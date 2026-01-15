@@ -1,6 +1,6 @@
 # The-Atomic-Charmer 
 
-The Atomic Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone whos never been late, doubles as an alarm and timer, and delivers compliments on demandbecause who wouldnt want a phone that cheers them on? Created for my mentor Sandra, whose wisdom and warmth outshine even the fanciest electronics.
+The Atomic Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone whos never been late, doubles as an alarm and timer, and delivers compliments on demandbecause who wouldnt want a phone that cheers them on? Created for my mentor Sandra, whose nerdiness and warmth outshine even the fanciest electronics.
 
 ## Hardware Components
 - **Microcontroller**: [Wemos Lolin D32 Pro (ESP32)](https://www.wemos.cc/en/latest/d32/d32_pro.html)
