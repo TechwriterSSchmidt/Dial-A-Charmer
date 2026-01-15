@@ -52,7 +52,7 @@ The device differentiates between two main usage modes based on the handset stat
     *   **Dial `2`**: Badran Compliments (`mp3_group_02`)
     *   **Dial `3`**: Yoda Compliments (`mp3_group_03`)
     *   **Dial `4`**: Neutral Compliments (`mp3_group_04`)
-    *   **Dial `0`**: Announce current time (tts voice)
+    *   **Dial `0`**: call main menu (`dial a number` style
 
 ### 3. Ringing Mode (Alarm/Timer)
 *   **Trigger:** Countdown expires or Alarm time is reached.
@@ -171,8 +171,8 @@ The system uses specific WAV files in `/system/` for feedback:
 
 *   **Clock:** Add option to set individual alarms for for each day of the week.
 *   **Dial logic:** Implement multi-digit dialing to set longer timers and alarms.
-*   **Dial logic:** Implement phone book for special functionalities such as `voice menu` and a number to call Gemini chat bot
-*   **Dial TTS voice Menu:** Implement a classic `dial a number` menu to turn on/off services such as alarms or to enable/disable snooze or to change the ringtone and others.
+*   **Dial logic:** Implement phone book for special functionalities such as `voice menu` and a number to call Gemini chat bot or time announcement 
+*   **Dial TTS voice Menu:** Implement a classic `dial a number` menu to turn on/off services such as alarms or to enable/disable snooze or to change the ringtone and other basic functions.
 *   **Snooze functionality:** Implement lift to snooze option. Snooze time should be selectable in the Webinterface.
 *   **Webinterface:** Add separate volume control for base speaker and handset
 *   **Main Code:** AGC for mic and, if possible, AEC for Gemini AI usage
