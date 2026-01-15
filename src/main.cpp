@@ -7,6 +7,7 @@
 #include <vector>
 #include <algorithm>
 #include <random>
+#include <map>
 
 #include "config.h"
 #include "Settings.h"
@@ -28,67 +29,110 @@ bool timerRunning = false;
 bool timerSoundPlaying = false;
 
 // --- Playlist Management ---
-std::vector<String> playlist;
-int playlistIndex = 0;
+struct Playlist {
+    std::vector<String> tracks;
+    int index = 0;
+};
 
-void buildPlaylist() {
-    playlist.clear();
-    Serial.println("Scanning for Compliments...");
-    
-    File dir = SD.open("/compliments");
+std::map<int, Playlist> categories; // 1=Trump, 2=Badran, 3=Yoda, 4=Neutral
+Playlist mainPlaylist; // For Dial 0
+
+void scanDirectoryToPlaylist(String path, int categoryId) {
+    File dir = SD.open(path);
     if(!dir || !dir.isDirectory()) {
-        Serial.println("Failed to open /compliments directory");
-        return;
+         Serial.print("Dir missing: "); Serial.println(path);
+         return;
     }
     
     File file = dir.openNextFile();
     while(file) {
         if(!file.isDirectory()) {
             String fname = String(file.name());
-            
-            // Basic cleaning and path normalization
             if(fname.endsWith(".mp3") && fname.indexOf("._") == -1) {
-                // If the name is just "file.mp3", prepend path. 
-                // If it is "/compliments/file.mp3", keep it.
-                if (!fname.startsWith("/")) {
-                     fname = "/compliments/" + fname;
-                } else if (!fname.startsWith("/compliments")) {
-                     // Should verify if this ever happens in this FS
-                     fname = "/compliments" + fname; 
-                }
+                // Construct full path. Depending on SD lib version, file.name() might be full path or distinct.
+                // We assume we need to prepend path if it's just the name.
+                String fullPath = path;
+                if(!fullPath.endsWith("/")) fullPath += "/";
+                if(fname.startsWith("/")) fname = fname.substring(1); // avoid double slash
+                fullPath += fname;
                 
-                playlist.push_back(fname);
+                // Add to specific category
+                categories[categoryId].tracks.push_back(fullPath);
+                
+                // Add to main playlist
+                mainPlaylist.tracks.push_back(fullPath);
             }
         }
         file = dir.openNextFile();
     }
-    
-    // Shuffle
-    if (!playlist.empty()) {
-        // Use ESP32 hardware RNG for seeding
-        std::shuffle(playlist.begin(), playlist.end(), std::default_random_engine(esp_random()));
-        Serial.printf("Playlist ready: %d tracks found.\n", playlist.size());
-    } else {
-        Serial.println("No MP3s found in /compliments");
-    }
-    playlistIndex = 0;
 }
 
-String getNextPlaylistTrack() {
-    if (playlist.empty()) {
-         // Attempt to rebuild if empty
-         buildPlaylist();
-         if (playlist.empty()) return "";
+void buildPlaylist() {
+    categories.clear();
+    mainPlaylist.tracks.clear();
+    mainPlaylist.index = 0;
+    
+    Serial.println("Building Playlists...");
+    
+    // 1: Trump
+    scanDirectoryToPlaylist("/compliments/trump", 1);
+    // 2: Badran
+    scanDirectoryToPlaylist("/compliments/badran", 2);
+    // 3: Yoda
+    scanDirectoryToPlaylist("/compliments/yoda", 3);
+    // 4: Neutral
+    scanDirectoryToPlaylist("/compliments/neutral", 4);
+    // Scan root compliments for uncategorized/mixtures if needed, or just these subfolders
+    // scanDirectoryToPlaylist("/compliments", 5); 
+
+    // Shuffle all
+    auto rng = std::default_random_engine(esp_random());
+    
+    for(auto const& [key, val] : categories) {
+         if (!categories[key].tracks.empty()) {
+             std::shuffle(categories[key].tracks.begin(), categories[key].tracks.end(), rng);
+             categories[key].index = 0;
+             Serial.printf("Category %d: %d tracks\n", key, categories[key].tracks.size());
+         }
     }
     
-    if (playlistIndex >= playlist.size()) {
-        Serial.println("Playlist finished! Reshuffling for infinite loop...");
-        std::shuffle(playlist.begin(), playlist.end(), std::default_random_engine(esp_random()));
-        playlistIndex = 0;
+    if (!mainPlaylist.tracks.empty()) {
+        std::shuffle(mainPlaylist.tracks.begin(), mainPlaylist.tracks.end(), rng);
+        Serial.printf("Main Playlist (All): %d tracks\n", mainPlaylist.tracks.size());
     }
-    
-    return playlist[playlistIndex++];
 }
+
+String getNextTrack(int category) {
+    Playlist* target = nullptr;
+    
+    if (category == 0) {
+        target = &mainPlaylist;
+    } else {
+        if (categories.find(category) != categories.end()) {
+            target = &categories[category];
+        }
+    }
+    
+    if (target == nullptr || target->tracks.empty()) {
+        // Fallback or empty
+        if (category != 0 && !mainPlaylist.tracks.empty()) {
+             // If specific category is empty, try main
+             target = &mainPlaylist; 
+        } else {
+             return "";
+        }
+    }
+    
+    // Check index
+    if (target->index >= target->tracks.size()) {
+        Serial.printf("Playlist %d finished! Reshuffling...\n", category);
+        std::shuffle(target->tracks.begin(), target->tracks.end(), std::default_random_engine(esp_random()));
+        target->index = 0;
+    }
+    
+    return target->tracks[target->index++];
+}
+
 
 // --- Helper Functions ---
 void playSound(String filename) {
@@ -135,18 +179,19 @@ void speakCompliment(int number) {
     }
     
     // Fallback if no Key or AI failed
-    // New Logic: Play from randomized playlist
-    String path = getNextPlaylistTrack();
+    // New Logic: Play from randomized playlist based on number
+    // 0 = Mix, 1..4 = Specific Categories
+    // If number > 4, fallback to Mix (0)
+    int category = (number <= 4) ? number : 0;
+    
+    String path = getNextTrack(category);
     
     if (path.length() == 0) {
          Serial.println("Playlist Empty! Check SD Card.");
-         path = "/system/error.mp3"; // Or similar default
-         // Try finding anything
-         if(SD.exists("/compliments/001.mp3")) path = "/compliments/001.mp3";
+         path = "/system/error.mp3"; 
     }
     
-    Serial.print("Playing compliment (Random): ");
-    Serial.println(path);
+    Serial.printf("Playing compliment (Cat: %d): %s\n", category, path.c_str());
     playSound(path);
 }
 
