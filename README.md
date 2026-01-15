@@ -27,7 +27,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | :--- | :--- | :--- |
 | **Timekeeping** | **Atomic Clock** | Syncs time via GNSS (M10 Module) for precision. |
 | | **Alarm Clock** | Wake up to custom sounds or compliments. |
-| | **Kitchen Timer** | Set a countdown using the rotary dial (e.g., dial '5' for 5 minutes). |
+| | **Kitchen Timer** | Set a countdown using the rotary dial (e.g., dial '12' for a perfect 12 minutes Pizza timer). |
 | **Interaction** | **Compliment Dispenser** | Dial specific numbers to hear compliments from different "personas". |
 | | **Vintage Feel** | Uses original rotary dial and hook switch mechanics. |
 | **System** | **Standalone** | Operates completely independently without Home Assistant or external servers. |
@@ -41,23 +41,23 @@ The device differentiates between two main usage modes based on the handset stat
 *   **State:** The phone is waiting on the cradle.
 *   **Action (Dialing):** Rotating the dial sets the **Timer**.
     *   Dial `5` -> Sets 5 minute timer.
-    *   Dial `0` -> Cancels timer.
-*   **Action (Button):** Pressing the extra button toggles the **Alarm** (On/Off).
+    *   Lift the handset shortly off the cradle -> Resets timer and the alarm.
+*   **Action (Button and dialing):** Pressing the extra button enables the alarm clock mode. In this mode, dialing `0715` sets the clock to `7:15` o'clock AM. To delete the alarm, press the button and lift off the handset from the hook shortly. 
 
 ### 2. Active Mode (Handset Lifted)
 *   **Trigger:** Lift the handset (Off-Hook).
-*   **Behavior:** The phone "wakes up", potentially announcing the time or playing a greeting.
+*   **Behavior:** The phone "wakes up" with a dial tone and plays a random compliment after 2s.
 *   **Action (Dialing):** Input numbers to request content:
     *   **Dial `1`**: Trump Compliments (`mp3_group_01`)
     *   **Dial `2`**: Badran Compliments (`mp3_group_02`)
     *   **Dial `3`**: Yoda Compliments (`mp3_group_03`)
     *   **Dial `4`**: Neutral Compliments (`mp3_group_04`)
-    *   **Dial `0`**: Play Main Playlist (Music/mixed)
+    *   **Dial `0`**: Announce current time (tts voice)
 
 ### 3. Ringing Mode (Alarm/Timer)
 *   **Trigger:** Countdown expires or Alarm time is reached.
 *   **Behavior:** Ringtones play, Vibration motor activates, LED flashes.
-*   **Stop:** Lift the handset or toggle the hook switch to silence.
+*   **Stop:** Lift the handset or toggle the hook switch to reset and silence.
 
 ## Hardware Support & Pinout
 
@@ -132,11 +132,13 @@ Single WS2812B LED provides visual feedback.
 
 | State | Color/Effect | Meaning |
 | :--- | :--- | :--- |
-| **Booting** | 🔵 Blue | System initializing |
-| **GPS Search** | 🟠 Orange | Waiting for Satellite Lock |
-| **Ready** | 🟢 Green | Time synced, ready to use |
-| **Error** | 🔴 Red | SD Card missing or Hardware fault |
-| **Ringing** | ⚪ White Flashing | Alarm or Timer active |
+| **Booting** | 🔵 Blue pulsing | System initializing |
+| **GPS Search** | 🟠 Orange pulsing | Waiting for Satellite Lock |
+| **Ready** | 🟢 Green continuously | Time synced, ready to use |
+| **Error** | 🔴 Red continuously | SD Card missing or Hardware fault |
+| **Battery< 15% *** | Red pulsing | Recharge battery|
+| **Ringing** | ⚪ Warm White Flashing | Alarm active |
+| **Ringing** | ⚪ Pink Flashing | Timer active |
 
 ## Acoustic Signals
 
