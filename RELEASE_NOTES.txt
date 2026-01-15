@@ -1,5 +1,19 @@
 # Release Notes - The Atomic Charmer
 
+## v1.2.0 (2026-01-15)
+- **New Playlist System**: Compliments are now grouped by style/persona.
+  - **Trump Style**: Dial 1
+  - **Badran Style (Swiss Politics)**: Dial 2
+  - **Yoda Style**: Dial 3
+  - **Neutral/Nerdy**: Dial 4
+  - **Random Mix**: Dial 0 (or Pickup without dial)
+- **Smart Shuffle**: Tracks are played without repetition until all in a category are heard.
+- **Content Expansion**: Added over 1200 unique compliments text files.
+- **Firmware Update**: Dynamic directory scanning (`/compliments/{category}/`) on SD card.
+- **Bugfixes**: 
+  - Python split script rewritten to remove `pydub` dependency. 
+  - Added audio fade-in to prevent pops.
+
 ## v1.0.0 (Initial Release)
 - **Core Functionality**:
   - Atomic Clock synchronization via GNSS (M10 module).

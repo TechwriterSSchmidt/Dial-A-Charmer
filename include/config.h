@@ -17,6 +17,14 @@
 #undef CONF_I2S_DOUT
 #define CONF_I2S_DOUT       27 
 
+// Audio Speaker (MAX98357)
+#define CONF_I2S_SPK_BCLK   14
+#define CONF_I2S_SPK_LRC    12
+#define CONF_I2S_SPK_DOUT   15
+
+// Vibration Motor
+#define CONF_PIN_VIB_MOTOR  2
+
 // GNSS (M10 or similar)
 #define CONF_GPS_RX         16
 #define CONF_GPS_TX         17

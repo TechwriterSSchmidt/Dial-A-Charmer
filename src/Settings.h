@@ -26,6 +26,8 @@ public:
     // Audio
     int getVolume();
     void setVolume(int vol);
+    int getBaseVolume();
+    void setBaseVolume(int vol);
     int getRingtone();
     void setRingtone(int toneIndex);
 

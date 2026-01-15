@@ -24,9 +24,11 @@ RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN);
 
 // --- Globals ---
 unsigned long alarmEndTime = 0;
-bool alarmActive = false;
+bool alarmActive = false; // Used for external alarms?
 bool timerRunning = false;
-bool timerSoundPlaying = false;
+bool isAlarmRinging = false;
+unsigned long alarmRingingStartTime = 0;
+int currentAlarmVol = 0;
 
 // --- Playlist Management ---
 struct Playlist {
@@ -36,6 +38,74 @@ struct Playlist {
 
 std::map<int, Playlist> categories; // 1=Trump, 2=Badran, 3=Yoda, 4=Neutral
 Playlist mainPlaylist; // For Dial 0
+
+// --- Persistence Helpers ---
+String getStoredPlaylistPath(int category) {
+    return "/playlists/cat_" + String(category) + ".m3u";
+}
+
+String getStoredIndexPath(int category) {
+    return "/playlists/cat_" + String(category) + ".idx";
+}
+
+void ensurePlaylistDir() {
+    if (!SD.exists("/playlists")) SD.mkdir("/playlists");
+}
+
+void savePlaylistToSD(int category, Playlist &pl) {
+    ensurePlaylistDir();
+    String path = getStoredPlaylistPath(category);
+    SD.remove(path);
+    File f = SD.open(path, FILE_WRITE);
+    if (!f) return;
+    for (const auto &track : pl.tracks) {
+        f.println(track);
+    }
+    f.close();
+}
+
+void saveProgressToSD(int category, int index) {
+    ensurePlaylistDir();
+    String path = getStoredIndexPath(category);
+    SD.remove(path);
+    File f = SD.open(path, FILE_WRITE);
+    if (f) {
+        f.println(index);
+        f.close();
+    }
+}
+
+bool loadPlaylistFromSD(int category, Playlist &pl) {
+    String path = getStoredPlaylistPath(category);
+    if (!SD.exists(path)) return false;
+    
+    File f = SD.open(path);
+    if (!f) return false;
+    
+    pl.tracks.clear();
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0) pl.tracks.push_back(line);
+    }
+    f.close();
+    
+    // Load Index
+    String idxPath = getStoredIndexPath(category);
+    if (SD.exists(idxPath)) {
+        File fIdx = SD.open(idxPath);
+        if (fIdx) {
+            String idxStr = fIdx.readStringUntil('\n'); 
+            pl.index = idxStr.toInt();
+            // Sanity check
+            if (pl.index < 0 || (size_t)pl.index >= pl.tracks.size()) pl.index = 0;
+            fIdx.close();
+        }
+    } else {
+        pl.index = 0;
+    }
+    return true;
+}
 
 void scanDirectoryToPlaylist(String path, int categoryId) {
     File dir = SD.open(path);
@@ -49,18 +119,14 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
         if(!file.isDirectory()) {
             String fname = String(file.name());
             if(fname.endsWith(".mp3") && fname.indexOf("._") == -1) {
-                // Construct full path. Depending on SD lib version, file.name() might be full path or distinct.
-                // We assume we need to prepend path if it's just the name.
+                // Construct full path
                 String fullPath = path;
                 if(!fullPath.endsWith("/")) fullPath += "/";
-                if(fname.startsWith("/")) fname = fname.substring(1); // avoid double slash
+                if(fname.startsWith("/")) fname = fname.substring(1); 
                 fullPath += fname;
                 
-                // Add to specific category
+                // Add to specific category ONLY
                 categories[categoryId].tracks.push_back(fullPath);
-                
-                // Add to main playlist
-                mainPlaylist.tracks.push_back(fullPath);
             }
         }
         file = dir.openNextFile();
@@ -72,33 +138,53 @@ void buildPlaylist() {
     mainPlaylist.tracks.clear();
     mainPlaylist.index = 0;
     
-    Serial.println("Building Playlists...");
+    Serial.println("Initializing Playlists...");
     
-    // 1: Trump
-    scanDirectoryToPlaylist("/compliments/trump", 1);
-    // 2: Badran
-    scanDirectoryToPlaylist("/compliments/badran", 2);
-    // 3: Yoda
-    scanDirectoryToPlaylist("/compliments/yoda", 3);
-    // 4: Neutral
-    scanDirectoryToPlaylist("/compliments/neutral", 4);
-    // Scan root compliments for uncategorized/mixtures if needed, or just these subfolders
-    // scanDirectoryToPlaylist("/compliments", 5); 
-
-    // Shuffle all
-    auto rng = std::default_random_engine(esp_random());
-    
-    for(auto const& [key, val] : categories) {
-         if (!categories[key].tracks.empty()) {
-             std::shuffle(categories[key].tracks.begin(), categories[key].tracks.end(), rng);
-             categories[key].index = 0;
-             Serial.printf("Category %d: %d tracks\n", key, categories[key].tracks.size());
-         }
+    // Categories 1-4
+    for (int i = 1; i <= 4; i++) {
+        String subfolder;
+        if (i==1) subfolder = "trump";
+        else if (i==2) subfolder = "badran";
+        else if (i==3) subfolder = "yoda";
+        else if (i==4) subfolder = "neutral";
+        
+        bool loaded = loadPlaylistFromSD(i, categories[i]);
+        if (!loaded || categories[i].tracks.empty()) {
+            Serial.printf("Building Cat %d (scanning)...\n", i);
+            categories[i].tracks.clear();
+            categories[i].index = 0;
+            scanDirectoryToPlaylist("/compliments/" + subfolder, i);
+            
+            // Shuffle
+            auto rng = std::default_random_engine(esp_random());
+            std::shuffle(categories[i].tracks.begin(), categories[i].tracks.end(), rng);
+            
+            savePlaylistToSD(i, categories[i]);
+            saveProgressToSD(i, 0);
+        } else {
+            Serial.printf("Loaded Cat %d from SD (Tracks: %d, Idx: %d)\n", i, categories[i].tracks.size(), categories[i].index);
+        }
     }
     
-    if (!mainPlaylist.tracks.empty()) {
+    // Main Playlist (0)
+    bool loadedMain = loadPlaylistFromSD(0, mainPlaylist);
+    if (!loadedMain || mainPlaylist.tracks.empty()) {
+        Serial.println("Building Main Playlist...");
+        mainPlaylist.tracks.clear();
+        mainPlaylist.index = 0;
+        
+        // Aggregate
+        for (int i = 1; i <= 4; i++) {
+            for (const auto &t : categories[i].tracks) mainPlaylist.tracks.push_back(t);
+        }
+        
+        auto rng = std::default_random_engine(esp_random());
         std::shuffle(mainPlaylist.tracks.begin(), mainPlaylist.tracks.end(), rng);
-        Serial.printf("Main Playlist (All): %d tracks\n", mainPlaylist.tracks.size());
+        
+        savePlaylistToSD(0, mainPlaylist);
+        saveProgressToSD(0, 0);
+    } else {
+        Serial.printf("Loaded Main Playlist from SD (Tracks: %d, Idx: %d)\n", mainPlaylist.tracks.size(), mainPlaylist.index);
     }
 }
 
@@ -114,28 +200,63 @@ String getNextTrack(int category) {
     }
     
     if (target == nullptr || target->tracks.empty()) {
-        // Fallback or empty
+        // Fallback to Main if specific empty
         if (category != 0 && !mainPlaylist.tracks.empty()) {
-             // If specific category is empty, try main
              target = &mainPlaylist; 
+             category = 0; 
         } else {
              return "";
         }
     }
     
     // Check index
-    if (target->index >= target->tracks.size()) {
+    if ((size_t)target->index >= target->tracks.size()) {
         Serial.printf("Playlist %d finished! Reshuffling...\n", category);
         std::shuffle(target->tracks.begin(), target->tracks.end(), std::default_random_engine(esp_random()));
         target->index = 0;
+        
+        savePlaylistToSD(category, *target);
+        // Progress saved below after increment
     }
     
-    return target->tracks[target->index++];
+    String track = target->tracks[target->index];
+    
+    // Increment and Save Progress
+    target->index++; 
+    saveProgressToSD(category, target->index);
+    
+    return track;
 }
 
 
 // --- Helper Functions ---
-void playSound(String filename) {
+enum AudioOutput { OUT_HANDSET, OUT_SPEAKER };
+AudioOutput currentOutput = OUT_HANDSET;
+
+void setAudioOutput(AudioOutput target) {
+    // Check if we need to switch
+    if (currentOutput == target) return; 
+    
+    // Stop ensuring clean switch
+    if(audio.isRunning()) audio.stopSong();
+    
+    if (target == OUT_HANDSET) {
+        audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+        int vol = map(settings.getVolume(), 0, 42, 0, 21);
+        audio.setVolume(vol);
+        Serial.println("Output: Handset");
+    } else {
+        audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT);
+        int vol = map(settings.getBaseVolume(), 0, 42, 0, 21);
+        audio.setVolume(vol);
+        Serial.println("Output: Speaker");
+    }
+    currentOutput = target;
+}
+
+void playSound(String filename, bool useSpeaker = false) {
+    setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
+
     if (SD.exists(filename)) {
         statusLed.setTalking();
         audio.connecttofs(SD, filename.c_str());
@@ -148,7 +269,7 @@ void playSound(String filename) {
 
 void speakTime() {
     Serial.print("Speaking Time...");
-    playSound("/time_intro.mp3"); 
+    playSound("/time_intro.mp3", false); 
     // TODO: proper timestamp logic
 }
 
@@ -169,6 +290,7 @@ void speakCompliment(int number) {
             
             // 3. Play
             Serial.println("Streaming TTS...");
+            setAudioOutput(OUT_HANDSET);
             statusLed.setTalking();
             audio.connecttohost(ttsUrl.c_str());
             return;
@@ -188,11 +310,63 @@ void speakCompliment(int number) {
     
     if (path.length() == 0) {
          Serial.println("Playlist Empty! Check SD Card.");
-         path = "/system/error.mp3"; 
+         path = "/system/error_tone.wav"; 
     }
     
     Serial.printf("Playing compliment (Cat: %d): %s\n", category, path.c_str());
-    playSound(path);
+    playSound(path, false);
+}
+
+void startAlarm() {
+    isAlarmRinging = true;
+    alarmRingingStartTime = millis();
+    currentAlarmVol = 5; // Start quiet
+    Serial.println("Starting Alarm Sequence (Ascending + Vibe)");
+    
+    setAudioOutput(OUT_SPEAKER);
+    // Explicitly set low volume initially (bypass stored setting for now)
+    audio.setVolume(map(currentAlarmVol, 0, 42, 0, 21)); 
+    
+    // Start Sound
+    playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
+}
+
+void stopAlarm() {
+    if (!isAlarmRinging) return;
+    
+    isAlarmRinging = false;
+    digitalWrite(CONF_PIN_VIB_MOTOR, LOW); // Ensure Motor Off
+    if (audio.isRunning()) audio.stopSong();
+    
+    // Restore Volumes to settings
+    setAudioOutput(OUT_HANDSET); // Reset default state
+    // Vol will be restored by next setAudioOutput call or manual
+    Serial.println("Alarm Stopped");
+}
+
+void handleAlarmLogic() {
+    if (!isAlarmRinging) return;
+    
+    unsigned long duration = millis() - alarmRingingStartTime;
+    
+    // 1. Vibration Pattern (Pulse: 500ms ON, 500ms OFF)
+    bool vibOn = (duration % 1000) < 500;
+    digitalWrite(CONF_PIN_VIB_MOTOR, vibOn ? HIGH : LOW);
+    
+    // 2. Volume Ramp (Increase every 3 seconds)
+    int maxVol = settings.getBaseVolume();
+    int rampStep = duration / 3000; 
+    int newVol = 5 + rampStep;
+    
+    if (newVol > maxVol) newVol = maxVol;
+    
+    // Only update if changed
+    if (newVol != currentAlarmVol) {
+        currentAlarmVol = newVol;
+        // Map 0-42 -> 0-21
+        audio.setVolume(map(currentAlarmVol, 0, 42, 0, 21));
+        Serial.printf("Alarm Vol Ramp: %d/%d\n", currentAlarmVol, maxVol);
+    }
 }
 
 // --- Callbacks ---
@@ -205,7 +379,7 @@ void onDial(int number) {
             Serial.printf("Setting Ringtone to %d\n", number);
             settings.setRingtone(number);
             statusLed.setWifiConnected(); // Green blink
-            playSound("/ringtones/" + String(number) + ".mp3");
+            playSound("/ringtones/" + String(number) + ".wav", true);
             return;
         }
     }
@@ -221,7 +395,7 @@ void onDial(int number) {
         alarmEndTime = millis() + (number * 60000);
         timerRunning = true;
         statusLed.setWifiConnecting(); 
-        playSound("/timer_set.mp3");
+        playSound("/system/beep.wav", true); // Confirmation
     }
 }
 
@@ -230,14 +404,14 @@ void onHook(bool offHook) {
     
     if (offHook) {
         statusLed.setIdle();
-        if (timerSoundPlaying || alarmActive) {
-            if (audio.isRunning()) audio.stopSong();
-            timerSoundPlaying = false;
-            alarmActive = false;
+        
+        // Stop Alarm if ringing
+        if (isAlarmRinging || timerRunning) {
+            stopAlarm();
             timerRunning = false;
             Serial.println("Alarm/Timer Stopped by Pickup");
         } else {
-            playSound("/dial_tone.mp3"); 
+            playSound("/system/dial_tone.wav", false); 
         }
     } else {
         if (audio.isRunning()) {
@@ -249,7 +423,7 @@ void onHook(bool offHook) {
 
 void onButton() {
     Serial.println("Extra Button Pressed");
-    playSound("/ip_announce_start.mp3");
+    playSound("/system/beep.wav", false);
 }
 
 void setup() {
@@ -277,12 +451,7 @@ void setup() {
     }
     
     // Init Audio Lib
-    audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
-    
-    // Map 0-42 (UI) to 0-21 (Audio Lib)
-    int volConf = settings.getVolume();
-    int volLib = map(volConf, 0, 42, 0, 21);
-    audio.setVolume(volLib); 
+    setAudioOutput(OUT_HANDSET);
     
     dial.onDialComplete(onDial);
     dial.onHookChange(onHook);
@@ -294,7 +463,12 @@ void setup() {
     Serial2.begin(CONF_GPS_BAUD, SERIAL_8N1, CONF_GPS_RX, CONF_GPS_TX);
     
     Serial.println("Atomic Charmer Started");
-    playSound("/startup.mp3");
+    
+    // Init Motor
+    pinMode(CONF_PIN_VIB_MOTOR, OUTPUT);
+    digitalWrite(CONF_PIN_VIB_MOTOR, LOW);
+    
+    playSound("/system/beep.wav", true); // Speaker
 }
 
 void loop() {
@@ -303,15 +477,17 @@ void loop() {
     dial.loop();
     statusLed.loop();
     
+    if (isAlarmRinging) {
+        handleAlarmLogic();
+    }
+    
     while (Serial2.available() > 0) {
         gps.encode(Serial2.read());
     }
     
     if (timerRunning && millis() > alarmEndTime) {
         timerRunning = false;
-        timerSoundPlaying = true;
-        Serial.println("Timer Finished! Ringing...");
-        playSound("/ringtones/" + String(settings.getRingtone()) + ".mp3");
+        startAlarm();
     }
 }
 
@@ -319,8 +495,16 @@ void loop() {
 void audio_eof_mp3(const char *info){
     Serial.print("EOF: "); Serial.println(info);
     statusLed.setIdle();
-    if (timerSoundPlaying) {
-        audio.connecttofs(SD, ("/ringtones/" + String(settings.getRingtone()) + ".mp3").c_str());
+    
+    if (isAlarmRinging) {
+         // Loop Alarm Sound
+         playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
+         
+         // Note: setVolume might be reset by playSound internal logic if we called setAudioOutput again?
+         // Our modified playSound calls setAudioOutput. 
+         // setAudioOutput resets volume to settings.getBaseVolume().
+         // FIXME: We need to force current ramp volume back.
+         audio.setVolume(map(currentAlarmVol, 0, 42, 0, 21));
     }
 }
 

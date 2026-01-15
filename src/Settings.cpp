@@ -49,6 +49,19 @@ void Settings::setVolume(int vol) {
     _prefs.putInt("vol", vol);
 }
 
+int Settings::getBaseVolume() {
+    return _prefs.getInt("base_vol", 30); // Default reasonable vol
+}
+
+void Settings::setBaseVolume(int vol) {
+    if (vol < 0) vol = 0;
+    if (vol > 21) vol = 21; // MAX98357 is LOUD, maybe cap smaller or use same scale 0-42. 
+                            // Audio lib is 0-21. Let's use 0-21 native for this one or map?
+                            // Consistency: Handset is 0-42 mapped to 0-21. Let's stick to 0-42.
+    if (vol > 42) vol = 42;
+    _prefs.putInt("base_vol", vol);
+}
+
 int Settings::getRingtone() {
     return _prefs.getInt("ring", CONF_DEFAULT_RING);
 }
