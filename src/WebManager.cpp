@@ -8,103 +8,92 @@ const char* htmlStyle = R"rawliteral(
 <style>
 body {
     font-family: 'Times New Roman', Times, serif;
+    background-color: #080808; /* Deep Black */
+    color: #f0e6d2; /* Cream/Champagne */
     margin: 0;
     padding: 20px;
-    background-color: #2b1d0e; /* Bakelite Brown */
-    color: #e8dcca; /* Cream/Ivory */
-    background-image: radial-gradient(#3a2817 15%, transparent 16%), radial-gradient(#3a2817 15%, transparent 16%);
-    background-size: 20px 20px;
-    background-position: 0 0, 10px 10px;
+    line-height: 1.5;
 }
 h2 {
     text-align: center;
-    color: #d4af37; /* Brass/Gold */
-    border-bottom: 3px double #d4af37;
-    padding-bottom: 10px;
     text-transform: uppercase;
-    text-shadow: 2px 2px 0px #000;
+    letter-spacing: 6px; /* Art Deco Spacing */
+    color: #d4af37; /* Metallic Gold */
+    border-bottom: 2px solid #d4af37;
+    margin-bottom: 40px;
+    padding-bottom: 15px;
+    font-weight: normal;
 }
 .card {
-    background: #1a1108;
-    padding: 20px;
-    border: 2px solid #5c4033;
-    margin-bottom: 25px;
-    border-radius: 10px;
-    box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
-    position: relative;
-}
-.card::before {
-    content: '';
-    position: absolute;
-    top: 5px; left: 5px; right: 5px; bottom: 5px;
-    border: 1px dashed #5c4033;
-    border-radius: 5px;
-    pointer-events: none;
+    background: #111;
+    border: 1px solid #222;
+    border-top: 4px solid #d4af37; /* Gold Accent */
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
 }
 .card h3 {
     margin-top: 0;
     color: #d4af37;
-    border-bottom: 1px solid #5c4033;
-    padding-bottom: 5px;
-    font-size: 1.4em;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 15px;
+    font-weight: normal;
+}
+label {
+    display: block;
+    margin-top: 20px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #888;
 }
 input, select {
     width: 100%;
     padding: 12px;
-    margin: 8px 0;
-    background: #e8dcca;
-    color: #2b1d0e;
-    border: 2px solid #5c4033;
-    box-sizing: border-box;
+    margin-top: 5px;
+    background-color: #f0e6d2;
+    border: 2px solid #333;
+    color: #111;
     font-family: 'Times New Roman', Times, serif;
-    font-size: 1.1em;
-    border-radius: 3px;
-    box-shadow: inset 2px 2px 5px rgba(0,0,0,0.2);
+    font-size: 1.1rem;
+    box-sizing: border-box;
+    border-radius: 0; /* Sharp Edges (Bauhaus/Deco) */
 }
-input:focus {
+input:focus, select:focus {
     outline: none;
-    background: #fff;
     border-color: #d4af37;
-}
-label {
-    display: block;
-    margin-top: 15px;
-    font-weight: bold;
-    color: #a89f91;
-    text-transform: uppercase;
-    font-size: 0.9em;
-    letter-spacing: 1px;
-}
-output {
-    display: inline-block;
-    float: right;
-    color: #d4af37;
-    font-weight: bold;
+    background-color: #fff;
 }
 button {
     width: 100%;
-    padding: 15px;
-    margin-top: 20px;
-    background: #800000; /* Dark Red Button */
-    color: #e8dcca;
-    border: 4px solid #1a0f00;   
-    font-weight: bold;
-    font-family: 'Times New Roman', Times, serif;
-    font-size: 1.5em;
-    cursor: pointer;
+    padding: 18px;
+    margin-top: 30px;
+    background-color: #8b0000; /* Deep Red */
+    color: #f0e6d2;
+    border: 1px solid #a00000;
     text-transform: uppercase;
-    border-radius: 50px; /* Round Button */
-    box-shadow: 0 5px 0 #3d0000, 0 10px 10px rgba(0,0,0,0.4);
-    transition: all 0.1s;
-}
-button:active {
-    box-shadow: 0 2px 0 #3d0000, 0 5px 5px rgba(0,0,0,0.4);
-    transform: translateY(3px);
+    letter-spacing: 4px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: 'Times New Roman', Times, serif;
 }
 button:hover {
-    background: #a00000;
+    background-color: #b22222;
+    color: #fff;
+    border-color: #f00;
+    box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
 }
-a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; }
+output {
+    float: right;
+    color: #d4af37;
+    font-family: monospace;
+    font-size: 1.2em;
+}
+a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; transition: 0.3s; }
 a:hover { color: #fff; border-bottom: 1px solid #fff; }
 </style>
 )rawliteral";
