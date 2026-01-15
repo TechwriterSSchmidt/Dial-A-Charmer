@@ -9,7 +9,9 @@ body{font-family:sans-serif;margin:0;padding:20px;background:#121212;color:#e0e0
 h2{text-align:center;color:#ffc107}
 .card{background:#1e1e1e;padding:15px;border:1px solid #333;margin-bottom:15px;border-radius:5px}
 input,select{width:100%;padding:10px;margin:5px 0;background:#333;color:#fff;border:1px solid #444;box-sizing:border-box}
-button{width:100%;padding:12px;background:#ffc107;color:#000;border:none;font-weight:bold;cursor:pointer}
+label{display:block;margin-top:10px;font-weight:bold;color:#aaa}
+output{display:inline-block;float:right;color:#ffc107;font-weight:bold}
+button{width:100%;padding:12px;margin-top:15px;background:#ffc107;color:#000;border:none;font-weight:bold;cursor:pointer}
 </style>
 )rawliteral";
 
@@ -105,6 +107,13 @@ void WebManager::handleNotFound() {
 }
 
 String WebManager::getHtml() {
+    // Scan for networks
+    int n = WiFi.scanNetworks();
+    String ssidOptions = "";
+    for (int i = 0; i < n; ++i) {
+        ssidOptions += "<option value='" + WiFi.SSID(i) + "'>";
+    }
+
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
     html += "</head><body>";
@@ -112,7 +121,10 @@ String WebManager::getHtml() {
     html += "<form action='/save' method='POST'>";
     
     html += "<div class='card'><h3>WiFi Settings</h3>";
-    html += "<label>SSID</label><input type='text' name='ssid' value='" + settings.getWifiSSID() + "'>";
+    html += "<label>SSID</label>";
+    html += "<input type='text' name='ssid' list='ssidList' value='" + settings.getWifiSSID() + "' placeholder='Select or type SSID'>";
+    html += "<datalist id='ssidList'>" + ssidOptions + "</datalist>";
+    
     html += "<label>Password</label><input type='password' name='pass' value='" + settings.getWifiPass() + "'>";
     html += "</div>";
     
@@ -121,23 +133,19 @@ String WebManager::getHtml() {
     html += "</div>";
 
     html += "<div class='card'><h3>Audio Settings</h3>";
-    html += "<label>Volume (0-42)</label>";
-    html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.nextElementSibling.value = this.value'>";
-    html += "<output>" + String(settings.getVolume()) + "</output>";
+    html += "<label>Volume (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
+    html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     html += "</div>";
 
     html += "<div class='card'><h3>LED Settings</h3>";
-    html += "<label>Day Brightness (0-42)</label>";
-    // Map 0-255 -> 0-42 for display
-    int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
-    html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "' oninput='this.nextElementSibling.value = this.value'>";
-    html += "<output>" + String(dayVal) + "</output>";
     
-    html += "<label>Night Brightness (0-42)</label>";
-    // Map 0-255 -> 0-42 for display
+    int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
+    html += "<label>Day Brightness (0-42) <output>" + String(dayVal) + "</output></label>";
+    html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    
     int nightVal = map(settings.getLedNightBright(), 0, 255, 0, 42);
-    html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "' oninput='this.nextElementSibling.value = this.value'>";
-    html += "<output>" + String(nightVal) + "</output>";
+    html += "<label>Night Brightness (0-42) <output>" + String(nightVal) + "</output></label>";
+    html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     
     html += "<label>Night Start Hour (0-23)</label>";
     html += "<input type='number' name='night_start' min='0' max='23' value='" + String(settings.getNightStartHour()) + "'>";
@@ -162,7 +170,7 @@ String WebManager::getHelpHtml() {
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
     html += "</head><body>";
-    html += "<h2>User Manual ☎️</h2>";
+    html += "<h2>User Manual</h2>";
     
     html += "<div class='card'><h3>1. Time & Alarm</h3>";
     html += "<ul><li><b>Receiver Down:</b> Dial a number (1-9) to set a Timer in minutes.</li>";

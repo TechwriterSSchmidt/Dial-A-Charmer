@@ -22,12 +22,13 @@
 #define CONF_PIN_VIB_MOTOR  2
 
 // GNSS (M10 or similar)
-#define CONF_GPS_RX         16
-#define CONF_GPS_TX         17
+// WARNUNG: 16/17 sind PSRAM beim D32 Pro!
+#define CONF_GPS_RX         35  // Input Only - OK
+#define CONF_GPS_TX         0   // Moved to 0 to free Pin 5 (GPIO 0 is Boot-Safe if Idle High)
 #define CONF_GPS_BAUD       9600
 
 // Rotary Dial & Inputs
-#define CONF_PIN_DIAL_PULSE 34
+#define CONF_PIN_DIAL_PULSE 5   // Changed to 5 (Supports INPUT_PULLUP) - No resistor needed!
 #define CONF_PIN_HOOK       32
 #define CONF_PIN_EXTRA_BTN  33
 
@@ -49,7 +50,7 @@
 #define CONF_BTN_DEBOUNCE        50
 
 // --- Web / Network ---
-#define CONF_AP_SSID        "DialACharmer"
+#define CONF_AP_SSID        "Dial-A-Charmer"
 #define CONF_AP_IP          IPAddress(192, 168, 4, 1)
 #define CONF_DNS_PORT       53
 
