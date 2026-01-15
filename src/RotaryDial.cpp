@@ -23,9 +23,11 @@ void IRAM_ATTR RotaryDial::isrPulse() {
 }
 
 void RotaryDial::begin() {
-    pinMode(_pulsePin, INPUT_PULLUP);
-    pinMode(_hookPin, INPUT_PULLUP);
-    pinMode(_btnPin, INPUT_PULLUP); 
+    // GPIO 34-39 are input only and have NO internal pullups.
+    // Ensure you have external pullups or use pins that support internal pullups.
+    if (_pulsePin >= 34 && _pulsePin <= 39) pinMode(_pulsePin, INPUT); else pinMode(_pulsePin, INPUT_PULLUP);
+    if (_hookPin >= 34 && _hookPin <= 39) pinMode(_hookPin, INPUT); else pinMode(_hookPin, INPUT_PULLUP);
+    if (_btnPin >= 34 && _btnPin <= 39) pinMode(_btnPin, INPUT); else pinMode(_btnPin, INPUT_PULLUP); 
     
     attachInterrupt(digitalPinToInterrupt(_pulsePin), isrPulse, FALLING);
 }

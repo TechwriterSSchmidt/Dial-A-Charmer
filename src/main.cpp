@@ -552,8 +552,11 @@ void setup() {
 }
 
 void loop() {
+    Serial.println("L1");
     audio.loop();
+    Serial.println("L2");
     webManager.loop();
+    Serial.println("L3");
     dial.loop();
     
     // Pass hour for adaptive brightness
@@ -564,6 +567,7 @@ void loop() {
          if (h >= 24) h -= 24;
          if (h < 0) h += 24;
     }
+    // Serial.println("L: LED");
     statusLed.loop(h);
     
     if (isAlarmRinging) {
