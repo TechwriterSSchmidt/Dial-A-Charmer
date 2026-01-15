@@ -70,6 +70,46 @@ void Settings::setRingtone(int toneIndex) {
     _prefs.putInt("ring", toneIndex);
 }
 
+int Settings::getLedDayBright() {
+    return _prefs.getInt("led_day_b", 100); // Default 100 (approx 40%)
+}
+
+void Settings::setLedDayBright(int bright) {
+    if (bright < 0) bright = 0;
+    if (bright > 255) bright = 255;
+    _prefs.putInt("led_day_b", bright);
+}
+
+int Settings::getLedNightBright() {
+    return _prefs.getInt("led_night_b", 10); // Default 10 (very dim)
+}
+
+void Settings::setLedNightBright(int bright) {
+    if (bright < 0) bright = 0;
+    if (bright > 255) bright = 255;
+    _prefs.putInt("led_night_b", bright);
+}
+
+int Settings::getNightStartHour() {
+    return _prefs.getInt("night_start", 22); // 22:00
+}
+
+void Settings::setNightStartHour(int hour) {
+    if (hour < 0) hour = 0;
+    if (hour > 23) hour = 23;
+    _prefs.putInt("night_start", hour);
+}
+
+int Settings::getNightEndHour() {
+    return _prefs.getInt("night_end", 6); // 06:00
+}
+
+void Settings::setNightEndHour(int hour) {
+    if (hour < 0) hour = 0;
+    if (hour > 23) hour = 23;
+    _prefs.putInt("night_end", hour);
+}
+
 void Settings::clear() {
     _prefs.clear();
 }

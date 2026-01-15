@@ -19,6 +19,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 *   [Getting Started](#getting-started)
 *   [Maintenance](#maintenance)
 *   [Documentation](QUICK_REFERENCE_GUIDE.md)
+*   [Release Notes](RELEASE_NOTES.txt)
 
 ## Features
 

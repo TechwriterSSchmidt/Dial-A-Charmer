@@ -5,17 +5,13 @@
 // Audio (I2S - ES8311 Codec + NS4150B Amp)
 #define CONF_I2S_BCLK       26
 #define CONF_I2S_LRC        25
-#define CONF_I2S_DOUT       22
-// ES8311 requires I2C for configuration
-#define CONF_I2C_SDA        21
-#define CONF_I2C_SCL        22 // Note: Check your board! Usually 22 is SCL on ESP32, but above I2S_DOUT is 22. Conflict?
-                               // Wemos D32 Pro Default: SDA=21, SCL=22. 
-                               // If using ES8311 module, ensure I2S pins don't conflict. 
-                               // Common I2S mappings: BCLK=26, LRC=25, DOUT=22 is standard for internal DAC or PCM5102.
-                               // If SCL is 22, move I2S_DOUT to another pin (e.g., 19 or 27).
-                               // ADJUSTING I2S_DOUT to 27 to avoid conflict with SCL(22).
-#undef CONF_I2S_DOUT
+// Pin 22 ist SCL beim D32 Pro, daher DOUT auf 27 verlegt (IO27/TFT_DC)
 #define CONF_I2S_DOUT       27 
+
+// ES8311 requires I2C for configuration
+// Bestätigt durch D32 Pro Schematic: SDA=21, SCL=22
+#define CONF_I2C_SDA        21
+#define CONF_I2C_SCL        22 
 
 // Audio Speaker (MAX98357)
 #define CONF_I2S_SPK_BCLK   14

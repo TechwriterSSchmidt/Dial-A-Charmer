@@ -39,7 +39,7 @@ public:
     void setVolume(uint8_t vol) {
         // Map 0-100 to 0-255
         if (!_initialized) return;
-        uint8_t regVol = map(vol, 0, 100, 0, 255);
+        uint8_t regVol = ::map(vol, 0, 100, 0, 255);
         writeReg(0x32, regVol);
     }
     

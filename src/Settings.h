@@ -31,6 +31,16 @@ public:
     int getRingtone();
     void setRingtone(int toneIndex);
 
+    // LED Brightness
+    int getLedDayBright();     // 0-255
+    void setLedDayBright(int bright);
+    int getLedNightBright();   // 0-255
+    void setLedNightBright(int bright);
+    int getNightStartHour();   // 0-23
+    void setNightStartHour(int hour);
+    int getNightEndHour();     // 0-23
+    void setNightEndHour(int hour);
+
     // System
     void clear();
 

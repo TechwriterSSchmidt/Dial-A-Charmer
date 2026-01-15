@@ -22,6 +22,10 @@ TinyGPSPlus gps;
 Audio audio;
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN);
 
+// Global flag for hardware availability
+bool sdAvailable = false;
+bool audioCodecAvailable = false;
+
 // --- Globals ---
 unsigned long alarmEndTime = 0;
 bool alarmActive = false; // Used for external alarms?
@@ -49,10 +53,12 @@ String getStoredIndexPath(int category) {
 }
 
 void ensurePlaylistDir() {
+    if (!sdAvailable) return;
     if (!SD.exists("/playlists")) SD.mkdir("/playlists");
 }
 
 void savePlaylistToSD(int category, Playlist &pl) {
+    if (!sdAvailable) return;
     ensurePlaylistDir();
     String path = getStoredPlaylistPath(category);
     SD.remove(path);
@@ -65,6 +71,7 @@ void savePlaylistToSD(int category, Playlist &pl) {
 }
 
 void saveProgressToSD(int category, int index) {
+    if (!sdAvailable) return;
     ensurePlaylistDir();
     String path = getStoredIndexPath(category);
     SD.remove(path);
@@ -76,6 +83,7 @@ void saveProgressToSD(int category, int index) {
 }
 
 bool loadPlaylistFromSD(int category, Playlist &pl) {
+    if (!sdAvailable) return false;
     String path = getStoredPlaylistPath(category);
     if (!SD.exists(path)) return false;
     
@@ -108,6 +116,7 @@ bool loadPlaylistFromSD(int category, Playlist &pl) {
 }
 
 void scanDirectoryToPlaylist(String path, int categoryId) {
+    if (!sdAvailable) return;
     File dir = SD.open(path);
     if(!dir || !dir.isDirectory()) {
          Serial.print("Dir missing: "); Serial.println(path);
@@ -238,12 +247,12 @@ void setAudioOutput(AudioOutput target) {
     
     if (target == OUT_HANDSET) {
         audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
-        int vol = map(settings.getVolume(), 0, 42, 0, 21);
+        int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.println("Output: Handset");
     } else {
         audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT);
-        int vol = map(settings.getBaseVolume(), 0, 42, 0, 21);
+        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.println("Output: Speaker");
     }
@@ -251,11 +260,15 @@ void setAudioOutput(AudioOutput target) {
 }
 
 void playSound(String filename, bool useSpeaker = false) {
+    if (!sdAvailable) {
+        Serial.println("SD Not Available, cannot play: " + filename);
+        return;
+    }
     setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
 
     if (SD.exists(filename)) {
         statusLed.setTalking();
-        audio.connecttofs(SD, filename.c_str());
+        audio.connecttoFS(SD, filename.c_str());
     } else {
         Serial.print("File missing: ");
         Serial.println(filename);
@@ -389,7 +402,7 @@ void startAlarm() {
     
     setAudioOutput(OUT_SPEAKER);
     // Explicitly set low volume initially (bypass stored setting for now)
-    audio.setVolume(map(currentAlarmVol, 0, 42, 0, 21)); 
+    audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21)); 
     
     // Start Sound
     playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
@@ -428,7 +441,7 @@ void handleAlarmLogic() {
     if (newVol != currentAlarmVol) {
         currentAlarmVol = newVol;
         // Map 0-42 -> 0-21
-        audio.setVolume(map(currentAlarmVol, 0, 42, 0, 21));
+        audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
         Serial.printf("Alarm Vol Ramp: %d/%d\n", currentAlarmVol, maxVol);
     }
 }
@@ -496,20 +509,24 @@ void setup() {
     
     // Init Audio Codec (ES8311)
     if (!audioCodec.begin()) {
-        Serial.println("ES8311 Init Failed!");
+        Serial.println("ES8311 Init Failed! (No I2C device?)");
         statusLed.setWarning();
+        audioCodecAvailable = false;
     } else {
         Serial.println("ES8311 Initialized");
+        audioCodecAvailable = true;
         audioCodec.setVolume(50); // Set Hardware Volume to 50%
         // Adjust software volume in Audio lib if needed
     }
     
     // Init SD 
     if(!SD.begin(CONF_PIN_SD_CS)){
-        Serial.println("SD Card Mount Failed");
+        Serial.println("SD Card Mount Failed (No Card?)");
         statusLed.setWarning();
+        sdAvailable = false;
     } else {
         Serial.println("SD Card Mounted");
+        sdAvailable = true;
         buildPlaylist();
     }
     
@@ -538,7 +555,16 @@ void loop() {
     audio.loop();
     webManager.loop();
     dial.loop();
-    statusLed.loop();
+    
+    // Pass hour for adaptive brightness
+    int h = -1;
+    // TinyGPS++ gps is available globally in this file
+    if (gps.time.isValid()) {
+         h = gps.time.hour() + settings.getTimezoneOffset();
+         if (h >= 24) h -= 24;
+         if (h < 0) h += 24;
+    }
+    statusLed.loop(h);
     
     if (isAlarmRinging) {
         handleAlarmLogic();
@@ -574,7 +600,7 @@ void audio_eof_mp3(const char *info){
          // Our modified playSound calls setAudioOutput. 
          // setAudioOutput resets volume to settings.getBaseVolume().
          // FIXME: We need to force current ramp volume back.
-         audio.setVolume(map(currentAlarmVol, 0, 42, 0, 21));
+         audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
     }
 }
 

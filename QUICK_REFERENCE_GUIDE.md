@@ -42,3 +42,14 @@ To add new compliments:
 2. **Split Files:** If you have one long file, use `python utils/split_audio.py` to chop it into pieces.
 3. **Copy to SD:** Save mp3s into the respective folder (`mp3_group_XX`) on the SD card.
 4. **Reboot:** Reboot the Dial-A-Charmer (Power Cycle) to re-index the playlists.
+
+## ⚙️ Web Configuration
+Connect to the WiFi Access Point named **DialACharmer** (No Password) to access:
+- **WiFi Settings**: Connect Dial-A-Charmer to your home network.
+- **Time Settings**: Set your timezone offset.
+- **Audio Settings**: Adjustable Base Volume (0-42).
+- **LED Settings**: 
+  - **Day Brightness**: 0-42
+  - **Night Brightness**: 0-42
+  - **Night Schedule**: Start/End hours for auto-dimming.
+- **AI Settings**: Gemini API Key for dynamic compliments.

@@ -1,5 +1,19 @@
 # Release Notes - Dial-A-Charmer
 
+## v1.3.0 (2026-01-15)
+- **Stability Fixes**:
+  - **Crash Fix**: Resolved critical conflict between Audio I2S driver and FastLED by migrating status LEDs to **Adafruit NeoPixel** library.
+  - **Partitioning**: Switched to `huge_app.csv` partition scheme to resolve linker overflow errors and support OTA updates for larger binaries.
+  - **Hardware Abstraction**: Added safety checks to prevent boot loops if peripherals (SD Card, Audio Codec) are disconnected.
+- **Web Interface Updates**:
+  - **LED Brightness Control**: Added sliders for Day and Night brightness (0-42 scale in UI, mapped to 0-255).
+  - **Night Mode Schedule**: Added configurable "Night Start" and "End" hours for automatic dimming.
+- **Hardware Config**:
+  - **Pin Mapping**: Corrected I2S DOUT pin to GPIO 27 (was 22) to resolve conflict with I2C SCL on Lolin D32 Pro.
+- **Project Structure**:
+  - Renamed project repository/folder to "Dial-A-Charmer".
+  - Updated Python utilities to use relative paths.
+
 ## v1.2.0 (2026-01-15)
 - **New Playlist System**: Compliments are now grouped by style/persona.
   - **Trump Style**: Dial 1

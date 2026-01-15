@@ -15,7 +15,7 @@ public:
 private:
     WebServer _server;
     DNSServer _dnsServer;
-    const byte _dnsPort = CONF_DNS_PORT;
+    const uint8_t _dnsPort = CONF_DNS_PORT;
     bool _apMode = false;
 
     void handleRoot();

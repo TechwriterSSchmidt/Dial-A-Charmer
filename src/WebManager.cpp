@@ -1,4 +1,5 @@
 #include "WebManager.h"
+#include "LedStatus.h"
 
 WebManager webManager;
 
@@ -69,6 +70,20 @@ void WebManager::handleSave() {
     if (_server.hasArg("gemini")) settings.setGeminiKey(_server.arg("gemini"));
     if (_server.hasArg("vol")) settings.setVolume(_server.arg("vol").toInt());
     
+    // LED Settings
+    if (_server.hasArg("led_day")) {
+        int val = _server.arg("led_day").toInt();
+        settings.setLedDayBright(map(val, 0, 42, 0, 255));
+    }
+    if (_server.hasArg("led_night")) {
+        int val = _server.arg("led_night").toInt();
+        settings.setLedNightBright(map(val, 0, 42, 0, 255));
+    }
+    if (_server.hasArg("night_start")) settings.setNightStartHour(_server.arg("night_start").toInt());
+    if (_server.hasArg("night_end")) settings.setNightEndHour(_server.arg("night_end").toInt());
+
+    statusLed.reloadSettings(); // Apply new LED settings immediately
+
     String html = "<html><body><h1>Saved! Rebooting...</h1></body></html>";
     _server.send(200, "text/html", html);
     delay(1000);
@@ -109,6 +124,26 @@ String WebManager::getHtml() {
     html += "<label>Volume (0-42)</label>";
     html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.nextElementSibling.value = this.value'>";
     html += "<output>" + String(settings.getVolume()) + "</output>";
+    html += "</div>";
+
+    html += "<div class='card'><h3>LED Settings</h3>";
+    html += "<label>Day Brightness (0-42)</label>";
+    // Map 0-255 -> 0-42 for display
+    int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
+    html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "' oninput='this.nextElementSibling.value = this.value'>";
+    html += "<output>" + String(dayVal) + "</output>";
+    
+    html += "<label>Night Brightness (0-42)</label>";
+    // Map 0-255 -> 0-42 for display
+    int nightVal = map(settings.getLedNightBright(), 0, 255, 0, 42);
+    html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "' oninput='this.nextElementSibling.value = this.value'>";
+    html += "<output>" + String(nightVal) + "</output>";
+    
+    html += "<label>Night Start Hour (0-23)</label>";
+    html += "<input type='number' name='night_start' min='0' max='23' value='" + String(settings.getNightStartHour()) + "'>";
+    
+    html += "<label>Night End Hour (0-23)</label>";
+    html += "<input type='number' name='night_end' min='0' max='23' value='" + String(settings.getNightEndHour()) + "'>";
     html += "</div>";
 
     html += "<div class='card'><h3>AI Settings</h3>";
