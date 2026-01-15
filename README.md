@@ -70,14 +70,22 @@ The device differentiates between two main usage modes based on the handset stat
 | | DOUT | `GPIO 27` | *Modified from 22 to avoid conflict* |
 | **I2C Bus** | SDA | `GPIO 21` | Codec Configuration |
 | | SCL | `GPIO 22` | |
-| **Input** | Dial Pulse | `GPIO 34` | Input Only |
+| **Input** | Dial Pulse | `GPIO 5` | Input with Internal Pull-Up (No Resistor needed!) |
 | | Hook Switch | `GPIO 32` | |
 | | Extra Button | `GPIO 33` | |
-| **GNSS (GPS)** | RX | `GPIO 16` | M10 Module |
-| | TX | `GPIO 17` | |
+| **GNSS (GPS)** | RX | `GPIO 35` | M10 Module |
+| | TX | `GPIO 0` | |
 | **Output** | Vibration | `GPIO 2` | Haptic Feedback |
 | | LED Data | `GPIO 13` | WS2812B |
 | **Storage** | SD CS | `GPIO 4` | On-board SD Slot |
+
+## Accessing the Configuration
+
+Once the device is connected to your WiFi network (or you are connected to its Access Point), you can access the configuration interface by navigating to:
+
+👉 **http://dial-a-charmer.local**
+
+(Requires a modern browser on Android, iOS, Windows, or macOS. No IP address needed!)
 
 ## Project Structure
 

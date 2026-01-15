@@ -44,7 +44,12 @@ To add new compliments:
 4. **Reboot:** Reboot the Dial-A-Charmer (Power Cycle) to re-index the playlists.
 
 ## ⚙️ Web Configuration
-Connect to the WiFi Access Point named **DialACharmer** (No Password) to access:
+Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) to access settings.
+
+Once connected (either directly or if the device is in your home WiFi), open:
+👉 **http://dial-a-charmer.local**
+
+**Configurable Options:**
 - **WiFi Settings**: Connect Dial-A-Charmer to your home network.
 - **Time Settings**: Set your timezone offset.
 - **Audio Settings**: Adjustable Base Volume (0-42).

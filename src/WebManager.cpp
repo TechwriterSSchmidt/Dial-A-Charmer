@@ -1,5 +1,6 @@
 #include "WebManager.h"
 #include "LedStatus.h"
+#include <ESPmDNS.h>
 
 WebManager webManager;
 
@@ -18,16 +19,11 @@ button{width:100%;padding:12px;margin-top:15px;background:#ffc107;color:#000;bor
 void WebManager::begin() {
     String ssid = settings.getWifiSSID();
     String pass = settings.getWifiPass();
-    
-    WiFi.mode(WIFI_AP_STA);
-    
-    // Always start AP (Permanent AP mode requested)
-    WiFi.softAP(CONF_AP_SSID); // Open network (no password)
-    _dnsServer.start(_dnsPort, "*", WiFi.softAPIP());
-    Serial.print("AP Started: ");
-    Serial.println(CONF_AP_SSID);
+    bool connected = false;
 
+    // Try to connect if SSID is set
     if (ssid != "") {
+        WiFi.mode(WIFI_STA);
         WiFi.begin(ssid.c_str(), pass.c_str());
         Serial.print("Connecting to WiFi");
         int tries = 0;
@@ -37,14 +33,30 @@ void WebManager::begin() {
             tries++;
         }
         Serial.println();
+        
+        if (WiFi.status() == WL_CONNECTED) {
+            connected = true;
+            _apMode = false;
+            Serial.print("Connected! IP: ");
+            Serial.println(WiFi.localIP());
+            if (MDNS.begin("dial-a-charmer")) {
+                Serial.println("mDNS responder started. You can access it via http://dial-a-charmer.local");
+            }
+        } else {
+            Serial.println("WiFi Connection Failed.");
+        }
     }
 
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.print("Connected! IP: ");
-        Serial.println(WiFi.localIP());
-        _apMode = false; // Note: AP is still active, but we are effectively "online"
-    } else {
+    // Fallback to AP if not connected
+    if (!connected) {
         _apMode = true;
+        WiFi.mode(WIFI_AP);
+        WiFi.softAP(CONF_AP_SSID); 
+        _dnsServer.start(_dnsPort, "*", WiFi.softAPIP());
+        Serial.print("AP Started (Fallback): ");
+        Serial.println(CONF_AP_SSID);
+        Serial.print("AP IP: ");
+        Serial.println(WiFi.softAPIP());
     }
 
     _server.on("/", [this](){ handleRoot(); });
