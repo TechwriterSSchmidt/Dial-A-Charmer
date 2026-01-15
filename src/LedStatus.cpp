@@ -3,7 +3,7 @@
 LedStatus statusLed;
 
 void LedStatus::begin() {
-    FastLED.addLeds<WS2812, LED_PIN, GRB>(_leds, NUM_LEDS);
+    FastLED.addLeds<WS2812, CONF_PIN_LED, GRB>(_leds, CONF_AC_EXC_LED_NUM);
     setBooting();
 }
 

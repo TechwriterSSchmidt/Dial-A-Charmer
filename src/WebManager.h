@@ -5,6 +5,7 @@
 #include <WebServer.h>
 #include <DNSServer.h>
 #include "Settings.h"
+#include "config.h"
 
 class WebManager {
 public:
@@ -14,14 +15,16 @@ public:
 private:
     WebServer _server;
     DNSServer _dnsServer;
-    const byte _dnsPort = 53;
+    const byte _dnsPort = CONF_DNS_PORT;
     bool _apMode = false;
 
     void handleRoot();
     void handleSave();
+    void handleHelp();
     void handleNotFound();
     
     String getHtml();
+    String getHelpHtml();
 };
 
 extern WebManager webManager;

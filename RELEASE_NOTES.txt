@@ -1,0 +1,18 @@
+# Release Notes - The Atomic Charmer
+
+## v1.0.0 (Initial Release)
+- **Core Functionality**:
+  - Atomic Clock synchronization via GNSS (M10 module).
+  - Rotary Dial input processing (Pulse counting with debounce).
+  - Hook Switch and Extra Action Button support.
+  - Audio playback via I2S (MAX98357A/PCM5102) from SD Card.
+- **Features**:
+  - **Timer/Alarm**: Set countdowns using the rotary dial when the receiver is on the hook.
+  - **Compliment Dispenser**: Dial numbers (1-9) when the receiver is off the hook to hear compliments.
+  - **Time Announcement**: Dial 0 when receiver is off the hook to hear the current time.
+  - **Web Interface**: Captive Portal (Access Point "AtomicCharmer") for configuring Wi-Fi credentials and Timezone offset.
+  - **Status LED**: WS2812 indication for boot, Wi-Fi status, and GNSS lock.
+- **Configuration**:
+  - Centralized `include/config.h` for all hardware pins and system constants.
+  - Persistent settings (Wi-Fi, Timezone) saved to Flash memory.
+  - Standalone operation (No external servers/Home Assistant required).

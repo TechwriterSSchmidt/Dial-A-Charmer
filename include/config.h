@@ -2,10 +2,20 @@
 #define CONFIG_H
 
 // --- Hardware Pins ---
-// Audio (I2S - MAX98357A / PCM5102)
+// Audio (I2S - ES8311 Codec + NS4150B Amp)
 #define CONF_I2S_BCLK       26
 #define CONF_I2S_LRC        25
 #define CONF_I2S_DOUT       22
+// ES8311 requires I2C for configuration
+#define CONF_I2C_SDA        21
+#define CONF_I2C_SCL        22 // Note: Check your board! Usually 22 is SCL on ESP32, but above I2S_DOUT is 22. Conflict?
+                               // Wemos D32 Pro Default: SDA=21, SCL=22. 
+                               // If using ES8311 module, ensure I2S pins don't conflict. 
+                               // Common I2S mappings: BCLK=26, LRC=25, DOUT=22 is standard for internal DAC or PCM5102.
+                               // If SCL is 22, move I2S_DOUT to another pin (e.g., 19 or 27).
+                               // ADJUSTING I2S_DOUT to 27 to avoid conflict with SCL(22).
+#undef CONF_I2S_DOUT
+#define CONF_I2S_DOUT       27 
 
 // GNSS (M10 or similar)
 #define CONF_GPS_RX         16
@@ -42,5 +52,7 @@
 // --- Persistence ---
 #define CONF_PREFS_NS       "charmer"
 #define CONF_DEFAULT_TZ     1
+#define CONF_DEFAULT_VOL    30 // Scale 0-42
+#define CONF_DEFAULT_RING   1
 
 #endif

@@ -5,32 +5,18 @@
 #include <SD.h>
 #include <FS.h>
 
+#include "config.h"
 #include "Settings.h"
 #include "WebManager.h"
 #include "RotaryDial.h"
 #include "LedStatus.h"
-
-// --- Configuration ---
-// Audio (I2S) - MAX98357A / PCM5102
-#define I2S_BCLK 26
-#define I2S_LRC  25
-#define I2S_DOUT 22
-
-// GPS (Serial2)
-#define GPS_RX 16
-#define GPS_TX 17
-#define GPS_BAUD 9600
-
-// Pins
-#define DIAL_PULSE_PIN 34
-#define HOOK_SWITCH_PIN 32
-#define EXTRA_BTN_PIN 33
-// LED_PIN is 13 (in LedStatus.h)
+#include "Es8311Driver.h" // New Audio Codec Driver
+#include "AiManager.h"    // New AI Manager
 
 // --- Objects ---
 TinyGPSPlus gps;
 Audio audio;
-RotaryDial dial(DIAL_PULSE_PIN, HOOK_SWITCH_PIN, EXTRA_BTN_PIN);
+RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN);
 
 // --- Globals ---
 unsigned long alarmEndTime = 0;
@@ -51,19 +37,42 @@ void playSound(String filename) {
 }
 
 void speakTime() {
-    // Logic to construct sentence: "Es ist [Stunde] Uhr [Minuten]"
-    // Requires mp3 files for numbers 0-59, "uhr.mp3", etc.
-    // Placeholder:
     Serial.print("Speaking Time...");
     playSound("/time_intro.mp3"); 
+    // TODO: proper timestamp logic
 }
 
 void speakCompliment(int number) {
-    // Determine category or specific file based on number
+    // Check if AI is configured
+    String key = settings.getGeminiKey();
+    
+    if (key.length() > 5) { // Assuming a valid key
+        statusLed.setWifiConnecting(); // Yellow = Thinking
+        Serial.println("AI Mode Active");
+        
+        // 1. Get Text from Gemini
+        String text = ai.getCompliment(number);
+        
+        if (text.length() > 0) {
+            // 2. Get TTS URL
+            String ttsUrl = ai.getTTSUrl(text);
+            
+            // 3. Play
+            Serial.println("Streaming TTS...");
+            statusLed.setTalking();
+            audio.connecttohost(ttsUrl.c_str());
+            return;
+        } else {
+            Serial.println("AI Failed, falling back to SD");
+            statusLed.setWarning();
+        }
+    }
+    
+    // Fallback if no Key or AI failed
     String path = "/compliments/" + String(number) + ".mp3";
     if (number == 0) path = "/compliments/random.mp3"; 
     
-    Serial.print("Playing compliment: ");
+    Serial.print("Playing compliment (Fallback): ");
     Serial.println(path);
     playSound(path);
 }
@@ -72,22 +81,28 @@ void speakCompliment(int number) {
 void onDial(int number) {
     Serial.printf("Dialed: %d\n", number);
     
-    // Logic depends on Hook State
+    // Check for Ringtone Setting Mode (Button Held)
+    if (dial.isButtonDown()) {
+        if (number >= 1 && number <= 5) {
+            Serial.printf("Setting Ringtone to %d\n", number);
+            settings.setRingtone(number);
+            statusLed.setWifiConnected(); // Green blink
+            playSound("/ringtones/" + String(number) + ".mp3");
+            return;
+        }
+    }
+
     if (dial.isOffHook()) {
-        // Active Mode
         if (number == 0) {
             speakTime();
         } else {
             speakCompliment(number);
         }
     } else {
-        // Idle/Settings Mode (Receiver Down)
-        // Dialing here sets Timer
         Serial.printf("Setting Timer for %d minutes\n", number);
         alarmEndTime = millis() + (number * 60000);
         timerRunning = true;
-        statusLed.setWifiConnecting(); // Yellow blink for timer set?
-        // Maybe play a short "Timer Set" beep
+        statusLed.setWifiConnecting(); 
         playSound("/timer_set.mp3");
     }
 }
@@ -96,10 +111,7 @@ void onHook(bool offHook) {
     Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
     
     if (offHook) {
-        // Picked up
-        statusLed.setIdle(); // Or ready light
-        
-        // If alarm/timer is ringing, stop it
+        statusLed.setIdle();
         if (timerSoundPlaying || alarmActive) {
             if (audio.isRunning()) audio.stopSong();
             timerSoundPlaying = false;
@@ -107,13 +119,9 @@ void onHook(bool offHook) {
             timerRunning = false;
             Serial.println("Alarm/Timer Stopped by Pickup");
         } else {
-            // Normal pickup
-            playSound("/dial_tone.mp3"); // Optional: Fake dial tone
+            playSound("/dial_tone.mp3"); 
         }
-        
     } else {
-        // Hung up
-        // Stop any current playback
         if (audio.isRunning()) {
             audio.stopSong();
             statusLed.setIdle();
@@ -123,43 +131,48 @@ void onHook(bool offHook) {
 
 void onButton() {
     Serial.println("Extra Button Pressed");
-    // Toggle Web/AP Mode? Or Repeat?
-    // Current requirement: "Wecker und Timer ausschalten könnte man über den Gabeltaster"
-    // So this button is free. Maybe Force Time Sync?
-    
-    // For now: Announce IP Address
     playSound("/ip_announce_start.mp3");
-    // Logic to speak IP digits would go here
 }
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(CONF_SERIAL_BAUD);
     settings.begin();
     statusLed.begin();
     
-    // Init SD (Lolin D32 Pro default pins are VSPI: MOSI 23, MISO 19, CLK 18, CS 4)
-    if(!SD.begin(4)){
+    // Init Audio Codec (ES8311)
+    if (!audioCodec.begin()) {
+        Serial.println("ES8311 Init Failed!");
+        statusLed.setWarning();
+    } else {
+        Serial.println("ES8311 Initialized");
+        audioCodec.setVolume(50); // Set Hardware Volume to 50%
+        // Adjust software volume in Audio lib if needed
+    }
+    
+    // Init SD 
+    if(!SD.begin(CONF_PIN_SD_CS)){
         Serial.println("SD Card Mount Failed");
         statusLed.setWarning();
     } else {
         Serial.println("SD Card Mounted");
     }
     
-    // Init Audio
-    audio.setPinout(I2S_BCLK, I2S_LRC, I2S_DOUT);
-    audio.setVolume(15);
+    // Init Audio Lib
+    audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
     
-    // Init Dial
+    // Map 0-42 (UI) to 0-21 (Audio Lib)
+    int volConf = settings.getVolume();
+    int volLib = map(volConf, 0, 42, 0, 21);
+    audio.setVolume(volLib); 
+    
     dial.onDialComplete(onDial);
     dial.onHookChange(onHook);
     dial.onButtonPress(onButton);
     dial.begin();
     
-    // Init Web
     webManager.begin();
     
-    // Init GPS
-    Serial2.begin(GPS_BAUD, SERIAL_8N1, GPS_RX, GPS_TX);
+    Serial2.begin(CONF_GPS_BAUD, SERIAL_8N1, CONF_GPS_RX, CONF_GPS_TX);
     
     Serial.println("Atomic Charmer Started");
     playSound("/startup.mp3");
@@ -169,19 +182,17 @@ void loop() {
     audio.loop();
     webManager.loop();
     dial.loop();
-    statusLed.loop(); // For LED animations
+    statusLed.loop();
     
-    // GPS
     while (Serial2.available() > 0) {
         gps.encode(Serial2.read());
     }
     
-    // Timer Check
     if (timerRunning && millis() > alarmEndTime) {
         timerRunning = false;
         timerSoundPlaying = true;
         Serial.println("Timer Finished! Ringing...");
-        playSound("/alarm_ring.mp3");
+        playSound("/ringtones/" + String(settings.getRingtone()) + ".mp3");
     }
 }
 
@@ -189,9 +200,13 @@ void loop() {
 void audio_eof_mp3(const char *info){
     Serial.print("EOF: "); Serial.println(info);
     statusLed.setIdle();
-    
-    // If it was the alarm ringing, loop it!
     if (timerSoundPlaying) {
-        audio.connecttofs(SD, "/alarm_ring.mp3");
+        audio.connecttofs(SD, ("/ringtones/" + String(settings.getRingtone()) + ".mp3").c_str());
     }
+}
+
+// Called when stream (TTS) finishes
+void audio_eof_stream(const char *info){
+    Serial.print("EOF Stream: "); Serial.println(info);
+    statusLed.setIdle();
 }

@@ -1,4 +1,4 @@
-# The-Atomic-Charmer
+# The-Atomic-Charmer 
 
 The Atomic Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone whos never been late, doubles as an alarm and timer, and delivers compliments on demandbecause who wouldnt want a phone that cheers them on? Created for my mentor Sandra, whose wisdom and warmth outshine even the fanciest electronics.
 
@@ -6,7 +6,9 @@ The Atomic Charmer is a vintage telephone brought back to life with more persona
 - **Microcontroller**: [Wemos Lolin D32 Pro (ESP32)](https://www.wemos.cc/en/latest/d32/d32_pro.html)
   - *Note*: Has built-in SD Card slot.
 - **Positioning**: M10 GNSS Module (GPS/GLONASS/Galileo)
-- **Audio**: Amplifier with Speaker (I2S or DAC)
+- **Audio**: 
+  - Module with ES8311 Codec + NS4150B Amplifier
+  - On-board Microphone (ES8311)
 - **Power**: 3000mAh Battery
 - **Input**: 
   - Vintage Telephone Rotary Dial
@@ -21,6 +23,7 @@ The Atomic Charmer is a vintage telephone brought back to life with more persona
 3. **Alarm Clock**: Wake up to custom sounds or compliments.
 4. **Compliment Dispenser**: Dial a specific number.
 5. **Captive Portal**: Connect to Wi-Fi 'AtomicCharmer' to configure credentials and timezone.
+6. **Standalone**: Operates completely independently without Home Assistant or external servers.
 
 ## User Interface & Control
 - **Hook Switch (Gabeltaster)**:

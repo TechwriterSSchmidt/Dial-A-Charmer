@@ -15,6 +15,7 @@ public:
     void onButtonPress(void (*callback)());
 
     bool isOffHook();
+    bool isButtonDown();
 
 private:
     int _pulsePin;

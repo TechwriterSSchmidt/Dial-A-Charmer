@@ -2,9 +2,7 @@
 #define LED_STATUS_H
 
 #include <FastLED.h>
-
-#define LED_PIN 13
-#define NUM_LEDS 1
+#include "config.h"
 
 class LedStatus {
 public:
@@ -23,7 +21,7 @@ public:
     void setWarning();
 
 private:
-    CRGB _leds[NUM_LEDS];
+    CRGB _leds[CONF_AC_EXC_LED_NUM];
     unsigned long _lastUpdate = 0;
     int _state = 0; // 0=Idle
 };
