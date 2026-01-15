@@ -42,7 +42,7 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Action (Dialing):** Rotating the dial sets the **Timer**.
     *   Dial `5` -> Sets 5 minute timer.
     *   Lift the handset shortly off the cradle -> Resets timer and the alarm.
-*   **Action (Button and dialing):** Pressing the extra button enables the alarm clock mode. In this mode, dialing `0715` sets the clock to `7:15` o'clock AM. To delete the alarm, press the button and lift off the handset from the hook shortly. 
+*   **Action (Button and dialing):** Pressing the extra button enables the alarm clock mode. In this mode, dialing `0715` sets the clock to `7:15` o'clock AM next morning. To delete the alarm, press the button and lift off the handset from the hook shortly. 
 
 ### 2. Active Mode (Handset Lifted)
 *   **Trigger:** Lift the handset (Off-Hook).
@@ -136,9 +136,9 @@ Single WS2812B LED provides visual feedback.
 | **GPS Search** | 🟠 Orange pulsing | Waiting for Satellite Lock |
 | **Ready** | 🟢 Green continuously | Time synced, ready to use |
 | **Error** | 🔴 Red continuously | SD Card missing or Hardware fault |
-| **Battery< 15% *** | Red pulsing | Recharge battery|
+| **Battery< 15% ** | Red pulsing | Recharge battery|
 | **Ringing** | ⚪ Warm White Flashing | Alarm active |
-| **Ringing** | ⚪ Pink Flashing | Timer active |
+| **Ringing** | 🌸 Pink Flashing | Timer active |
 
 ## Acoustic Signals
 
@@ -167,11 +167,19 @@ The system uses specific WAV files in `/system/` for feedback:
     *   On first boot, connect to WiFi AP `DialACharmer`.
     *   Go to `192.168.4.1` to set your Timezone and Credentials (if needed for future OTA).
 
+## Future Options
+
+*   **Clock:** Add option to set individual alarms for for each day of the week.
+*	   **Dial logic:** Implement multi-digit dialing to set longer timers and alarms.
+*   **Dial logic:** Implement phone book for special functionalities such as `voice menu`
+*   **Dial TTS voice Menu:** Implement a classic `dial a number` menu to turn on/off services such as alarms or to enable/disable snooze or to change the ringtone and others.
+*   **Snooze functionality:** Implement lift to snooze option. Snooze time should be selectable in the Webinterface.
+*   **Webinterface:** Add separate volume control for base speaker and handset
+*   **Main Code:** AGC for mic and, if possible, AEC for Gemini AI usage
+
 ## Maintenance
 
 *   **Battery:** The system runs on a 3000mAh LiPo. Charge when the LED indicates low battery (if configured) or audio becomes distorted.
 *   **Time:** Thanks to GNSS, time is always accurate as long as the device has occasional sky visibility.
 
-***
 
-*Built specially for Sandra, a nerdy and inspiring colleague/mentor.*
