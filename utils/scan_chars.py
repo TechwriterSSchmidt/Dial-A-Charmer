@@ -3,7 +3,7 @@ import glob
 import collections
 
 def scan_chars():
-    base_dir = r"c:\Users\scse\Documents\PlatformIO\The-Atomic-Charmer\utils\compliments\grouped"
+    base_dir = os.path.join(os.path.dirname(__file__), 'compliments', 'grouped')
     allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?:;()-_\"'\n\r"
     # Basic ASCII + common punctuation relative to code.
     # Note: Umlauts are NOT in this allowed list, so they should show up.

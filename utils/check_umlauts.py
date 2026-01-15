@@ -66,6 +66,6 @@ def check_encoding_issues(filepath):
         print(f"Error: {e}")
 
 if __name__ == "__main__":
-    base_dir = r"c:\Users\scse\Documents\PlatformIO\The-Atomic-Charmer\utils\compliments\grouped"
+    base_dir = os.path.join(os.path.dirname(__file__), 'compliments', 'grouped')
     for f in glob.glob(os.path.join(base_dir, "*.txt")):
         check_encoding_issues(f)

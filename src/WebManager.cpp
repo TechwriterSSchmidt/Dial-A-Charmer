@@ -92,7 +92,7 @@ String WebManager::getHtml() {
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
     html += "</head><body>";
-    html += "<h2>Atomic Charmer Setup</h2>";
+    html += "<h2>Dial-A-Charmer Setup</h2>";
     html += "<form action='/save' method='POST'>";
     
     html += "<div class='card'><h3>WiFi Settings</h3>";
@@ -142,7 +142,7 @@ String WebManager::getHelpHtml() {
     
     html += "<div class='card'><h3>3. Settings</h3>";
     html += "<ul><li><b>Change Ringtone:</b> Hold the 'Extra Button' and dial 1-5.</li>";
-    html += "<li><b>Web Config:</b> Connect to 'AtomicCharmer' WiFi.</li></ul></div>";
+    html += "<li><b>Web Config:</b> Connect to 'DialACharmer' WiFi.</li></ul></div>";
     
     html += "<div class='card'><a href='/' class='btn' style='background:#444;color:#fff;text-align:center;text-decoration:none;display:block'>Back to Settings</a></div>";
     

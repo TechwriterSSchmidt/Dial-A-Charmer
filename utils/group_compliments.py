@@ -1,8 +1,8 @@
 
 import os
 
-source_file = r"C:\Users\scse\Documents\PlatformIO\The-Atomic-Charmer\utils\compliments\compliments.txt"
-output_dir = r"C:\Users\scse\Documents\PlatformIO\The-Atomic-Charmer\utils\compliments\grouped"
+source_file = os.path.join(os.path.dirname(__file__), 'compliments', 'compliments.txt')
+output_dir = os.path.join(os.path.dirname(__file__), 'compliments', 'grouped')
 
 # Ensure output directory exists
 os.makedirs(output_dir, exist_ok=True)

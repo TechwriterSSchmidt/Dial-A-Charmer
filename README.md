@@ -1,6 +1,6 @@
-# The Atomic Charmer
+# Dial-A-Charmer
 
-The Atomic Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on? Created for my mentor Sandra, whose nerdiness and warmth outshine even the fanciest electronics.
+Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on? Created for my mentor Sandra, whose nerdiness and warmth outshine even the fanciest electronics.
 
 ## Support my projects
 
@@ -30,7 +30,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Interaction** | **Compliment Dispenser** | Dial specific numbers to hear compliments from different "personas". |
 | | **Vintage Feel** | Uses original rotary dial and hook switch mechanics. |
 | **System** | **Standalone** | Operates completely independently without Home Assistant or external servers. |
-| | **Captive Portal** | Wi-Fi hotspot 'AtomicCharmer' for simple timezone/settings configuration. |
+| | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple timezone/settings configuration. |
 
 ## Operational Logic
 
@@ -87,7 +87,7 @@ The device differentiates between two main usage modes based on the handset stat
 
 ## Audio Configuration
 
-Use a FAT32 formatted SD Card. The file structure is crucial for the Atomic Charmer to function properly.
+Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Charmer to function properly.
 
 ### SD Card Structure
 
@@ -153,7 +153,7 @@ The system uses specific WAV files in `/system/` for feedback:
     *   Upload Filesystem (Optional, if using LittleFS, otherwise just skip this).
     *   **Upload Firmware**.
 4.  **Configure:**
-    *   On first boot, connect to WiFi AP `AtomicCharmer`.
+    *   On first boot, connect to WiFi AP `DialACharmer`.
     *   Go to `192.168.4.1` to set your Timezone and Credentials (if needed for future OTA).
 
 ## Maintenance

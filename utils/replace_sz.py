@@ -18,7 +18,7 @@ def replace_sz_in_file(filepath):
         print(f"Error processing {filepath}: {e}")
 
 if __name__ == "__main__":
-    base_dir = r"c:\Users\scse\Documents\PlatformIO\The-Atomic-Charmer\utils\compliments\grouped"
+    base_dir = os.path.join(os.path.dirname(__file__), 'compliments', 'grouped')
     files = ["trump.txt", "badran.txt", "yoda.txt", "neutral.txt"]
     
     for file_name in files:

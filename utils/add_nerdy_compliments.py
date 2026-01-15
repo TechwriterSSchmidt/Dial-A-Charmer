@@ -2,7 +2,7 @@ import os
 import random
 
 def append_to_file(filename, new_lines):
-    path = os.path.join(r"c:\Users\scse\Documents\PlatformIO\The-Atomic-Charmer\utils\compliments\grouped", filename)
+    path = os.path.join(os.path.dirname(__file__), 'compliments', 'grouped', filename)
     try:
         with open(path, "a", encoding="utf-8") as f:
             f.write("\n")

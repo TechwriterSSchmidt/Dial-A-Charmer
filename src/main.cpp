@@ -525,7 +525,7 @@ void setup() {
     
     Serial2.begin(CONF_GPS_BAUD, SERIAL_8N1, CONF_GPS_RX, CONF_GPS_TX);
     
-    Serial.println("Atomic Charmer Started");
+    Serial.println("Dial-A-Charmer Started");
     
     // Init Motor
     pinMode(CONF_PIN_VIB_MOTOR, OUTPUT);

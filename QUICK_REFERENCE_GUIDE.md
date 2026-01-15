@@ -1,4 +1,4 @@
-# Quick Reference Guide - The Atomic Charmer
+# Quick Reference Guide - Dial-A-Charmer
 
 ## 📞 How to Use
 1. **Hear a Compliment:**
@@ -41,4 +41,4 @@ To add new compliments:
 1. **Prepare Audio:** Recording or TTS.
 2. **Split Files:** If you have one long file, use `python utils/split_audio.py` to chop it into pieces.
 3. **Copy to SD:** Save mp3s into the respective folder (`mp3_group_XX`) on the SD card.
-4. **Reboot:** Reboot the Atomic Charmer (Power Cycle) to re-index the playlists.
+4. **Reboot:** Reboot the Dial-A-Charmer (Power Cycle) to re-index the playlists.

@@ -37,7 +37,7 @@
 
 // Status LED (WS2812)
 #define CONF_PIN_LED        13
-#define CONF_AC_EXC_LED_NUM 1 // Atomic Charmer Exclusive LED Number
+#define CONF_AC_EXC_LED_NUM 1 // Dial-A-Charmer Exclusive LED Number
 
 // SD Card (VSPI Default on Lolin D32 Pro)
 #define CONF_PIN_SD_CS      4
@@ -53,7 +53,7 @@
 #define CONF_BTN_DEBOUNCE        50
 
 // --- Web / Network ---
-#define CONF_AP_SSID        "AtomicCharmer"
+#define CONF_AP_SSID        "DialACharmer"
 #define CONF_AP_IP          IPAddress(192, 168, 4, 1)
 #define CONF_DNS_PORT       53
 
