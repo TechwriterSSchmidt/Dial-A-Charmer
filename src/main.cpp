@@ -292,7 +292,10 @@ bool checkBattery() {
 
     int raw = adc1_get_raw(ADC1_CHANNEL_7);
     
-    float voltage = (float)raw * 3.3 / 4095.0 * 2.0; // Correction logic (Divider 100k/100k -> x2)
+    // Correction logic inspired by renatobo/bonogps for Lolin D32 Pro
+    // They associate raw 4096 with ~7.445V at the battery (post divider x2 logic implicit in factor)
+    // Formula: (raw / 4096.0) * 7.445
+    float voltage = (float)raw / 4096.0 * 7.445; 
     
     Serial.printf("Battery: %.2f V (Raw: %d)\n", voltage, raw);
     
@@ -565,8 +568,55 @@ void onButton() {
     speakTime();
 }
 
+// --- Deep Sleep & Power Management ---
+// Configured in config.h: CONF_SLEEP_TIMEOUT_MS
+
+RTC_DATA_ATTR int bootCount = 0; // Store in RTC memory
+
+bool isUsbPowerConnected() {
+    // Heuristic for Lolin D32 Pro via Battery Divider (35)
+    // Legacy ADC driver is used in checkBattery()
+    // 4.2V = ~2310 raw. 
+    // < 0.1V (Raw < 50) -> No Battery -> USB Power
+    // > 4.3V (Raw > 2400) -> Overcharged/USB Direct?
+    
+    int raw = adc1_get_raw(ADC1_CHANNEL_7);
+    if (raw < 50 || raw > 2400) return true; 
+    return false;
+}
+
+void setGpsStandby() {
+    Serial.println("GPS: Entering Standby (UBX-RXM-PMREQ)");
+    // UBX-RXM-PMREQ (Backup Mode, Infinite Duration)
+    uint8_t packet[] = {
+        0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 
+        0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+        0x4D, 0x3B
+    };
+    Serial2.write(packet, sizeof(packet));
+    delay(100); // Give it time to sleep
+}
+
+void wakeGps() {
+    Serial.println("GPS: Waking Up...");
+    // Send dummy bytes to wake UART
+    Serial2.write(0xFF);
+    delay(100);
+}
+
+unsigned long lastActivityTime = 0;
+
 void setup() {
     Serial.begin(CONF_SERIAL_BAUD);
+    
+    // Check Wakeup Cause
+    esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
+        Serial.println("Woke up from Deep Sleep (Hook Lift)!");
+    } else {
+        Serial.println("Power On / Reset");
+    }
+
     settings.begin();
     statusLed.begin();
     
@@ -605,6 +655,11 @@ void setup() {
     
     Serial2.begin(CONF_GPS_BAUD, SERIAL_8N1, CONF_GPS_RX, CONF_GPS_TX);
     
+    // If we woke from Deep Sleep, the GPS is likely in Backup Mode. Wake it up!
+    if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
+        wakeGps();
+    }
+    
     Serial.println("Dial-A-Charmer Started");
     
     // Init Motor
@@ -641,6 +696,33 @@ void loop() {
     if (timerRunning && millis() > alarmEndTime) {
         timerRunning = false;
         startAlarm();
+    }
+    
+    // --- SMART DEEP SLEEP LOGIC ---
+    // Prevent sleep if: Off Hook (Active), Audio Playing, Timer Running, or USB Power Detected
+    bool systemBusy = dial.isOffHook() || audio.isRunning() || timerRunning || isAlarmRinging || isUsbPowerConnected();
+    
+    if (systemBusy) {
+        lastActivityTime = millis();
+    } else {
+        if (millis() - lastActivityTime > CONF_SLEEP_TIMEOUT_MS) {
+            Serial.println("zzZ Entering Smart Deep Sleep (Preserving GPS) zzZ");
+            
+            // 1. Send GPS to Sleep (Backup Mode)
+            setGpsStandby();
+            
+            // 2. Configure Wakeup
+            // We wake when the hook is lifted.
+            // Check current state to wake on change/toggle
+            int currentHookState = digitalRead(CONF_PIN_HOOK);
+            esp_sleep_enable_ext0_wakeup((gpio_num_t)CONF_PIN_HOOK, !currentHookState);
+            
+            // 3. Status LED Off
+            statusLed.off(); // Ensure LED is dark
+            
+            // 4. Goodnight
+            esp_deep_sleep_start();
+        }
     }
 }
 

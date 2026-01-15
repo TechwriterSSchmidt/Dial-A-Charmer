@@ -114,3 +114,8 @@ void LedStatus::setWarning() {
     _currentState = STATE_WARNING;
     applyState();
 }
+
+void LedStatus::off() {
+    _pixels.clear();
+    _pixels.show();
+}

@@ -22,6 +22,7 @@ public:
     void setTalking();
     void setIdle();
     void setWarning();
+    void off();
 
 private:
     Adafruit_NeoPixel _pixels;

@@ -6,85 +6,106 @@ WebManager webManager;
 
 const char* htmlStyle = R"rawliteral(
 <style>
-@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 body {
-    font-family: 'VT323', monospace;
+    font-family: 'Times New Roman', Times, serif;
     margin: 0;
     padding: 20px;
-    background-color: #0d1117;
-    color: #00ff41; /* CRT Green */
-    text-shadow: 0 0 5px #00ff41;
-    background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-    background-size: 100% 2px, 3px 100%;
+    background-color: #2b1d0e; /* Bakelite Brown */
+    color: #e8dcca; /* Cream/Ivory */
+    background-image: radial-gradient(#3a2817 15%, transparent 16%), radial-gradient(#3a2817 15%, transparent 16%);
+    background-size: 20px 20px;
+    background-position: 0 0, 10px 10px;
 }
 h2 {
     text-align: center;
-    color: #00ff41;
-    border-bottom: 2px solid #00ff41;
+    color: #d4af37; /* Brass/Gold */
+    border-bottom: 3px double #d4af37;
     padding-bottom: 10px;
     text-transform: uppercase;
-    letter-spacing: 2px;
+    text-shadow: 2px 2px 0px #000;
 }
 .card {
-    background: #001100;
-    padding: 15px;
-    border: 2px solid #00ff41;
-    margin-bottom: 20px;
-    border-radius: 0; /* Retro sharp corners */
-    box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+    background: #1a1108;
+    padding: 20px;
+    border: 2px solid #5c4033;
+    margin-bottom: 25px;
+    border-radius: 10px;
+    box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
+    position: relative;
+}
+.card::before {
+    content: '';
+    position: absolute;
+    top: 5px; left: 5px; right: 5px; bottom: 5px;
+    border: 1px dashed #5c4033;
+    border-radius: 5px;
+    pointer-events: none;
 }
 .card h3 {
     margin-top: 0;
-    border-bottom: 1px dashed #008f11;
+    color: #d4af37;
+    border-bottom: 1px solid #5c4033;
     padding-bottom: 5px;
+    font-size: 1.4em;
 }
 input, select {
     width: 100%;
-    padding: 10px;
-    margin: 5px 0;
-    background: #000;
-    color: #00ff41;
-    border: 1px solid #00ff41;
+    padding: 12px;
+    margin: 8px 0;
+    background: #e8dcca;
+    color: #2b1d0e;
+    border: 2px solid #5c4033;
     box-sizing: border-box;
-    font-family: 'VT323', monospace;
-    font-size: 1.2em;
+    font-family: 'Times New Roman', Times, serif;
+    font-size: 1.1em;
+    border-radius: 3px;
+    box-shadow: inset 2px 2px 5px rgba(0,0,0,0.2);
 }
 input:focus {
     outline: none;
-    box-shadow: 0 0 5px #00ff41;
+    background: #fff;
+    border-color: #d4af37;
 }
 label {
     display: block;
-    margin-top: 10px;
+    margin-top: 15px;
     font-weight: bold;
-    color: #008f11;
+    color: #a89f91;
     text-transform: uppercase;
+    font-size: 0.9em;
+    letter-spacing: 1px;
 }
 output {
     display: inline-block;
     float: right;
-    color: #00ff41;
+    color: #d4af37;
     font-weight: bold;
 }
 button {
     width: 100%;
-    padding: 12px;
-    margin-top: 15px;
-    background: #00ff41;
-    color: #000;
-    border: 2px solid #00ff41;
+    padding: 15px;
+    margin-top: 20px;
+    background: #800000; /* Dark Red Button */
+    color: #e8dcca;
+    border: 4px solid #1a0f00;   
     font-weight: bold;
-    font-family: 'VT323', monospace;
+    font-family: 'Times New Roman', Times, serif;
     font-size: 1.5em;
     cursor: pointer;
     text-transform: uppercase;
+    border-radius: 50px; /* Round Button */
+    box-shadow: 0 5px 0 #3d0000, 0 10px 10px rgba(0,0,0,0.4);
+    transition: all 0.1s;
+}
+button:active {
+    box-shadow: 0 2px 0 #3d0000, 0 5px 5px rgba(0,0,0,0.4);
+    transform: translateY(3px);
 }
 button:hover {
-    background: #000;
-    color: #00ff41;
+    background: #a00000;
 }
-a { color: #00ff41; text-decoration: none; }
-a:hover { text-decoration: underline; background-color: #00ff41; color: #000; }
+a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; }
+a:hover { color: #fff; border-bottom: 1px solid #fff; }
 </style>
 )rawliteral";
 
@@ -237,7 +258,17 @@ String WebManager::getHtml() {
     html += "</div>";
     
     html += "<div class='card'><h3>Time Settings</h3>";
-    html += "<label>Timezone Offset (Hours)</label><input type='number' name='tz' value='" + String(settings.getTimezoneOffset()) + "'>";
+    html += "<label>Timezone (Europe)</label>";
+    html += "<select name='tz'>";
+    int tz = settings.getTimezoneOffset();
+    const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London, Dublin, Lisbon)", "UTC +1 (Zürich, Paris, Rome)", "UTC +2 (Athens, Helsinki, Kyiv)", "UTC +3 (Moscow, Istanbul)" };
+    int offsets[] = { -1, 0, 1, 2, 3 };
+    for(int i=0; i<5; i++) {
+        html += "<option value='" + String(offsets[i]) + "'";
+        if(tz == offsets[i]) html += " selected";
+        html += ">" + String(labels[i]) + "</option>";
+    }
+    html += "</select>";
     html += "</div>";
 
     html += "<div class='card'><h3>Audio Settings</h3>";

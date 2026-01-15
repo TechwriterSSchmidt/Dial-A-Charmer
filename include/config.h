@@ -54,6 +54,9 @@
 #define CONF_HOOK_DEBOUNCE       50
 #define CONF_BTN_DEBOUNCE        50
 
+// --- Power Management ---
+#define CONF_SLEEP_TIMEOUT_MS    60000 // 60 Seconds Idle before Deep Sleep
+
 // --- Web / Network ---
 #define CONF_AP_SSID        "Dial-A-Charmer"
 #define CONF_AP_IP          IPAddress(192, 168, 4, 1)
