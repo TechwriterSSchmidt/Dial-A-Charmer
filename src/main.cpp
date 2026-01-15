@@ -263,17 +263,85 @@ void playSound(String filename, bool useSpeaker = false) {
     }
 }
 
+// --- Time Speaking Logic ---
+enum TimeSpeakState { TIME_IDLE, TIME_INTRO, TIME_HOUR, TIME_UHR, TIME_MINUTE, TIME_DONE };
+TimeSpeakState timeState = TIME_IDLE;
+int currentHour = 0;
+int currentMinute = 0;
+
 void speakTime() {
-    Serial.print("Speaking Time...");
-    playSound("/time_intro.mp3", false); 
-    // TODO: proper timestamp logic
+    Serial.println("Speaking Time...");
+    
+    // Get time from GPS or fallback
+    // Note: TinyGPS++ gps variable is available
+    if (gps.time.isValid()) {
+        currentHour = gps.time.hour() + settings.getTimezoneOffset(); // Basic offset logic
+        if (currentHour >= 24) currentHour -= 24;
+        currentMinute = gps.time.minute();
+    } else {
+        // Mock time if no GPS for testing? Or maybe fail silently?
+        // Let's assume 12:00 for demo if valid fails
+        Serial.println("GPS Time Invalid, using mock 12:00");
+        currentHour = 12;
+        currentMinute = 0;
+    }
+
+    setAudioOutput(OUT_HANDSET);
+    timeState = TIME_INTRO;
+    playSound("/time/intro.wav", false);
+}
+
+void processTimeQueue() {
+    if (timeState == TIME_IDLE || timeState == TIME_DONE) return;
+
+    // This function is called from audio_eof_mp3 to trigger next file
+    String nextFile = "";
+
+    switch (timeState) {
+        case TIME_INTRO: // Intro finished, play Hour
+            timeState = TIME_HOUR;
+            nextFile = "/time/h_" + String(currentHour) + ".wav";
+            break;
+            
+        case TIME_HOUR: // Hour finished, play "Uhr"
+            timeState = TIME_UHR;
+            nextFile = "/time/uhr.wav";
+            break;
+            
+        case TIME_UHR: // "Uhr" finished, play Minute (if not 0)
+            if (currentMinute == 0) {
+                timeState = TIME_DONE;
+                Serial.println("Time Speak Done (Exact Hour)");
+            } else {
+                timeState = TIME_MINUTE;
+                if (currentMinute < 10) {
+                     // Play "null five" format? 
+                     nextFile = "/time/m_0" + String(currentMinute) + ".wav";
+                } else {
+                     nextFile = "/time/m_" + String(currentMinute) + ".wav";
+                }
+            }
+            break;
+            
+        case TIME_MINUTE: // Minute finished
+            timeState = TIME_DONE;
+            Serial.println("Time Speak Done");
+            break;
+            
+        default: break;
+    }
+    
+    if (nextFile.length() > 0) {
+        Serial.print("Next Time File: "); Serial.println(nextFile);
+        playSound(nextFile, false);
+    }
 }
 
 void speakCompliment(int number) {
-    // Check if AI is configured
+    // Check if AI is configured (Skip for 0 = Random Mix from SD)
     String key = settings.getGeminiKey();
     
-    if (key.length() > 5) { // Assuming a valid key
+    if (number != 0 && key.length() > 5) { // Assuming a valid key
         statusLed.setWifiConnecting(); // Yellow = Thinking
         Serial.println("AI Mode Active");
         
@@ -381,11 +449,8 @@ void onDial(int number) {
     }
 
     if (dial.isOffHook()) {
-        if (number == 0) {
-            speakTime();
-        } else {
-            speakCompliment(number);
-        }
+        // Dialing while off-hook -> Interrupt and play new selection
+        speakCompliment(number);
     } else {
         Serial.printf("Setting Timer for %d minutes\n", number);
         alarmEndTime = millis() + (number * 60000);
@@ -407,7 +472,9 @@ void onHook(bool offHook) {
             timerRunning = false;
             Serial.println("Alarm/Timer Stopped by Pickup");
         } else {
-            playSound("/system/dial_tone.wav", false); 
+            // Automatic Surprise Mix on Pickup
+            Serial.println("Auto-Start: Random Surprise Mix");
+            speakCompliment(0); 
         }
     } else {
         if (audio.isRunning()) {
@@ -418,8 +485,8 @@ void onHook(bool offHook) {
 }
 
 void onButton() {
-    Serial.println("Extra Button Pressed");
-    playSound("/system/beep.wav", false);
+    Serial.println("Extra Button Pressed: Speak Time");
+    speakTime();
 }
 
 void setup() {
@@ -490,6 +557,13 @@ void loop() {
 // Audio Events
 void audio_eof_mp3(const char *info){
     Serial.print("EOF: "); Serial.println(info);
+    
+    // Handle Time Speaking Queue
+    if (timeState != TIME_IDLE && timeState != TIME_DONE) {
+        processTimeQueue();
+        return; // Don't idle LED yet
+    }
+
     statusLed.setIdle();
     
     if (isAlarmRinging) {

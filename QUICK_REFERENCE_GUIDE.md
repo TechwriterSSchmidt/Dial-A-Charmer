@@ -3,15 +3,16 @@
 ## 📞 How to Use
 1. **Hear a Compliment:**
    - Lift the receiver.
-   - **Dial 1:** Donald Trump Style.
+   - **Automatic:** The **Random Surprise Mix** starts immediately.
+   - **Dial 1:** Donald Trump Style (Interrupts mix).
    - **Dial 2:** Jacqueline Badran Style (Swiss Politics).
    - **Dial 3:** Yoda Style.
    - **Dial 4:** Neutral / Classic Nerd Style.
-   - **Dial 0:** Random Surprise Mix.
+   - **Dial 0:** Next Random Surprise Track.
 
 2. **Hear the Time:**
-   - Lift the receiver and dial **0** (If configured for Time, otherwise random mix).
-   - *Note: Default Firmware v1.2 maps '0' to Random Playlist. Time function moved to separate Extra Button if available.*
+   - Press the **Extra Button** (if available).
+   - *Note: Default Firmware v1.3 maps 'Pickup' to Random Playlist and 'Button' to Time.*
 
 3. **Set a Timer:**
    - Keep receiver **ON** the hook.

@@ -3,6 +3,8 @@ import math
 import struct
 import os
 import random
+import subprocess
+import shutil
 
 SAMPLE_RATE = 44100
 AMPLITUDE = 16000 # Max 32767
@@ -59,6 +61,71 @@ def generate_tone(filename, frequency, duration_sec, pulse_on_ms=0, pulse_off_ms
             
         wav_file.writeframes(b''.join(data))
 
+def generate_startup_sound(output_path, ffmpeg_path="ffmpeg.exe"):
+    print(f"Generating Startup Sound (Windows-ish Pad)...")
+    
+    # Windows 95-ish "Ambient Swell" (E-flat Major)
+    # Frequencies: Eb3, Bb3, Eb4, G4, Bb4, Eb5
+    chord_freqs = [155.56, 233.08, 311.13, 392.00, 466.16, 622.25]
+    duration = 6.0 # seconds
+    
+    wav_filename = output_path.replace(".mp3", ".wav")
+    
+    num_samples = int(SAMPLE_RATE * duration)
+    data = []
+    
+    for i in range(num_samples):
+        # Time progression (0.0 to 1.0)
+        t = i / num_samples
+        
+        # Envelope: Slow attack (2s), Sustain, Slow Decay (2s)
+        env = 1.0
+        if t < 0.33: # Attack
+            env = t / 0.33
+        elif t > 0.66: # Decay
+            env = (1.0 - t) / 0.34
+            
+        # Mix oscillators
+        mixed_sample = 0.0
+        for freq in chord_freqs:
+            # Add slight detune for "width"
+            osc_val = math.sin(2.0 * math.pi * freq * i / SAMPLE_RATE)
+            mixed_sample += osc_val
+        
+        # Normalize (divide by num of oscillators)
+        mixed_sample = mixed_sample / len(chord_freqs)
+        
+        # Apply Envelope and Volume
+        final_sample = int(mixed_sample * AMPLITUDE * env)
+        data.append(struct.pack('<h', final_sample))
+
+    # Write WAV
+    with wave.open(wav_filename, 'w') as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(SAMPLE_RATE)
+        wav_file.writeframes(b''.join(data))
+        
+    # Convert to MP3 using local ffmpeg
+    if os.path.exists(wav_filename):
+        # Look for ffmpeg in current dir
+        if not os.path.exists(ffmpeg_path) and shutil.which("ffmpeg"):
+            ffmpeg_cmd = "ffmpeg"
+        else:
+            ffmpeg_cmd = os.path.abspath(ffmpeg_path)
+            
+        print(f"Converting {wav_filename} to {output_path} using {ffmpeg_cmd}...")
+        try:
+            # Overwrite if exists (-y)
+            subprocess.run([ffmpeg_cmd, "-y", "-i", wav_filename, output_path], 
+                         check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("Conversion successful.")
+            os.remove(wav_filename) # Cleanup WAV
+        except Exception as e:
+            print(f"Error converting to MP3: {e}. Keeping WAV file.")
+            # Rename WAV to MP3 variable to at least have the file? 
+            # No, user needs .mp3. If ffmpeg fails, we leave .wav and warn.
+
 if __name__ == "__main__":
     # Determine project root relative to this script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -79,6 +146,11 @@ if __name__ == "__main__":
 
     # 4. Success Beep / Timer Set (1000Hz, single beep 200ms)
     generate_tone(os.path.join(out_dir, "beep.wav"), 1000, 0.2)
+
+    # 5. Startup Sound (MP3)
+    startup_path = os.path.join(project_root, "sd_card_template", "startup.mp3")
+    ffmpeg_exe = os.path.join(script_dir, "ffmpeg.exe")
+    generate_startup_sound(startup_path, ffmpeg_exe)
 
 
 
