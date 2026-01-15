@@ -2,6 +2,7 @@ import wave
 import math
 import struct
 import os
+import random
 
 SAMPLE_RATE = 44100
 AMPLITUDE = 16000 # Max 32767
@@ -47,8 +48,7 @@ def generate_tone(filename, frequency, duration_sec, pulse_on_ms=0, pulse_off_ms
                 hum = 0.05 * math.sin(2.0 * math.pi * 50 * i / SAMPLE_RATE)
                 
                 # And minimal noise?
-                import random
-                noise = 0.01 * (random.random() - 0.5)
+                noise = 0.02 * (random.random() - 0.5)
                 
                 sample = int((val + hum + noise) * AMPLITUDE)
                 # Clip
@@ -60,7 +60,11 @@ def generate_tone(filename, frequency, duration_sec, pulse_on_ms=0, pulse_off_ms
         wav_file.writeframes(b''.join(data))
 
 if __name__ == "__main__":
-    out_dir = r"c:\Users\scse\Documents\PlatformIO\The-Atomic-Charmer\sd_card_template\system"
+    # Determine project root relative to this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(script_dir)
+    out_dir = os.path.join(project_root, "sd_card_template", "system")
+    
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
@@ -70,11 +74,11 @@ if __name__ == "__main__":
     # 2. Busy Tone (425Hz, 480ms ON, 480ms OFF) - 10 Seconds
     generate_tone(os.path.join(out_dir, "busy_tone.wav"), 425, 10, 480, 480)
     
-    # 3. Error / Off-Hook Warning (Special Information Tone usually, but here fast busy)
-    # 950/1400/1800 is SIT. Let's precise fast busy: 200ms/200ms
-    generate_tone(os.path.join(out_dir, "error_tone.wav"), 425, 10, 200, 200)
+    # 3. Error / Off-Hook Warning (Fast Busy: 200ms/200ms)
+    generate_tone(os.path.join(out_dir, "error_tone.wav"), 425, 5, 200, 200)
 
     # 4. Success Beep / Timer Set (1000Hz, single beep 200ms)
     generate_tone(os.path.join(out_dir, "beep.wav"), 1000, 0.2)
+
 
 
