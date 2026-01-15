@@ -7,12 +7,13 @@
   - **Yoda Style**: Dial 3
   - **Neutral/Nerdy**: Dial 4
   - **Random Mix**: Dial 0 (or Pickup without dial)
+- **SD Card Structure Update**:
+  - Changed folder names to `mp3_group_01` ... `mp3_group_04` for easier expansion.
+- **Tools**:
+  - **`split_audio.py`**: Added tool to split long MP3 recordings into individual files based on silence detection. Removed dependencies on `pydub`.
+  - **Cleanup**: Removed experimental Trump TTS generation scripts.
 - **Smart Shuffle**: Tracks are played without repetition until all in a category are heard.
-- **Content Expansion**: Added over 1200 unique compliments text files.
-- **Firmware Update**: Dynamic directory scanning (`/compliments/{category}/`) on SD card.
-- **Bugfixes**: 
-  - Python split script rewritten to remove `pydub` dependency. 
-  - Added audio fade-in to prevent pops.
+- **Firmware Update**: Dynamic directory scanning (`/mp3_group_XX/`) on SD card.
 
 ## v1.0.0 (Initial Release)
 - **Core Functionality**:

@@ -29,16 +29,15 @@ Ensure your SD card is formatted (FAT32) and structured as follows:
 ├── time_intro.mp3          (Preface for clock)
 ├── ringtones/              
 │   ├── 1.mp3 ... 5.mp3     (Ringtone options)
-├── compliments/
-│   ├── trump/              (mp3 files for Dial 1)
-│   ├── badran/             (mp3 files for Dial 2)
-│   ├── yoda/               (mp3 files for Dial 3)
-│   ├── neutral/            (mp3 files for Dial 4)
+├── mp3_group_01/           (Trump Compliments - Dial 1)
+├── mp3_group_02/           (Badran Compliments - Dial 2)
+├── mp3_group_03/           (Yoda Compliments - Dial 3)
+├── mp3_group_04/           (Neutral Compliments - Dial 4)
 ```
 
 ## 🛠️ Content Updates
 To add new compliments:
-1. Generate speech audio from text (use `utils/compliments/grouped/*.txt`).
-2. Save mp3s into the respective folder on the SD card.
-3. Filenames do not matter, the system scans all `.mp3` files in the folder.
-4. Reboot the Atomic Charmer (Power Cycle) to re-index the playlists.
+1. **Prepare Audio:** Recording or TTS.
+2. **Split Files:** If you have one long file, use `python utils/split_audio.py` to chop it into pieces.
+3. **Copy to SD:** Save mp3s into the respective folder (`mp3_group_XX`) on the SD card.
+4. **Reboot:** Reboot the Atomic Charmer (Power Cycle) to re-index the playlists.

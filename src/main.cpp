@@ -142,11 +142,7 @@ void buildPlaylist() {
     
     // Categories 1-4
     for (int i = 1; i <= 4; i++) {
-        String subfolder;
-        if (i==1) subfolder = "trump";
-        else if (i==2) subfolder = "badran";
-        else if (i==3) subfolder = "yoda";
-        else if (i==4) subfolder = "neutral";
+        String subfolder = "mp3_group_0" + String(i);
         
         bool loaded = loadPlaylistFromSD(i, categories[i]);
         if (!loaded || categories[i].tracks.empty()) {

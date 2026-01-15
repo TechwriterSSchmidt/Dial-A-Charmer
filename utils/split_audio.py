@@ -1,17 +1,17 @@
 import os
 import subprocess
 import shutil
+import argparse
 
 # INSTRUCTIONS:
 # 1. Download ffmpeg (https://www.gyan.dev/ffmpeg/builds/ -> release-essentials)
 # 2. Extract 'ffmpeg.exe' from the bin folder into THIS folder (where this script is).
 # 3. Place your mp3 files in this folder (e.g. 'compliments.mp3', 'part2.mp3').
-# 4. Run: python split_audio.py
+# 4. Run: python split_audio.py -o my_output_folder
 #    The script will process ALL mp3 files in the current folder.
 #    It automatically numbers output files consecutively (e.g. 1.mp3, 2.mp3...) 
-#    without overwriting existing files in 'compliments_split'.
+#    without overwriting existing files in the output folder.
 
-OUTPUT_DIR = "compliments_split"
 SILENCE_THRESH = "-25dB" 
 MIN_SILENCE_DUR = "0.5"
 
@@ -36,7 +36,7 @@ def get_next_index(output_folder):
             pass
     return max_idx + 1
 
-def process_file(filename, start_index, ffmpeg_exe):
+def process_file(filename, start_index, ffmpeg_exe, output_dir):
     print(f"\n--- Processing: {filename} ---")
     print("Analyzing silence to detect chunks...")
     
@@ -77,7 +77,7 @@ def process_file(filename, start_index, ffmpeg_exe):
     
     current_idx = start_index
     for i, (start, dur) in enumerate(segments):
-        out_name = os.path.join(OUTPUT_DIR, f"{current_idx}.mp3")
+        out_name = os.path.join(output_dir, f"{current_idx}.mp3")
         
         # To fix "pop" noises: re-encode and apply short fade-in.
         chunk_cmd = [
@@ -96,13 +96,19 @@ def process_file(filename, start_index, ffmpeg_exe):
     return current_idx
 
 def main():
+    parser = argparse.ArgumentParser(description="Split audio files into chunks based on silence.")
+    parser.add_argument("-o", "--output", default="compliments_split", help="Output directory for split files")
+    args = parser.parse_args()
+    
+    output_dir = args.output
+
     if not check_ffmpeg():
         print("Error: ffmpeg not found.")
         print("Please download ffmpeg and put 'ffmpeg.exe' in this folder.")
         return
 
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
         
     ffmpeg_exe = "ffmpeg" if shutil.which("ffmpeg") else ".\\ffmpeg.exe"
     
@@ -113,13 +119,13 @@ def main():
         print("No .mp3 files found in this folder.")
         return
 
-    current_index = get_next_index(OUTPUT_DIR)
-    print(f"Output folder ready. Starting numbering at {current_index}.mp3")
+    current_index = get_next_index(output_dir)
+    print(f"Output folder ready: {output_dir}. Starting numbering at {current_index}.mp3")
 
     for mp3 in mp3_files:
-        current_index = process_file(mp3, current_index, ffmpeg_exe)
+        current_index = process_file(mp3, current_index, ffmpeg_exe, output_dir)
 
-    print("\nAll files processed! Output in 'compliments_split/' folder.")
+    print(f"\nAll files processed! Output in '{output_dir}' folder.")
 
 if __name__ == "__main__":
     main()

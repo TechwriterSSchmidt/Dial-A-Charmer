@@ -50,11 +50,10 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Atomic Char
 ```
 /
 ├── startup.mp3                (Played on boot)
-├── compliments/               (MP3 Compliments)
-│   ├── trump/                 (Files for Dial 1)
-│   ├── badran/                (Files for Dial 2)
-│   ├── yoda/                  (Files for Dial 3)
-│   └── neutral/               (Files for Dial 4)
+├── mp3_group_01/              (Trump Compliments - Dial 1)
+├── mp3_group_02/              (Badran Compliments - Dial 2)
+├── mp3_group_03/              (Yoda Compliments - Dial 3)
+├── mp3_group_04/              (Neutral Compliments - Dial 4)
 ├── playlists/                 (System generated automatically)
 ├── ringtones/                 (Ringtones for Alarm/Ring)
 │   ├── 1.wav
@@ -67,9 +66,20 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Atomic Char
     └── beep.wav
 ```
 
-### Generating Audio Files
-1. **Compliments:** Run the Text-to-Speech generation on the text files in `utils/compliments/grouped/`.
-2. **System Tones:** Run `python utils/generate_tones.py` to create the WAV files in `sd_card_template/system`.
+### Audio Utilities
+This project contains several python user scripts in `utils/` to help manage the audio content.
+
+#### `split_audio.py`
+This tool splits large, long audio files (e.g. combined recordings) into individual MP3 files based on silence.
+Ideal for chopping up a long "compliment track" into single files for the SD card.
+
+**Usage:**
+1. Put your long MP3 files into the `utils` folder.
+2. Run `python split_audio.py -o my_output_folder`
+3. The script creates individual files (e.g. `153.mp3`, `154.mp3`...) in the target folder.
+4. Copy these files to the SD card (e.g. `sd_card/mp3_group_03`).
+
+```
 
 ## Target Audience
 Built specially for Sandra, a nerdy and inspiring colleague/mentor.
