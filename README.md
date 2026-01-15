@@ -176,6 +176,7 @@ The system uses specific WAV files in `/system/` for feedback:
 *   **Snooze functionality:** Implement `put handset aside for snooze` option. Snooze time should be selectable in the Webinterface.
 *   **Webinterface:** Add separate volume control for base speaker and handset
 *   **Main Code:** AGC for mic and, if possible, AEC for Gemini AI usage
+*   **OTA:** Update with GitHub runner same as Chain Juicer
 
 ## Maintenance
 
