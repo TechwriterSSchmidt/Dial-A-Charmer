@@ -276,14 +276,24 @@ void playSound(String filename, bool useSpeaker = false) {
     }
 }
 
+#include <driver/adc.h> // Include Legacy ADC driver
+
 // Check Battery Voltage (Lolin D32 Pro: Divider 100k/100k on IO35)
 bool checkBattery() {
-    // 12-bit ADC (0-4095)
-    // V_bat = ADC * 3.3V / 4095 * 2 (Divider)
-    uint16_t raw = analogRead(CONF_PIN_BATTERY);
-    float voltage = (float)raw * 3.3 / 4095.0 * 2.0; // Correction logic usually needed
+    // ADC: CONFLICT Fix
+    // Instead of analogRead(35) which uses the NEW driver (simultaneously with WiFi Legacy driver),
+    // we use the Legacy driver directly.
+    // GPIO 35 is ADC1_CHANNEL_7.
     
-    // Simple filter or single shot? Single shot is enough for status.
+    // Ensure width is configured (once, or every time?)
+    // Note: It's safe to call multiple times.
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11); // 11dB for 3.3V range
+
+    int raw = adc1_get_raw(ADC1_CHANNEL_7);
+    
+    float voltage = (float)raw * 3.3 / 4095.0 * 2.0; // Correction logic (Divider 100k/100k -> x2)
+    
     Serial.printf("Battery: %.2f V (Raw: %d)\n", voltage, raw);
     
     if (voltage < 3.3 && voltage > 2.0) { // Ignore 0.0 (USB powered/no bat)
@@ -518,7 +528,10 @@ void onHook(bool offHook) {
             // --- Battery Check ---
             if (!checkBattery()) {
                 Serial.println("Warn: Battery Low!");
-                playSound("/system/battery_low.wav", false); // Assuming file exists
+                // playSound("/system/battery_low.wav", false); 
+                // New TTS file
+                playSound("/system/battery_crit.mp3", false);
+                
                 // We could block further interaction, but let's just warn and continue.
                 // Wait for warning to play?
                 // Let's rely on standard logic queue. If we call speakCompliment immediately, it overwrites.
