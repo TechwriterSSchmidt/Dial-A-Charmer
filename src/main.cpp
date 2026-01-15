@@ -4,6 +4,9 @@
 #include <SPI.h>
 #include <SD.h>
 #include <FS.h>
+#include <vector>
+#include <algorithm>
+#include <random>
 
 #include "config.h"
 #include "Settings.h"
@@ -23,6 +26,69 @@ unsigned long alarmEndTime = 0;
 bool alarmActive = false;
 bool timerRunning = false;
 bool timerSoundPlaying = false;
+
+// --- Playlist Management ---
+std::vector<String> playlist;
+int playlistIndex = 0;
+
+void buildPlaylist() {
+    playlist.clear();
+    Serial.println("Scanning for Compliments...");
+    
+    File dir = SD.open("/compliments");
+    if(!dir || !dir.isDirectory()) {
+        Serial.println("Failed to open /compliments directory");
+        return;
+    }
+    
+    File file = dir.openNextFile();
+    while(file) {
+        if(!file.isDirectory()) {
+            String fname = String(file.name());
+            
+            // Basic cleaning and path normalization
+            if(fname.endsWith(".mp3") && fname.indexOf("._") == -1) {
+                // If the name is just "file.mp3", prepend path. 
+                // If it is "/compliments/file.mp3", keep it.
+                if (!fname.startsWith("/")) {
+                     fname = "/compliments/" + fname;
+                } else if (!fname.startsWith("/compliments")) {
+                     // Should verify if this ever happens in this FS
+                     fname = "/compliments" + fname; 
+                }
+                
+                playlist.push_back(fname);
+            }
+        }
+        file = dir.openNextFile();
+    }
+    
+    // Shuffle
+    if (!playlist.empty()) {
+        // Use ESP32 hardware RNG for seeding
+        std::shuffle(playlist.begin(), playlist.end(), std::default_random_engine(esp_random()));
+        Serial.printf("Playlist ready: %d tracks found.\n", playlist.size());
+    } else {
+        Serial.println("No MP3s found in /compliments");
+    }
+    playlistIndex = 0;
+}
+
+String getNextPlaylistTrack() {
+    if (playlist.empty()) {
+         // Attempt to rebuild if empty
+         buildPlaylist();
+         if (playlist.empty()) return "";
+    }
+    
+    if (playlistIndex >= playlist.size()) {
+        Serial.println("Playlist finished! Reshuffling for infinite loop...");
+        std::shuffle(playlist.begin(), playlist.end(), std::default_random_engine(esp_random()));
+        playlistIndex = 0;
+    }
+    
+    return playlist[playlistIndex++];
+}
 
 // --- Helper Functions ---
 void playSound(String filename) {
@@ -69,10 +135,17 @@ void speakCompliment(int number) {
     }
     
     // Fallback if no Key or AI failed
-    String path = "/compliments/" + String(number) + ".mp3";
-    if (number == 0) path = "/compliments/random.mp3"; 
+    // New Logic: Play from randomized playlist
+    String path = getNextPlaylistTrack();
     
-    Serial.print("Playing compliment (Fallback): ");
+    if (path.length() == 0) {
+         Serial.println("Playlist Empty! Check SD Card.");
+         path = "/system/error.mp3"; // Or similar default
+         // Try finding anything
+         if(SD.exists("/compliments/001.mp3")) path = "/compliments/001.mp3";
+    }
+    
+    Serial.print("Playing compliment (Random): ");
     Serial.println(path);
     playSound(path);
 }
@@ -155,6 +228,7 @@ void setup() {
         statusLed.setWarning();
     } else {
         Serial.println("SD Card Mounted");
+        buildPlaylist();
     }
     
     // Init Audio Lib
