@@ -6,13 +6,85 @@ WebManager webManager;
 
 const char* htmlStyle = R"rawliteral(
 <style>
-body{font-family:sans-serif;margin:0;padding:20px;background:#121212;color:#e0e0e0}
-h2{text-align:center;color:#ffc107}
-.card{background:#1e1e1e;padding:15px;border:1px solid #333;margin-bottom:15px;border-radius:5px}
-input,select{width:100%;padding:10px;margin:5px 0;background:#333;color:#fff;border:1px solid #444;box-sizing:border-box}
-label{display:block;margin-top:10px;font-weight:bold;color:#aaa}
-output{display:inline-block;float:right;color:#ffc107;font-weight:bold}
-button{width:100%;padding:12px;margin-top:15px;background:#ffc107;color:#000;border:none;font-weight:bold;cursor:pointer}
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+body {
+    font-family: 'VT323', monospace;
+    margin: 0;
+    padding: 20px;
+    background-color: #0d1117;
+    color: #00ff41; /* CRT Green */
+    text-shadow: 0 0 5px #00ff41;
+    background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 2px, 3px 100%;
+}
+h2 {
+    text-align: center;
+    color: #00ff41;
+    border-bottom: 2px solid #00ff41;
+    padding-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+.card {
+    background: #001100;
+    padding: 15px;
+    border: 2px solid #00ff41;
+    margin-bottom: 20px;
+    border-radius: 0; /* Retro sharp corners */
+    box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+.card h3 {
+    margin-top: 0;
+    border-bottom: 1px dashed #008f11;
+    padding-bottom: 5px;
+}
+input, select {
+    width: 100%;
+    padding: 10px;
+    margin: 5px 0;
+    background: #000;
+    color: #00ff41;
+    border: 1px solid #00ff41;
+    box-sizing: border-box;
+    font-family: 'VT323', monospace;
+    font-size: 1.2em;
+}
+input:focus {
+    outline: none;
+    box-shadow: 0 0 5px #00ff41;
+}
+label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+    color: #008f11;
+    text-transform: uppercase;
+}
+output {
+    display: inline-block;
+    float: right;
+    color: #00ff41;
+    font-weight: bold;
+}
+button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 15px;
+    background: #00ff41;
+    color: #000;
+    border: 2px solid #00ff41;
+    font-weight: bold;
+    font-family: 'VT323', monospace;
+    font-size: 1.5em;
+    cursor: pointer;
+    text-transform: uppercase;
+}
+button:hover {
+    background: #000;
+    color: #00ff41;
+}
+a { color: #00ff41; text-decoration: none; }
+a:hover { text-decoration: underline; background-color: #00ff41; color: #000; }
 </style>
 )rawliteral";
 
@@ -24,8 +96,10 @@ void WebManager::begin() {
     // Try to connect if SSID is set
     if (ssid != "") {
         WiFi.mode(WIFI_STA);
+        Serial.printf("Connecting to WiFi SSID: '%s'", ssid.c_str());
+        
         WiFi.begin(ssid.c_str(), pass.c_str());
-        Serial.print("Connecting to WiFi");
+        
         int tries = 0;
         while (WiFi.status() != WL_CONNECTED && tries < 20) {
             delay(500);
@@ -78,8 +152,24 @@ void WebManager::handleRoot() {
 }
 
 void WebManager::handleSave() {
-    if (_server.hasArg("ssid")) settings.setWifiSSID(_server.arg("ssid"));
-    if (_server.hasArg("pass")) settings.setWifiPass(_server.arg("pass"));
+    bool wifiChanged = false;
+
+    if (_server.hasArg("ssid")) {
+        String newSSID = _server.arg("ssid");
+        // Only update if changed
+        if (newSSID != settings.getWifiSSID()) {
+            settings.setWifiSSID(newSSID);
+            wifiChanged = true;
+        }
+    }
+    if (_server.hasArg("pass")) {
+        String newPass = _server.arg("pass");
+        if (newPass != settings.getWifiPass()) {
+             settings.setWifiPass(newPass);
+             wifiChanged = true;
+        }
+    }
+    
     if (_server.hasArg("tz")) settings.setTimezoneOffset(_server.arg("tz").toInt());
     if (_server.hasArg("gemini")) settings.setGeminiKey(_server.arg("gemini"));
     if (_server.hasArg("vol")) settings.setVolume(_server.arg("vol").toInt());
@@ -98,10 +188,16 @@ void WebManager::handleSave() {
 
     statusLed.reloadSettings(); // Apply new LED settings immediately
 
-    String html = "<html><body><h1>Saved! Rebooting...</h1></body></html>";
-    _server.send(200, "text/html", html);
-    delay(1000);
-    ESP.restart();
+    String html = "<html><body><h1>Saved!</h1>";
+    if (wifiChanged) {
+        html += "<p>WiFi settings changed. Rebooting to apply...</p></body></html>";
+        _server.send(200, "text/html", html);
+        delay(1000);
+        ESP.restart();
+    } else {
+        html += "<p>Settings applied.</p><p><a href='/'>Back</a></p></body></html>";
+        _server.send(200, "text/html", html);
+    }
 }
 
 void WebManager::handleHelp() {
@@ -171,7 +267,7 @@ String WebManager::getHtml() {
     html += "<small>Leave empty to use SD card audio only.</small>";
     html += "</div>";
     
-    html += "<button type='submit'>Save & Reboot</button>";
+    html += "<button type='submit'>Save Settings</button>";
     html += "</form>";
     html += "<p style='text-align:center'><a href='/help' style='color:#ffc107'>Usage Help</a></p>";
     html += "</body></html>";

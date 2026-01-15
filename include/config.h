@@ -23,9 +23,14 @@
 
 // GNSS (M10 or similar)
 // WARNUNG: 16/17 sind PSRAM beim D32 Pro!
-#define CONF_GPS_RX         35  // Input Only - OK
+// GPIO 35 ist intern Batterie-Spannungsteiler (HÄLFTE der Batteriespannung)
+// Wir nutzen GPIO 34 (Input Only) für GPS RX, um Konflikte zu vermeiden.
+#define CONF_GPS_RX         34  // Input Only - Safe
 #define CONF_GPS_TX         0   // Moved to 0 to free Pin 5 (GPIO 0 is Boot-Safe if Idle High)
 #define CONF_GPS_BAUD       9600
+
+// Battery Monitoring (Lolin D32 Pro)
+#define CONF_PIN_BATTERY    35  // 100k/100k Divider internally connected
 
 // Rotary Dial & Inputs
 #define CONF_PIN_DIAL_PULSE 5   // Changed to 5 (Supports INPUT_PULLUP) - No resistor needed!
