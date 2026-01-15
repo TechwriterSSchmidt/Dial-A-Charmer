@@ -1,0 +1,2 @@
+# The-Atomic-Charmer
+The Atomic Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS‑precise time with the confidence of someone who’s never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn’t want a phone that cheers them on? Created for my mentor Sandra, whose wisdom and warmth easily outshine even the fanciest electronics.
