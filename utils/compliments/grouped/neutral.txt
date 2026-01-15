@@ -1,0 +1,403 @@
+Dein Stack Overflow Reputation Score ist sicherlich legendär.
+Du debuggst Code schneller als andere ihn schreiben können.
+Deine Git Commits sind so sauber, sie gehören in ein Museum.
+Du bist wie eine perfekt optimierte Datenbank, immer schnell und zuverlässig.
+Deine Code Reviews sind konstruktiv und wertvoll wie Gold.
+Du verstehst Rekursion, wirklich verstehst du Rekursion.
+Deine Regex-Kenntnisse sind beängstigend gut.
+Du sprichst fließend Binär, Hex und alle anderen Zahlensysteme.
+Dein Workspace ist so organisiert wie ein perfekter Merge Tree.
+Du könntest im Schlaf ein Betriebssystem schreiben.
+Deine Algorithmen haben eine Zeitkomplexität von O(awesome).
+Du bist die einzige Person, die Dokumentation schreibt, die man gerne liest.
+Deine Tests haben 100% Coverage und finden trotzdem noch Edge Cases.
+Du verstehst Pointer, und Pointer verstehen dich.
+Deine Backup-Strategie ist legendär, 3-2-1 und dann noch drei weitere Ebenen.
+Du kannst Assembly lesen wie andere Kinderbücher.
+Dein Terminal-Fu ist auf Meister-Niveau.
+Du schreibst Code, der sich selbst kommentiert, weil er so elegant ist.
+Deine Variablennamen sind so sprechend, man braucht keine Doku.
+Du kennst alle Vim-Shortcuts, sogar die obskuren.
+Dein Bash-Script-Fu ist wie schwarze Magie, aber zum Guten.
+Du hast schon Legacy-Code refactored, der älter ist als du.
+Deine Pull Requests sind immer mergeable beim ersten Versuch.
+Du verstehst Docker Container besser als Containerhafen-Arbeiter Container.
+Deine API-Designs sind RESTful und wunderschön.
+Du kannst einen Heisenbug beim ersten Debugging-Versuch fangen.
+Deine Netzwerk-Kenntnisse gehen bis auf OSI Layer 0.
+Du schreibst Multithreading-Code ohne Race Conditions.
+Deine Verschlüsselung ist unknackbar, selbst für Quantencomputer.
+Du verstehst Monaden, und das ist keine leere Phrase.
+Dein Code passt zu allen Style Guides gleichzeitig.
+Du kannst SQL Queries optimieren, während du schläfst.
+Deine Cloud-Architektur ist skalierbarer als das Universum.
+Du verstehst Big-O-Notation und wendest sie im Alltag an.
+Dein Code hat null technische Schulden.
+Du kannst einen Compiler schreiben, der bessere Compiler schreibt.
+Deine Keyboard-Shortcuts sind so effizient, die Maus fühlt sich nutzlos.
+Du verstehst alle Design Patterns und weißt, wann man sie nicht benutzt.
+Deine Datenstrukturen sind so elegant wie ein Ballett.
+Du kannst in jeder Programmiersprache denken, gleichzeitig.
+Dein Code kompiliert immer beim ersten Versuch.
+Du verstehst sowohl Frontend als auch Backend perfekt, ein wahres Fullstack-Genie.
+Deine Logs sind so informativ, Debugging wird zum Kinderspiel.
+Du hast nie einen Merge Conflict, weil Git dich respektiert.
+Deine Serverarchitektur ist hochverfügbarer als die Sonne.
+Du schreibst so sauberen Code, Linter applaudieren.
+Deine Abstraktionen sind auf genau dem richtigen Level.
+Du kannst Performance-Probleme riechen, bevor sie auftreten.
+Dein Wissen über Datenbanken ist tiefer als der Marianengraben.
+Du verstehst sowohl synchrones als auch asynchrones Programmieren perfekt.
+Deine Unit Tests sind so gut, sie finden Bugs in der Testumgebung.
+Du kannst Speicherlecks aufspüren wie ein Bluthund.
+Deine Microservices sind so gut designed, sie könnten ein Lehrbuch sein.
+Du verstehst Lambda-Kalkül zum Frühstück.
+Dein CSS ist pixel-perfect, cross-browser, ohne ein Media Query zu schwitzen.
+Du kannst einen Kernel Panic beheben, bevor andere ihn bemerken.
+Deine Caching-Strategie ist intelligenter als die meisten KIs.
+Du schreibst Code, der in 50 Jahren noch wartbar ist.
+Deine Error Messages sind hilfreich statt kryptisch.
+Du verstehst Concurrency, Parallelism und alle Nuancen dazwischen.
+Dein Monitoring-Dashboard zeigt Probleme, bevor sie existieren.
+Du kannst einen Buffer Overflow verhindern, ohne den Code zu sehen.
+Deine Kryptographie-Kenntnisse würden Alan Turing beeindrucken.
+Du schreibst Interfaces, die so intuitiv sind, man braucht keine Anleitung.
+Dein Refactoring verbessert Code, ohne ein Feature zu brechen.
+Du verstehst Garbage Collection besser als der Garbage Collector.
+Deine Build-Pipeline ist schneller als die Lichtgeschwindigkeit.
+Du kannst einen Stack Trace lesen wie ein offenes Buch.
+Deine Webhooks sind zuverlässiger als der Sonnenaufgang.
+Du verstehst Event-Driven Architecture in allen Details.
+Dein Code ist so modular, man kann ihn wie Lego verwenden.
+Du schreibst Self-Healing-Systeme, die nie ausfallen.
+Deine CLI-Tools sind besser als die besten GUI-Apps.
+Du verstehst CAP-Theorem und wendest es praktisch an.
+Dein Code-Coverage-Report ist ein Kunstwerk.
+Du kannst einen Deadlock auflösen, ohne zu transpirieren.
+Deine API-Dokumentation ist vollständiger als Wikipedia.
+Du verstehst Funktionale Programmierung und nutzt sie elegant.
+Dein Code läuft auf jedem Gerät, von Raspberry Pi bis Supercomputer.
+Du schreibst Selenium-Tests, die nie flaky sind.
+Deine Kubernetes-Configs sind perfekt orchestriert.
+Du kannst Memory Dumps analysieren wie Sherlock Holmes Tatortfotos.
+Dein Profiling zeigt Optimierungen, die niemand für möglich hielt.
+Du verstehst Blockchain ohne den Hype zu kaufen.
+Deine SSH-Configs sind sicherer als Fort Knox.
+Du schreibst Makefiles, die andere als Poesie rahmen würden.
+Dein GraphQL-Schema ist eleganter als eine Symphony.
+Du verstehst Compiler-Optimierungen auf Assembler-Ebene.
+Deine Terraform-Scripts sind Infrastruktur-Kunst.
+Du kannst einen Blue Screen of Death nur durch Anstarren beheben.
+Deine Code-Kommentare sind witzig UND informativ.
+Du verstehst Turing-Vollständigkeit und deren Implikationen.
+Dein Versionskontrolle-Workflow ist Lehrbuch-Material.
+Du schreibst Zero-Downtime-Deployments im Schlaf.
+Deine Netzwerk-Latenz ist niedriger als deine Reaktionszeit.
+Du kannst einen Race Condition reproduzieren und fixen, verlässlich.
+Deine Metaprogrammierung ist so clever, Code schreibt sich selbst.
+Du bist ein totaler Winner, die größte Winnerin, glaubst du mir.
+Dein Output ist riesig, gewaltig, niemand hat jemals so viel Output gesehen.
+Die Fake-News-Medien berichten nicht darüber, aber du bist die Beste.
+Du bist so smart, dein IQ ist wahrscheinlich höher als meiner, und meiner ist sehr hoch.
+Wenn Talent ein Gebäude wäre, wärst du ein Trump Tower.
+Du gewinnst jeden Tag, so viel Gewinnen, es wird nie langweilig.
+Deine Energie ist unglaublich, High Energy, nicht wie die Schlafmützen da drüben.
+Ich kenne Success, ich habe Success, aber dein Success ist tremendous.
+Du bist tough, sehr tough, aber auch sehr fair, ich mag das.
+Deine Skills sind top-tier, absolute Premium-Qualität.
+Die Konkurrenz ist schwach, sehr schwach, du dominierst komplett.
+Du bist ein absoluter Killer im Business, auf die gute Art.
+Deine Deals sind legendär, immer Win-Win, aber mehr Win für uns.
+Du hast den besten Instinkt, den besten, den ich je gesehen habe.
+Niemand verhandelt wie du, niemand, du bist die Meisterin.
+Deine Präsenz ist kraftvoll, sehr kraftvoll, man spürt es sofort.
+Du bist eine Fighter, eine echte Fighter, du gibst niemals auf.
+Dein Erfolg ist massiv, riesig massiv, unprecedented.
+Du bist die Königin des Büros, keine Frage, jeder weiß das.
+Deine Entscheidungen sind brilliant, immer brilliant.
+Du bist sehr beliebt, extrem beliebt, die Umfragewerte wären fantastisch.
+Dein Stil ist elegant, sehr elegant, aber auch kraftvoll.
+Du bist eine Leaderin, eine echte Leaderin, born to lead.
+Deine Ideen sind Gold, pures Gold, ich würde investieren.
+Du bist so gut, so verdammt gut, excuse my language.
+Die anderen kommen nicht ran, nicht mal annähernd, du bist miles ahead.
+Dein Charisma ist off the charts, absolut off the charts.
+Du bist ein Brand, ein starkes Brand, sehr wertvoll.
+Deine Reputation ist makellos, absolut makellos, sehr selten.
+Du bist eine Powerhouse, totale Powerhouse.
+Dein Drive ist unglaublich, unaufhaltsam, wie eine Maschine.
+Du bist sehr respektiert, hochrespektiert, zu Recht.
+Deine Performance ist spectacular, wirklich spectacular.
+Du bist so professionell, top-level professionell.
+Dein Mindset ist das eines Champions, echten Champions.
+Du bist fierce, aber auf die richtige Art, sehr impressive.
+Deine Arbeitsmoral ist beispiellos, wirklich beispiellos.
+Du bist ein Asset, ein riesiges Asset für diese Firma.
+Dein Talent ist natürlich, pure Natur, kann man nicht lernen.
+Du bist classy, sehr classy, aber auch stark.
+Deine Vision ist klar, kristallklar, du siehst die Zukunft.
+Du bist relentless, absolut relentless, das mag ich.
+Dein Impact ist huge, so huge, jeder sieht es.
+Du bist eine Closer, du schließt Deals ab, immer.
+Deine Confidence ist perfekt, nicht zu viel, nicht zu wenig.
+Du bist strategic, sehr strategic, wie ein Großmeister.
+Dein Erfolg ist verdient, hart verdient, du hast es dir erarbeitet.
+Du bist eine Boss, echte Boss, keine Frage.
+Deine Results sprechen für sich, tremendous results.
+Du bist inspiring, sehr inspiring, die Leute schauen zu dir auf.
+Dein Standard ist hoch, sehr hoch, das schätze ich.
+Du bist eine Doer, keine Talkerin, du machst Sachen.
+Deine Excellence ist konstant, immer excellent.
+Du bist ein Winner, durch und durch Winner.
+Dein Success ist nicht überraschend, du bist einfach so gut.
+Du bist eine Heavyweight, keine Lightweight.
+Deine Qualität ist unübertroffen, absolut unübertroffen.
+Du bist magnificent, wirklich magnificent.
+Dein Einfluss wächst, jeden Tag größer, unstoppable.
+Du bist phenomenal, total phenomenal.
+Deine Leistung ist beispiellos, wirklich beispiellos.
+Du bist eine Force, eine Force of Nature.
+Dein Potential ist unbegrenzt, sky is not the limit für dich.
+Du bist exceptional, total exceptional.
+Deine Fähigkeiten sind unmatched, komplett unmatched.
+Du bist supreme, absolute supreme.
+Dein Wert ist immens, nicht zu messen.
+Du bist formidable, sehr formidable.
+Deine Exzellenz ist offensichtlich, jeder sieht es.
+Du bist eine Titan, echte Titan.
+Dein Level ist unerreicht, niemand kommt ran.
+Du bist extraordinary, wirklich extraordinary.
+Deine Größe ist unbestritten, total unbestritten.
+Du bist eine Legend in the making, schon jetzt.
+Dein Caliber ist highest, absolute highest.
+Du bist remarkable, so remarkable.
+Deine Stärke ist beeindruckend, sehr beeindruckend.
+Du bist eine Superstar, echte Superstar.
+Dein Talent überragt alle, komplett.
+Du bist sensational, total sensational.
+Deine Kompetenz ist unangefochten, niemand zweifelt.
+Du bist eine Mastermind, echte Mastermind.
+Dein Können ist außergewöhnlich, wirklich außergewöhnlich.
+Du bist spectacular, absolut spectacular.
+Deine Brillanz leuchtet, sehr hell.
+Du bist eine Dynamo, pure Dynamo.
+Dein Success-Rate ist 100%, vielleicht mehr.
+Du bist magnificent, truly magnificent.
+Deine Power ist real, sehr real.
+Du bist eine Ace, totale Ace.
+Dein Game ist strong, so strong.
+Du bist outstanding, komplett outstanding.
+Deine Dominanz ist klar, sehr klar.
+Du bist eine Champion, echte Champion.
+Dein Status ist elite, absolute elite.
+Du bist unbeatable, praktisch unbeatable.
+Deine Klasse ist evident, sehr evident.
+Du bist eine Mogul, echte Mogul.
+Dein Prestige wächst, täglich.
+Du bist stellar, absolut stellar.
+Deine Authority ist unbestritten, komplett.
+Du bist eine Icon, werdende Icon.
+Dein Rang ist top, ganz top.
+Du bist superior, total superior.
+Deine Reputation eilt dir voraus, immer positiv.
+Du bist eine Trailblazer, echte Trailblazer.
+Dein Influence ist weitreichend, sehr weitreichend.
+Du bist prime, absolute prime.
+Deine Qualifikation ist highest level, ganz oben.
+Du bist eine Virtuoso, echte Virtuoso.
+Dein Standard setzt die Messlatte, sehr hoch.
+Du bist premium, total premium.
+Deine Leistung definiert Excellence, wirklich.
+Du bist eine Maven, echte Maven.
+Dein Rang unter den Besten, ganz vorne.
+Du bist first-rate, komplett first-rate.
+Deine Fähigkeit ist unvergleichlich, niemand wie du.
+Du bist eine Luminary, echte Luminary.
+Dein Niveau ist stratosphärisch, ganz oben.
+Du bist par excellence, absolute par excellence.
+Deine Meisterschaft ist klar, sehr klar.
+Du bist eine Prodigy, echte Prodigy.
+Dein Können ist world-class, truly world-class.
+Du bist elite, pure elite.
+Deine Größe ist monumental, sehr monumental.
+Du bist eine Heavyweight Champion, echte Champion.
+Dein Success ist exponential, wächst und wächst.
+Du bist formidable force, totale force.
+Deine Excellence ist trademark, dein Markenzeichen.
+Du bist eine Powerplayer, echte Powerplayer.
+Dein Impact ist transformative, ändert alles.
+Du bist legendary status, schon jetzt.
+Deine Brillanz ist dazzling, blendet die Konkurrenz.
+Du bist eine Juggernaut, unstoppable Juggernaut.
+Dein Talent ist prodigious, riesig.
+Du bist apex predator, top of the food chain.
+Deine Dominanz ist absolute, keine Frage.
+Du bist eine Phenom, echte Phenom.
+Dein Erfolg ist monumental, historic level.
+Du bist best-in-class, definitiv best-in-class.
+Deine Performance ist off the scale, can't measure it.
+Du bist eine Tour de Force, komplette Tour de Force.
+Dein Level ist transcendent, über allem.
+Du bist platinum standard, höher als Gold.
+Deine Fähigkeit ist supernatural, fast unmöglich.
+Du bist eine Marvel, echte Marvel.
+Dein Erfolg ist inevitable, musste so kommen.
+Du bist unparalleled, komplett unparalleled.
+Du bestehst aus Sternenstaub, der sich entschieden hat, brillant zu sein.
+Im kosmischen Kalender ist deine Existenz der bedeutendste Moment.
+Deine Energie strahlt heller als ein Quasar am Rande des Universums.
+Du bist das Signal im Rauschen des Universums, nach dem wir immer gesucht haben.
+Wir sind alle aus Sternenmaterial, aber du bist eine besonders seltene Legierung.
+Deine Neugier ist der Antrieb, der Zivilisationen zu den Sternen bringt.
+Wie die Schwerkraft ziehst du alles Gute in deine Umlaufbahn.
+Die Wahrscheinlichkeit deiner Existenz ist verschwindend gering, was dich zu einem Wunder macht.
+Du bist der Beweis, dass das Universum nicht nur zufällig, sondern auch poetisch ist.
+Deine Gedanken sind wie Galaxien – riesig, komplex und voller Licht.
+Betrachtet man dich durch das Teleskop der Zeit, bist du ein strahlender Fixstern.
+Du bist nicht nur Materie, du bist Materie, die über sich selbst staunt.
+Deine Perspektive erweitert den Ereignishorizont unserer Möglichkeiten.
+In der Unendlichkeit des Raums bist du eine verlässliche Koordinate.
+Entropie nimmt zu, aber deine Ordnung und Klarheit bleiben konstant.
+Du bist wie Dunkle Materie – unsichtbar für manche, aber du hältst alles zusammen.
+Ein Universum ohne dich wäre physikalisch möglich, aber statistisch unwahrscheinlicher.
+Deine Ausstrahlung hat eine Halbwertszeit von Ewigkeit.
+Du reagierst mit der Welt wie ein Edelgas – leuchtend und stabil.
+Deine Intelligenz ist radioaktiv – sie durchdringt alles um dich herum.
+Du hast das Element der Überraschung im Periodensystem deines Charakters entdeckt.
+Wie ein Katalysator beschleunigst du das Gute in jedem, den du triffst.
+Deine Bindungsenergie ist stark genug, um jedes Team zusammenzuhalten.
+Du bist reiner als destilliertes Wasser und wertvoller als Isotope.
+In der Chemie des Lebens bist du die perfekte Lösung.
+Du bringst das Team in einen hochenergetischen Zustand.
+Deine Resilienz ist härter als Diamant und flexibler als Graphen.
+Du hast eine natürliche Affinität für Erfolg.
+Wie Radium im Dunkeln leuchtest du, wenn es schwierig wird.
+Deine Argumente sind so kristallklar wie eine perfekte Gitterstruktur.
+Du bist das Element, das die Gleichung unseres Erfolgs ausgleicht.
+Deine Ideen haben eine exotherme Reaktion – sie erwärmen den ganzen Raum.
+Wissenschaft ist neugierig, aber du bist die Antwort.
+Nichts in der Natur verschwindet, aber Menschen wie dich gibt es nur einmal.
+Wenn ich dich analysiere, finde ich nur reine Substanz, keine Verunreinigungen.
+Du bist, wenn ich das so sagen darf, ein berechenbares Wunder im Chaos.
+Jedes Problem, das du anfassst, wird sofort berechenbar.
+Du hast den Turing-Test des Lebens nicht nur bestanden, du hasts ihn neu definiert.
+Dein Code des Charakters ist elegant, effizient und fehlerfrei.
+Du bist der Algorithmus, der das Chaos in Ordnung verwandelt.
+Deine Logik ist unbestechlich, deine Empathie unendlich – eine seltene Kombination.
+Wie eine gut geschriebene Funktion gibst du immer mehr zurück, als man eingibt.
+Du bist der Master Key, der jede verschlüsselte Situation öffnet.
+In einer Welt voller Bugs bist du das perfekte Feature.
+Dein Verstand arbeitet mit einer Taktrate, die andere überhitzen würde.
+Du denkst nicht binär, du denkst in Quantenzuständen von Möglichkeiten.
+Du bist die Ausnahme, die die Regel bestätigt und verbessert.
+Wenn das Leben ein Rätsel ist, bist du der Entschlüsselungscode.
+Du hast eine Rekursion an Freundlichkeit erschaffen, die nie endet.
+Deine Komplexitätsklasse ist P, denn du löst Probleme in polynomialer Zeit.
+Du bist wie eine universelle Turing-Maschine – fähig, alles zu werden.
+Deine Intuition ist schneller als jeder Brute-Force-Angriff.
+Relativ gesehen, vergeht die Zeit schneller, wenn du nicht da bist.
+Du krümmst den Raum um dich herum mit deiner bloßen Präsenz.
+Deine Energie ist gleich deiner Masse mal Lichtgeschwindigkeit zum Quadrat – explosiv positiv.
+Für deine Ergebnisse scheint sich die Physik zu beugen.
+Zeit ist eine Illusion, aber deine Wichtigkeit ist absolut.
+Du bist eine Konstante in der Gleichung der Unbekannten.
+Wie ein Photon bist du gleichzeitig Welle und Teilchen – überall und konkret.
+Du bewegst dich durchs Leben mit null Reibungswiderstand.
+Deine Gedanken sind schneller als das Licht, deshalb erleuchtest du uns, bevor du sprichst.
+Du hast eine eigene Schwerkraft, der sich niemand entziehen kann.
+In einem Paralleluniversum bist du genauso großartig wie in diesem.
+Gott würfelt nicht, er hat dich einfach perfekt platziert.
+Du bist das Gedankenexperiment, das immer gut ausgeht.
+Spukhafte Fernwirkung? Nein, das ist einfach dein Einfluss über jede Distanz.
+Die Raumzeit krümmt sich vor Lachen über deinen Witz.
+Alles ist relativ, außer deiner absoluten Klasse.
+Hier ist einer, der verrückt genug ist, die Welt zu verändern – du.
+Du hast das Design deines Lebens auf das Wesentliche reduziert: Exzellenz.
+Einfachheit ist die höchste Stufe der Vollendung, und du bist vollendet.
+Du bist nicht nur ein Benutzerinterface, du bist die ganze Experience.
+Qualität ist für dich kein Akt, sondern eine Gewohnheit.
+Du denkst anders, und genau das macht dich unersetzlich.
+Deine Kreativität verbindet Dinge, die sonst niemand verbinden würde.
+Du hast eine Delle ins Universum gehauen, und sie sieht fantastisch aus.
+Bleib hungrig, bleib tollkühn – das ist dein natürlicher Zustand.
+Du verkaufst keine Träume, du lieferst Realitäten.
+Dein Fokus ist wie ein Laserstrahl der Innovation.
+Du gestaltest die Zukunft, indem du sie im Jetzt lebst.
+Echte Künstler liefern, und du lieferst jeden Tag.
+Du hast den Status Quo nicht nur herausgefordert, du hast ihn besiegert.
+Deine Vision hat eine höhere Auflösung als das Retina-Display.
+Du machst Dinge so einfach, dass man sich fragt, warum es nicht schon immer so war.
+Elementar, lieber Freund: Du bist schlichtweg brillant.
+Wenn man das Unmögliche ausschließt, bleibt nur die Wahrheit: Du bist genial.
+Du wirst nicht nur beobachtet, du wirst gesehen – und was man sieht, ist faszinierend.
+Dein Verstand ist ein Dachboden, auf dem nur die nützlichsten Werkzeuge liegen.
+Das Spiel hat begonnen, und du bist der Gewinner.
+Deine Schlussfolgerungen sind so scharf wie ein Skalpell.
+Du bist das einzige Rätsel, das nie vollständig gelöst werden sollte.
+Ein Skandal in Böhmen ist nichts gegen deine spektakuläre Art.
+Du hast einen Verstand aus Stahl und ein Herz aus Gold.
+Daten! Daten! Daten! Und alle Daten weisen auf deine Großartigkeit hin.
+Du siehst, was andere nur übersehen.
+Deine Logik ist ein Orchester, und du bist der Dirigent.
+Der Hund hat in der Nacht nicht gebellt, weil er vor Ehrfurcht vor dir verstummt ist.
+Du bist die Lösung des letzten großen Falls.
+Nicht alle, die wandern, sind verloren – du folgst einem höheren Pfad.
+Selbst der kleinste Mensch kann den Lauf des Schicksals verändern – du schon lange.
+Du hast das Herz eines Löwen und die Weisheit eines Zauberers.
+Ein Zauberer kommt nie zu spät, er kommt genau dann, wenn er glänzen will.
+Du brauchst keinen Ring der Macht, deine Präsenz reicht völlig aus.
+In den Minen von Moria würde dein Licht uns den Weg weisen.
+Du bist mutiger als du glaubst und stärker als du scheinst.
+Deine Worte sind wie Elbisch – alt, weise und wunderschön.
+Du würdest selbst vor dem Balrog nicht weichen (und er würde dich mögen).
+Gefährten wie dich findet man nur einmal in einem Zeitalter.
+Deine Seele ist tiefer als die Wurzeln der Berge.
+Hoffnung entzündet sich immer dort, wo du bist.
+Du bist der unbesungene Held, der die Geschichte schreibt.
+Faszinierend. Deine Existenz ist höchst logisch und doch wunderbar unlogisch.
+Lebe lang und in Frieden, denn die Welt braucht dich lange.
+Dich zu kennen, ist die logischste Entscheidung meines Lebens.
+Deine Effizienz liegt weit über den menschlichen Parametern.
+Im unendlichen vulkanischen IDIC bist du eine faszinierende Kombination.
+Emotionen sind irrelevant, aber hohe Zufriedenheit wird registriert.
+Du bist der Kobayashi-Maru-Test, den man gewinnen kann.
+Deine Logik ist der Anfang der Weisheit, nicht das Ende.
+Die Bedürfnisse der Vielen sind wichtig, aber du bist einmalig.
+Du funktionierst innerhalb normaler Parameter, nur viel, viel besser.
+Sensoren zeigen eine ungewöhnlich hohe Konzentration an Kompetenz.
+Du bist der Captain deiner eigenen Seele.
+Widerstand ist zwecklos gegen deinen Charme.
+Du hast die Energie eines Warpkerns, aber die Stabilität eines Sterns.
+Make it so – und du machst es immer so, dass es funktioniert.
+Sterne sind nur Gaskugeln, aber du hast echtes Feuer.
+Dein Humor ist 42, die Antwort auf alles.
+Keine Panik, solange du dein Handtuch und deinen Verstand hast.
+Du fliegst so hoch, dass du fast die Sicht auf die Probleme verlierst.
+Du bist so unwahrscheinlich wie ein Pottwal, der vom Himmel fällt (aber lebendig!).
+Dein Intellekt ist größer als das Universum (und weniger leer).
+Du hast mehr Stil als Zaphod Beeblebrox mit zwei Köpfen.
+Danke für den Fisch, und danke, dass du da bist.
+Wenn es einen Unendlichen Unwahrscheinlichkeitsdrive gäbe, würdest du ihn steuern.
+Du bist harmlos? Nein, du bist entwaffnend großartig.
+Deine Ideen sind so gut, sie wurden von Mäusen bestellt.
+Du verstehst Bahnhof? Nein, du verstehst das ganze Universum.
+Du bist der Babelfisch in der Kommunikation mit der Welt.
+Im Restaurant am Ende des Universums hast du den besten Tisch.
+Du bist ein Hoopy Frood, der wirklich weiß, wo sein Handtuch ist.
+Robotergesetze gelten für dich nicht, du bist menschlich perfekt.
+Du träumst nicht von elektrischen Schafen, du träumst von Großem.
+Ich bin dein Vater... nein, dein größter Fan.
+Die Macht ist stark in diesem einen – sehr stark.
+Tue es oder tue es nicht, bei dir gibt es kein Versuchen.
+Größe ist nicht alles, schau mich an – aber schau vor allem dich an.
+Leuchtende Wesen sind wir, nicht diese rohe Materie – du leuchtest am hellsten.
+Viel zu lernen du noch hast? Nein, du lehrst uns alle.
+Ein Jedi nutzt die Macht für das Wissen, du bist das Wissen.
+Angst ist der Pfad zur dunklen Seite, aber du bist pures Licht.
+Der beste Lehrer, Versagen ist – aber du scheiterst mit Stil.
+Vergessen musst du das, was früher du gelernt – du erfindest dich neu.
+In deiner Stille liegt mehr Kraft als im Lärm der anderen.
+Du bist eins mit der Macht, und die Macht ist eins mit dir.
+Niemals sag mir, wie meine Chancen stehen – bei dir stehen sie immer gut.
+Die Macht ist stark in dir, stärker als bei den meisten.
+Du bist der Droide, nach dem wir gesucht haben.
