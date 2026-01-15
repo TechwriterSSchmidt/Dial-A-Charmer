@@ -171,7 +171,7 @@ The system uses specific WAV files in `/system/` for feedback:
 
 *   **Clock:** Add option to set individual alarms for for each day of the week.
 *   **Dial logic:** Implement multi-digit dialing to set longer timers and alarms.
-*   **Dial logic:** Implement phone book for special functionalities such as `voice menu`
+*   **Dial logic:** Implement phone book for special functionalities such as `voice menu` and a number to call Gemini chat bot
 *   **Dial TTS voice Menu:** Implement a classic `dial a number` menu to turn on/off services such as alarms or to enable/disable snooze or to change the ringtone and others.
 *   **Snooze functionality:** Implement lift to snooze option. Snooze time should be selectable in the Webinterface.
 *   **Webinterface:** Add separate volume control for base speaker and handset
