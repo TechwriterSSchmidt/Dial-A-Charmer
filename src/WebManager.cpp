@@ -18,6 +18,12 @@ void WebManager::begin() {
     
     WiFi.mode(WIFI_AP_STA);
     
+    // Always start AP (Permanent AP mode requested)
+    WiFi.softAP(CONF_AP_SSID); // Open network (no password)
+    _dnsServer.start(_dnsPort, "*", WiFi.softAPIP());
+    Serial.print("AP Started: ");
+    Serial.println(CONF_AP_SSID);
+
     if (ssid != "") {
         WiFi.begin(ssid.c_str(), pass.c_str());
         Serial.print("Connecting to WiFi");
@@ -30,17 +36,12 @@ void WebManager::begin() {
         Serial.println();
     }
 
-    if (WiFi.status() != WL_CONNECTED) {
-        WiFi.softAP(CONF_AP_SSID);
-        _apMode = true;
-        _dnsServer.start(_dnsPort, "*", WiFi.softAPIP());
-        Serial.print("AP Mode: ");
-        Serial.print(CONF_AP_SSID);
-        Serial.println(" (192.168.4.1)");
-    } else {
+    if (WiFi.status() == WL_CONNECTED) {
         Serial.print("Connected! IP: ");
         Serial.println(WiFi.localIP());
-        _apMode = false;
+        _apMode = false; // Note: AP is still active, but we are effectively "online"
+    } else {
+        _apMode = true;
     }
 
     _server.on("/", [this](){ handleRoot(); });
@@ -110,7 +111,7 @@ String WebManager::getHtml() {
     html += "<output>" + String(settings.getVolume()) + "</output>";
     html += "</div>";
 
-    html += "<div class='card'><h3>AI Settings</h3>";";
+    html += "<div class='card'><h3>AI Settings</h3>";
     html += "<label>Gemini API Key (Optional)</label><input type='password' name='gemini' value='" + settings.getGeminiKey() + "'>";
     html += "<small>Leave empty to use SD card audio only.</small>";
     html += "</div>";
