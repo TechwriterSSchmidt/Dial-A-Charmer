@@ -35,7 +35,7 @@ h2 {
 .card h3 {
     margin-top: 0;
     color: #d4af37;
-    font-size: 1.2rem;
+    font-size: 1.5rem;
     text-transform: uppercase;
     letter-spacing: 3px;
     border-bottom: 1px solid #333;
@@ -45,7 +45,7 @@ h2 {
 label {
     display: block;
     margin-top: 20px;
-    font-size: 0.8rem;
+    font-size: 1.2rem;
     text-transform: uppercase;
     letter-spacing: 2px;
     color: #888;
@@ -58,7 +58,7 @@ input, select {
     border: 2px solid #333;
     color: #111;
     font-family: 'Times New Roman', Times, serif;
-    font-size: 1.1rem;
+    font-size: 1.4rem;
     box-sizing: border-box;
     border-radius: 0; /* Sharp Edges (Bauhaus/Deco) */
 }
@@ -76,7 +76,7 @@ button {
     border: 1px solid #a00000;
     text-transform: uppercase;
     letter-spacing: 4px;
-    font-size: 1.2rem;
+    font-size: 1.5rem;
     cursor: pointer;
     transition: all 0.3s;
     font-family: 'Times New Roman', Times, serif;
@@ -205,8 +205,9 @@ void WebManager::handleSave() {
         delay(1000);
         ESP.restart();
     } else {
-        html += "<p>Settings applied.</p><p><a href='/'>Back</a></p></body></html>";
-        _server.send(200, "text/html", html);
+        // Redirect back to main page
+        _server.sendHeader("Location", "/", true);
+        _server.send(302, "text/plain", "");
     }
 }
 
@@ -250,7 +251,7 @@ String WebManager::getHtml() {
     html += "<label>Timezone (Europe)</label>";
     html += "<select name='tz'>";
     int tz = settings.getTimezoneOffset();
-    const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London, Dublin, Lisbon)", "UTC +1 (Zürich, Paris, Rome)", "UTC +2 (Athens, Helsinki, Kyiv)", "UTC +3 (Moscow, Istanbul)" };
+    const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London, Dublin, Lisbon)", "UTC +1 (Zurich, Paris, Rome)", "UTC +2 (Athens, Helsinki, Kyiv)", "UTC +3 (Moscow, Istanbul)" };
     int offsets[] = { -1, 0, 1, 2, 3 };
     for(int i=0; i<5; i++) {
         html += "<option value='" + String(offsets[i]) + "'";
