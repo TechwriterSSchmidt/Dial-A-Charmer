@@ -1,8 +1,10 @@
 # Dial-A-Charmer
 
-Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on? Created for my mentor Sandra, whose nerdiness and warmth outshine even the fanciest electronics.
+Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on?
 
-**Easy to Install:** No coding skills required! Use the [Web Installer](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/) to flash your ESP32 directly from the browser. Future updates can be done wirelessly via OTA (Over-The-Air) using the [latest firmware file](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/firmware.bin).
+**Easy to Install:**
+1.  **Web Installer (Recommended):** Use the [Dial-A-Charmer Web Installer](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/) to flash directly from Chrome/Edge.
+2.  **PlatformIO:** Build from source for development.
 
 ## Support my projects
 
@@ -45,7 +47,9 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Action (Dialing):** Rotating the dial sets the **Timer**.
     *   Dial `5` -> Sets 5 minute timer.
     *   Lift the handset shortly off the cradle -> Resets timer and the alarm.
-*   **Action (Button and dialing):** Pressing the extra button enables the alarm clock mode. In this mode, dialing `0715` sets the clock to `7:15` o'clock AM next morning. To delete the alarm, press the button and lift off the handset from the hook shortly. 
+*   **Action (Set Alarm):** Hold the extra button down while dialing 4 digits.
+    *   Dial `0730` (while holding button) -> Sets alarm for 07:30.
+    *   Hold button and lift handset -> Deletes current alarm.
 
 ### 2. Active Mode (Handset Lifted)
 *   **Trigger:** Lift the handset (Off-Hook).
@@ -55,7 +59,9 @@ The device differentiates between two main usage modes based on the handset stat
     *   **Dial `2`**: Badran Compliments (`mp3_group_02`)
     *   **Dial `3`**: Yoda Compliments (`mp3_group_03`)
     *   **Dial `4`**: Neutral Compliments (`mp3_group_04`)
-    *   **Dial `0`**: call main menu (`dial a number` style
+    *   **Dial `0`**: Main Menu (Status, Language, etc.)
+    *   **Dial `8`**: Speak System IP & Status
+    *   **Dial `90`**: Toggle Alarms On/Off
 
 ### 3. Ringing Mode (Alarm/Timer)
 *   **Trigger:** Countdown expires or Alarm time is reached.
