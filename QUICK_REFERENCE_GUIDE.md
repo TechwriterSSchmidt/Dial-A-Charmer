@@ -28,6 +28,12 @@
 
 5. **Stop / Snooze Alarm:**
    - **Snooze (9 min):** Lift receiver but **DO NOT** hang up (put it aside).
+
+6. **Voice Menu & Admin:**
+   - **Dial 9:** Hear current status and menu options.
+   - **Dial 90:** Toggle Alarms (On/Off).
+   - **Dial 91:** Skip Next Alarm.
+   - **Dial 8:** Speak full system status (IP, Signal, etc.).
    - **Stop:** Lift receiver and hang up again.
    - **Delete Alarm:** Press and hold Extra Button, then lift receiver briefly.
 
