@@ -147,24 +147,77 @@ void WebManager::begin() {
     _server.on("/", [this](){ handleRoot(); });
     _server.on("/phonebook", [this](){ handlePhonebook(); });
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
+    _server.on("/api/preview", [this](){ handlePreviewApi(); }); // New
     _server.on("/help", [this](){ handleHelp(); });
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
     _server.begin();
+    
+    // Auto-off AP Timer
+    _apEndTime = millis() + 600000; // 10 Minutes
 }
 
 void WebManager::loop() {
     if (_apMode) {
         _dnsServer.processNextRequest();
+        
+        // Timeout Check
+        if (millis() > _apEndTime) {
+             Serial.println("AP Timeout -> Stopping Access Point");
+             stopAp();
+        }
     }
     _server.handleClient();
 }
 
+void WebManager::startAp() {
+    if (_apMode) {
+        resetApTimer(); // Just extend
+        return;
+    }
+    _apMode = true;
+    WiFi.mode(WIFI_AP_STA); // Keep STA up if possible? Or just AP?
+    // User requested "Enable AP". Usually alongside existing connection if debugging?
+    // Or fallback.
+    // Let's assume AP_STA to not break STA.
+    WiFi.softAP(CONF_AP_SSID); 
+    _dnsServer.start(_dnsPort, "*", WiFi.softAPIP());
+    resetApTimer();
+    Serial.println("AP Started via Request");
+}
+
+void WebManager::stopAp() {
+    if (!_apMode) return;
+    WiFi.softAPdisconnect(true);
+    _apMode = false;
+    Serial.println("AP Stopped");
+}
+
+void WebManager::resetApTimer() {
+    _apEndTime = millis() + 600000; 
+}
+
 void WebManager::handleRoot() {
+    resetApTimer();
     _server.send(200, "text/html", getHtml());
 }
 
+extern void playPreviewSound(String type, int index); // Defined in main.cpp
+
+void WebManager::handlePreviewApi() {
+    if (_server.hasArg("type") && _server.hasArg("id")) {
+        String type = _server.arg("type");
+        int id = _server.arg("id").toInt();
+        resetApTimer();
+        playPreviewSound(type, id);
+        _server.send(200, "text/plain", "OK");
+    } else {
+        _server.send(400, "text/plain", "Missing Args");
+    }
+}
+
 void WebManager::handleSave() {
+    resetApTimer();
     bool wifiChanged = false;
 
     if (_server.hasArg("ssid")) {
@@ -183,12 +236,21 @@ void WebManager::handleSave() {
         }
     }
     
+    // System Settings
     if (_server.hasArg("lang")) settings.setLanguage(_server.arg("lang"));
     if (_server.hasArg("tz")) settings.setTimezoneOffset(_server.arg("tz").toInt());
     if (_server.hasArg("gemini")) settings.setGeminiKey(_server.arg("gemini"));
+    
+    // Audio Settings
     if (_server.hasArg("vol")) settings.setVolume(_server.arg("vol").toInt());
     if (_server.hasArg("base_vol")) settings.setBaseVolume(_server.arg("base_vol").toInt());
+    if (_server.hasArg("ring")) settings.setRingtone(_server.arg("ring").toInt());
+    if (_server.hasArg("dt")) settings.setDialTone(_server.arg("dt").toInt());
     
+    // Checkbox handling (Browser sends nothing if unchecked)
+    bool hd = _server.hasArg("hd"); 
+    settings.setHalfDuplex(hd);
+
     // LED Settings
     if (_server.hasArg("led_day")) {
         int val = _server.arg("led_day").toInt();
@@ -243,7 +305,10 @@ String WebManager::getHtml() {
     String t_tz = isDe ? "Zeitzone (Europa)" : "Timezone (Europe)";
     String t_audio = isDe ? "Audio Einstellungen" : "Audio Settings";
     String t_h_vol = isDe ? "Hörer Lautstärke" : "Handset Volume";
-    String t_r_vol = isDe ? "Klingelton Lautstärke" : "Ringer Volume";
+    String t_r_vol = isDe ? "Klingelton Lautstärke (Basis)" : "Ringer Volume (Base)";
+    String t_ring = isDe ? "Klingelton" : "Ringtone";
+    String t_dt = isDe ? "Wählton" : "Dial Tone";
+    String t_hd = isDe ? "Half-Duplex (Echo-Unterdrückung)" : "Half-Duplex (AEC)";
     String t_led = isDe ? "LED Einstellungen" : "LED Settings";
     String t_day = isDe ? "Helligkeit (Tag)" : "Day Brightness";
     String t_night = isDe ? "Helligkeit (Nacht)" : "Night Brightness";
@@ -265,6 +330,7 @@ String WebManager::getHtml() {
 
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
+    html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>";
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
     html += "<form action='/save' method='POST'>";
@@ -301,11 +367,31 @@ String WebManager::getHtml() {
     html += "</div>";
 
     html += "<div class='card'><h3>" + t_audio + "</h3>";
+    
     html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
     html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     
     html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
     html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+
+    // Ringtone
+    html += "<label>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>";
+    int r = settings.getRingtone();
+    for(int i=1; i<=5; i++) {
+        html += "<option value='" + String(i) + "'" + (r==i?" selected":"") + ">Ringtone " + String(i) + " (" + (i==5?"Digital":"Mechanical") + ")</option>";
+    }
+    html += "</select>";
+    
+    // Dial Tone
+    html += "<label>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>";
+    int dt = settings.getDialTone();
+    for(int i=1; i<=3; i++) {
+        html += "<option value='" + String(i) + "'" + (dt==i?" selected":"") + ">Dial Tone " + String(i) + " (" + (i==1?"DE": (i==2?"US":"UK")) + ")</option>";
+    }
+    html += "</select>";
+    
+    // Half Duplex
+    html += "<label style='display:flex;align-items:center;margin-top:20px;'><input type='checkbox' name='hd' value='1' style='width:30px;height:30px;margin-right:10px;'" + String(settings.getHalfDuplex() ? " checked" : "") + "> " + t_hd + "</label>";
     html += "</div>";
 
     html += "<div class='card'><h3>" + t_led + "</h3>";

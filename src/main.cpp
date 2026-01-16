@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <TinyGPS++.h>
 #include <Audio.h>
 #include <SPI.h>
 #include <SD.h>
@@ -12,66 +11,28 @@
 #include "config.h"
 #include "Settings.h"
 #include "WebManager.h"
+#include "TimeManager.h" // Added
 #include "RotaryDial.h"
 #include "LedManager.h"
-#include "Es8311Driver.h" // New Audio Codec Driver
-#include "AiManager.h"    // New AI Manager
-#include "PhonebookManager.h" // Telefonbuch
+#include "Es8311Driver.h" 
+#include "AiManager.h"   
+#include "PhonebookManager.h"
 
 // --- Objects ---
-TinyGPSPlus gps;
+// TinyGPSPlus gps; // Removed
 Audio audio;
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN, CONF_PIN_DIAL_MODE);
 LedManager ledManager(CONF_PIN_LED);
-
 
 // Global flag for hardware availability
 bool sdAvailable = false;
 bool audioCodecAvailable = false;
 
-// --- Globals (Moved Up) ---
-unsigned long alarmEndTime = 0;
-bool timerRunning = false;
+// --- Ringing State (UI) ---
 bool isAlarmRinging = false;
 bool isTimerRinging = false; 
-bool isTimerActiveRinging = false; 
-
-// Alarm Control Flags
-bool alarmsEnabled = true;
-bool skipNextAlarm = false;
-
-unsigned long alarmRingingStartTime = 0;
+unsigned long ringingStartTime = 0;
 int currentAlarmVol = 0;
-
-void startAlarm() {
-  // Overloaded for backward compatibility if needed, but we changed logic
-  // This is just a placeholder if I missed any calls.
-  Serial.println("Deprecated startAlarm called. Assuming Alarm Clock.");
-  // Forward to new impl
-  isAlarmRinging = true;
-  isTimerRinging = false;
-  alarmRingingStartTime = millis();
-  currentAlarmVol = 0; 
-}
-
-// Actual implementation (moved logic here or kept separate? Wait, tool failure above meant I probably didn't replace the declaration)
-// Let's fix the variable declaration block cleanly.
-
-// --- Globals (Deleted) ---
-// Moved up to fix scope issues
-// unsigned long alarmEndTime = 0; ...
-// ...
-// ...
-
-// Alarm Clock
-int alarmHour = -1;   // -1 = Disabled
-int alarmMinute = -1;
-bool snoozeActive = false;
-unsigned long snoozeEndTime = 0;
-const int SNOOZE_DURATION_MS = 9 * 60 * 1000; // 9 Minutes
-String dialBuffer = ""; // Use String for easier debugging and parsing
-unsigned long lastDialTime = 0;
-// bool skipNextAlarm = false; // Removed Duplicate
 
 // --- Playlist Management ---
 struct Playlist {
@@ -353,16 +314,13 @@ int currentMinute = 0;
 void speakTime() {
     Serial.println("Speaking Time...");
     
-    // Get time from GPS or fallback
-    // Note: TinyGPS++ gps variable is available
-    if (gps.time.isValid()) {
-        currentHour = gps.time.hour() + settings.getTimezoneOffset(); // Basic offset logic
-        if (currentHour >= 24) currentHour -= 24;
-        currentMinute = gps.time.minute();
+    TimeManager::DateTime dt = timeManager.getLocalTime();
+    
+    if (dt.valid) {
+        currentHour = dt.hour;
+        currentMinute = dt.minute;
     } else {
-        // Mock time if no GPS for testing? Or maybe fail silently?
-        // Let's assume 12:00 for demo if valid fails
-        Serial.println("GPS Time Invalid, using mock 12:00");
+        Serial.println("Time Invalid (No Sync), using 12:00");
         currentHour = 12;
         currentMinute = 0;
     }
@@ -476,72 +434,80 @@ void speakCompliment(int number) {
     playSound(path, false);
 }
 
+void playPreviewSound(String type, int index) {
+    if (audio.isRunning()) audio.stopSong();
+    
+    // Play on Speaker if On-Hook, Handset if Off-Hook
+    bool offHook = dial.isOffHook();
+    // setAudioOutput(offHook ? OUT_HANDSET : OUT_SPEAKER); // playSound handles this
+    
+    String path = "";
+    if (type == "ring") {
+        path = "/ringtones/" + String(index) + ".wav";
+    } else if (type == "dt") {
+        path = "/system/dialtone_" + String(index) + ".wav";
+    }
+    
+    if (path.length() > 0) {
+        Serial.printf("Preview Sound: %s\n", path.c_str());
+        playSound(path, !offHook); // Use Speaker if NOT off-hook
+    }
+}
+
 void startAlarm(bool isTimer) {
     isAlarmRinging = true;
-    isTimerActiveRinging = isTimer;
-    alarmRingingStartTime = millis();
-    currentAlarmVol = 5; // Start quiet
+    isTimerRinging = isTimer; 
+    ringingStartTime = millis();
+    currentAlarmVol = 5; 
     Serial.println(isTimer ? "TIMER ALERT STARTED" : "ALARM CLOCK RINGING");
     
     setAudioOutput(OUT_SPEAKER);
-    // Explicitly set low volume initially (bypass stored setting for now)
     audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21)); 
     
-    // Start Sound
     playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
 }
 
 void stopAlarm() {
     isAlarmRinging = false;
-    isTimerActiveRinging = false;
-    digitalWrite(CONF_PIN_VIB_MOTOR, LOW); // Ensure Motor Off
+    isTimerRinging = false;
+    digitalWrite(CONF_PIN_VIB_MOTOR, LOW); 
     if (audio.isRunning()) audio.stopSong();
     
-    // Restore Volumes to settings
-    setAudioOutput(OUT_HANDSET); // Reset default state
-    // Vol will be restored by next setAudioOutput call or manual
+    timeManager.cancelTimer(); 
+    
+    setAudioOutput(OUT_HANDSET); 
     Serial.println("Alarm Stopped");
 }
 
 void startSnooze() {
     stopAlarm();
-    snoozeActive = true;
-    snoozeEndTime = millis() + SNOOZE_DURATION_MS;
-    Serial.printf("Snooze Started. Resuming in %d min.\n", SNOOZE_DURATION_MS / 60000);
-    // Optional: Play a short confirmation
-    setAudioOutput(OUT_HANDSET); // Snooze confirmation in handset?
-    // playSound("/system/beep.wav", false);
+    timeManager.startSnooze();
+    Serial.println("Snooze Started.");
 }
 
 void cancelSnooze() {
-    if (snoozeActive) {
-        snoozeActive = false;
-        Serial.println("Snooze Cancelled.");
-    }
+    timeManager.cancelSnooze();
+    Serial.println("Snooze Cancelled.");
 }
 
 void handleAlarmLogic() {
     if (!isAlarmRinging) return;
     
-    unsigned long duration = millis() - alarmRingingStartTime;
-    
-    // 1. Vibration Pattern (Pulse: 500ms ON, 500ms OFF)
+    unsigned long duration = millis() - ringingStartTime;
+    // Vibration Pattern
     bool vibOn = (duration % 1000) < 500;
     digitalWrite(CONF_PIN_VIB_MOTOR, vibOn ? HIGH : LOW);
     
-    // 2. Volume Ramp (Increase every 3 seconds)
+    // Volume Ramp
     int maxVol = settings.getBaseVolume();
     int rampStep = duration / 3000; 
     int newVol = 5 + rampStep;
     
     if (newVol > maxVol) newVol = maxVol;
     
-    // Only update if changed
     if (newVol != currentAlarmVol) {
         currentAlarmVol = newVol;
-        // Map 0-42 -> 0-21
         audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
-        Serial.printf("Alarm Vol Ramp: %d/%d\n", currentAlarmVol, maxVol);
     }
 }
 
@@ -705,8 +671,7 @@ void handleDialedNumber(String numberStr) {
          int num = numberStr.toInt();
          if (num > 0 && num <= 60 && numberStr.length() <= 2) {
             Serial.printf("Setting Timer for %d minutes\n", num);
-            alarmEndTime = millis() + (num * 60000);
-            timerRunning = true;
+            timeManager.setTimer(num);
             playSound("/system/beep.wav", true); 
          } else {
             // Unknown
@@ -726,8 +691,8 @@ void processBufNumber(String numberStr) {
             int m = numberStr.substring(2, 4).toInt();
             
             if (h >= 0 && h < 24 && m >= 0 && m < 60) {
-                alarmHour = h; alarmMinute = m;
-                Serial.printf("ALARM SET TO: %02d:%02d\n", alarmHour, alarmMinute);
+                timeManager.setAlarm(h, m);
+                Serial.printf("ALARM SET TO: %02d:%02d\n", h, m);
                 
                 // Audio Feedback
                 setAudioOutput(OUT_HANDSET);
@@ -753,8 +718,7 @@ void processBufNumber(String numberStr) {
          int num = numberStr.toInt();
          if (num > 0 && num <= 120) { // Allow up to 120 minutes
             Serial.printf("Setting Timer for %d minutes\n", num);
-            alarmEndTime = millis() + (num * 60000);
-            timerRunning = true;
+            timeManager.setTimer(num);
             playSound("/system/beep.wav", true); 
          } else {
             // Unknown
@@ -800,8 +764,7 @@ void onHook(bool offHook) {
     
     // 2. Logic: Delete Alarm (Button + Lift)
     if (offHook && dial.isButtonDown()) {
-        alarmHour = -1;
-        alarmMinute = -1;
+        timeManager.deleteAlarm();
         Serial.println("Alarm Deleted/Disabled");
         // Audio Feedback
         setAudioOutput(OUT_HANDSET);
@@ -818,8 +781,8 @@ void onHook(bool offHook) {
             return;
         }
         
-        if (timerRunning) {
-             timerRunning = false;
+        if (timeManager.isTimerRunning()) {
+             timeManager.cancelTimer();
              stopAlarm(); // Should stop timer ringing too
              Serial.println("Timer Stopped by Pickup");
              return; // Don't play compliment logic
@@ -838,7 +801,7 @@ void onHook(bool offHook) {
     } else {
         // ON HOOK (Hung Up)
         
-        if (snoozeActive) {
+        if (timeManager.isSnoozeActive()) {
             // User hung up during snooze -> Cancel Snooze (I am awake)
             cancelSnooze();
         }
@@ -919,6 +882,7 @@ void setup() {
     ledManager.begin();
     ledManager.setMode(LedManager::CONNECTING); // Start sequence
     phonebook.begin(); // Load Phonebook from SPIFFS
+    timeManager.begin(); // Added TimeManager
     
     // Init Audio Codec (ES8311)
     if (!audioCodec.begin()) {
@@ -929,7 +893,6 @@ void setup() {
         Serial.println("ES8311 Initialized");
         audioCodecAvailable = true;
         audioCodec.setVolume(50); // Set Hardware Volume to 50%
-        // Adjust software volume in Audio lib if needed
     }
     
     // Init SD 
@@ -953,8 +916,6 @@ void setup() {
     
     webManager.begin();
     
-    Serial2.begin(CONF_GPS_BAUD, SERIAL_8N1, CONF_GPS_RX, CONF_GPS_TX);
-    
     // If we woke from Deep Sleep, the GPS is likely in Backup Mode. Wake it up!
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
         wakeGps();
@@ -973,18 +934,10 @@ void loop() {
     audio.loop();
     webManager.loop();
     dial.loop();
+    timeManager.loop();
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {
-        // If we have a dial Mode pin, we rely on RotaryDial to send digits one by one.
-        // But what about the *buffer* timeout?
-        // User said: "Wir brauchen das nicht mit einem Timeout zu setzen" (We don't need to set that with a timeout)
-        // If they use the off-normal contact to detect digits, maybe they also use the Hook or Button to submit?
-        // Or, maybe they simply want to type '9' '0' and wait?
-        // If we remove the timeout, the command never executes unless we have a different trigger.
-        // Let's use a very long timeout (fallback) OR check if the user just wanted to remove the pulse timeout logic.
-        // Assuming they still need a way to say "I'm done dialing 90", we default to a timeout UNLESS they have a button.
-        // However, since CONF_DIAL_FINISHED_TIMEOUT was removed from config, we define a local fallback here.
         #define DIAL_CMD_TIMEOUT 3000
 
         if (millis() - lastDialTime > DIAL_CMD_TIMEOUT) {
@@ -994,49 +947,33 @@ void loop() {
         }
     }
 
-    // Pass hour for adaptive brightness
-    int h = -1;
-    // TinyGPS++ gps is available globally in this file
-    if (gps.time.isValid()) {
-         h = gps.time.hour() + settings.getTimezoneOffset();
-         if (h >= 24) h -= 24;
-         if (h < 0) h += 24;
+    // --- Triggers ---
+    if (timeManager.checkTimerTrigger()) {
+        startAlarm(true);
     }
-    
-    // Check Alarm
-    if (alarmHour >= 0 && !isAlarmRinging && !snoozeActive && gps.time.isValid()) {
-        int m = gps.time.minute();
-        // Simple One-Shot trigger: matches exactly and seconds < 2 to avoid multi-trigger?
-        // Or flag logic.
-        static int lastTriggerMinute = -1;
-        
-        if (alarmHour == h && alarmMinute == m && lastTriggerMinute != m) {
-            Serial.println("Alarm Time Reached!");
-            startAlarm(false); // False = Alarm Clock
-            lastTriggerMinute = m;
-        }
+    if (timeManager.checkAlarmTrigger()) {
+        startAlarm(false);
     }
-    
-    // Check Snooze End
-    if (snoozeActive && millis() > snoozeEndTime) {
-        Serial.println("Snooze Ended! Wakey Wakey!");
-        cancelSnooze();
-        startAlarm(false); // Snooze is always from Alarm Clock usually
+    if (timeManager.checkSnoozeExpired()) {
+         Serial.println("Snooze Expired -> Ringing!");
+         startAlarm(false);
     }
+
+    // --- LED Updates ---
+    TimeManager::DateTime dt = timeManager.getLocalTime();
+    int h = dt.valid ? dt.hour : -1;
     
-    // Serial.println("L: LED");
-    // statusLed.loop(h);
     ledManager.update();
     
     // LED State Logic
     if (isAlarmRinging) {
-        if (isTimerActiveRinging) {
+        if (isTimerRinging) {
              ledManager.setMode(LedManager::TIMER_ALERT); // Red Fast
         } else {
              ledManager.setMode(LedManager::ALARM_CLOCK); // Warm White Pulse
         }
     } 
-    else if (snoozeActive) {
+    else if (timeManager.isSnoozeActive()) {
         ledManager.setMode(LedManager::SNOOZE_MODE); // Warm White Solid
     }
     else if (!sdAvailable || !audioCodecAvailable) {
@@ -1054,38 +991,44 @@ void loop() {
         handleAlarmLogic();
     }
     
-    while (Serial2.available() > 0) {
-        gps.encode(Serial2.read());
-    }
-    
-    if (timerRunning && millis() > alarmEndTime) {
-        timerRunning = false;
-        startAlarm(true); // True = Timer
-    }
-    
-    // --- HALF-DUPLEX AEC & AGC ---
-    // If Audio is outputting (AI speaking), Mute Mic to prevent Echo.
+    // --- HALF-DUPLEX AEC ---
     static bool wasAudioRunning = false;
     bool isAudioRunning = audio.isRunning();
     
-    if (isAudioRunning && !wasAudioRunning) {
-        // Playback started -> Mute Mic
-        Serial.println("AEC: Audio Start -> Muting Mic");
-        audioCodec.muteMic(true);
-    } 
-    else if (!isAudioRunning && wasAudioRunning) {
-        // Playback finished -> Unmute Mic (Listen)
-        Serial.println("AEC: Audio Stop -> Unmuting Mic");
+    if (settings.getHalfDuplex()) {
+        if (isAudioRunning && !wasAudioRunning) {
+            Serial.println("AEC: Audio Start -> Muting Mic");
+            audioCodec.muteMic(true);
+        } 
+        else if (!isAudioRunning && wasAudioRunning) {
+            Serial.println("AEC: Audio Stop -> Unmuting Mic");
+            audioCodec.muteMic(false);
+        }
+    } else if (wasAudioRunning && !isAudioRunning) {
+        // Ensure unmuted if we toggled setting off during playback
         audioCodec.muteMic(false);
-        
-        // Simple AGC Reset (Restore Gain)
-        // audioCodec.setMicGain(200); 
     }
     wasAudioRunning = isAudioRunning;
     
+    // --- AP Mode Long Press ---
+    static unsigned long btnPressStart = 0;
+    if (dial.isButtonDown()) {
+        if (btnPressStart == 0) btnPressStart = millis();
+        if (millis() - btnPressStart > 10000) { // 10 Seconds
+             Serial.println("Long Press Detected: Starting AP Mode");
+             playSound("/system/beep.wav", false);
+             webManager.startAp();
+             btnPressStart = 0; // Trigger once
+             // Wait for release
+             while(dial.isButtonDown()) { dial.loop(); delay(10); }
+        }
+    } else {
+        btnPressStart = 0;
+    }
+    
     // --- SMART DEEP SLEEP LOGIC ---
     // Prevent sleep if: Off Hook (Active), Audio Playing, Timer Running, or USB Power Detected
-    bool systemBusy = dial.isOffHook() || audio.isRunning() || timerRunning || isAlarmRinging || isUsbPowerConnected();
+    bool systemBusy = dial.isOffHook() || audio.isRunning() || timeManager.isTimerRunning() || isAlarmRinging || timeManager.isSnoozeActive() || isUsbPowerConnected();
     
     if (systemBusy) {
         lastActivityTime = millis();

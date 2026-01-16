@@ -17,13 +17,21 @@ private:
     DNSServer _dnsServer;
     const uint8_t _dnsPort = CONF_DNS_PORT;
     bool _apMode = false;
+    unsigned long _apEndTime = 0; // Auto-off timer
 
     void handleRoot();
     void handleSave();
     void handleHelp();
     void handlePhonebook();
     void handlePhonebookApi();
+    void handleSettingsApi(); // New for specialized settings
+    void handlePreviewApi();  // New for audio preview
     void handleNotFound();
+    
+    // Helpers
+    void resetApTimer();
+    void startAp();
+    void stopAp();
     
     String getHtml();
     String getPhonebookHtml();

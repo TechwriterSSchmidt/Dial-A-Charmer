@@ -30,6 +30,12 @@ public:
     void setBaseVolume(int vol);
     int getRingtone();
     void setRingtone(int toneIndex);
+    int getDialTone(); // New
+    void setDialTone(int toneIndex);
+
+    // Half Duplex Mode
+    bool getHalfDuplex(); // New
+    void setHalfDuplex(bool enabled);
 
     // LED Brightness
     int getLedDayBright();     // 0-255

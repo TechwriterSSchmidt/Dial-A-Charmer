@@ -67,6 +67,22 @@ void Settings::setRingtone(int toneIndex) {
     _prefs.putInt("ring", toneIndex);
 }
 
+int Settings::getDialTone() {
+    return _prefs.getInt("dt_idx", 1); // Default 1
+}
+
+void Settings::setDialTone(int toneIndex) {
+    _prefs.putInt("dt_idx", toneIndex);
+}
+
+bool Settings::getHalfDuplex() {
+    return _prefs.getBool("half_duplex", true); // Default ON
+}
+
+void Settings::setHalfDuplex(bool enabled) {
+    _prefs.putBool("half_duplex", enabled);
+}
+
 int Settings::getLedDayBright() {
     return _prefs.getInt("led_day_b", 100); // Default 100 (approx 40%)
 }
