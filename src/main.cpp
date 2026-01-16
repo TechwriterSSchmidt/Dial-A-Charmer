@@ -279,33 +279,28 @@ void setAudioOutput(AudioOutput target) {
     // Check if we need to switch
     if (currentOutput == target) return; 
     
-    // Stop ensuring clean switch
-    if(audio.isRunning()) { 
-        audio.stopSong(); 
-        delay(100); // Give time for DMA to stop
-    }
+    // Force Stop to prevent I2S DMA crash during reconfig
+    if(audio.isRunning()) audio.stopSong();
     
-    // Mute before switch to prevent pop?
-    // audioCodec.mute(true); // I2C is flaky
-    
+    // IMPORTANT: Wait for I2S peripheral to fully idle
+    delay(100); 
+
     if (target == OUT_HANDSET) {
         // Handset: Includes Mic (DIN) and MCLK
-        // NOTE: MCLK 0 is tricky. If issues persist, try -1 or check hardware strapping.
         audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT, CONF_I2S_DIN, CONF_I2S_MCLK);
-        delay(100); // Allow drivers to re-init
+        delay(50); 
         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.printf("Output Switched: HANDSET (Vol: %d)\n", vol);
     } else {
         // Speaker: Output only (DIN=-1, MCLK=-1)
         audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, -1);
-        delay(100); // Allow drivers to re-init
+        delay(50);
         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.printf("Output Switched: SPEAKER (Vol: %d)\n", vol);
     }
     currentOutput = target;
-    // audioCodec.mute(false);
 }
 
 void playSound(String filename, bool useSpeaker = false) {
