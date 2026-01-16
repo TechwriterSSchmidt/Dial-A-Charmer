@@ -16,12 +16,14 @@
 #include "LedManager.h"
 #include "Es8311Driver.h" // New Audio Codec Driver
 #include "AiManager.h"    // New AI Manager
+#include "PhonebookManager.h" // Telefonbuch
 
 // --- Objects ---
 TinyGPSPlus gps;
 Audio audio;
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN);
 LedManager ledManager(CONF_PIN_LED);
+
 
 // Global flag for hardware availability
 bool sdAvailable = false;
@@ -537,63 +539,101 @@ void handleAlarmLogic() {
 }
 
 // --- Callbacks ---
+// Central Logic for Dialed Numbers (Phonebook + Features)
+void handleDialedNumber(String numberStr) {
+    auto entry = phonebook.getEntry(numberStr);
+    
+    if (entry.type.length() > 0) {
+        Serial.printf("Phonebook Match: %s (%s)\n", entry.name.c_str(), entry.type.c_str());
+        
+        if (entry.type == "FUNCTION") {
+            if (entry.value == "COMPLIMENT_CAT" || entry.value == "COMPLIMENT_MIX") {
+                // Call old SpeakCompliment logic with CAT ID (stored in parameter)
+                // Assuming param is int category
+                int cat = entry.parameter.toInt();
+                speakCompliment(cat);
+            }
+            else if (entry.value == "SPEAK_TIME") {
+                speakTime();
+            }
+        }
+        else if (entry.type == "AUDIO") {
+            // Play specific file
+             Serial.printf("Playing Audio: %s\n", entry.value.c_str());
+             playSound(entry.value, false);
+        }
+        else if (entry.type == "TTS") {
+            // TODO: Simple static TTS via Google? Or reuse Gemini?
+             Serial.printf("TTS Req: %s\n", entry.value.c_str());
+             if (ai.hasApiKey()) {
+                 String url = ai.getTTSUrl(entry.value);
+                 audio.connecttohost(url.c_str());
+             }
+        }
+    } else {
+        // Unknown Number
+        Serial.println("Unknown Number Dialed");
+        // Fallback or specific reaction?
+        // Default behavior for 1-4 was handled by phonebook defaults now.
+        // If unknown:
+        playSound("/system/error_tone.wav", false);
+    }
+}
+
 void onDial(int number) {
     Serial.printf("Dialed: %d\n", number);
     
     // 1. Logic: Setting Alarm Clock (Button Held + Dialing 4 digits)
     if (dial.isButtonDown()) {
+        // ... (Alarm setting logic remains unchanged)
         // Clear buffer if stale (> 5 seconds since last digit)
         if (millis() - lastDialTime > 5000) {
              dialBuffer.clear();
         }
         lastDialTime = millis();
+        // ...
+        // Re-injecting alarm logic in next edit if needed, or keeping it?
+        // Wait, I am replacing ON DIAL. I need to keep the alarm logic!
+        // Let me copy the alarm logic from context or previous reads.
         
-        dialBuffer.push_back(number == 10 ? 0 : number); // 10 pulses usually means 0
+        dialBuffer.push_back(number == 10 ? 0 : number); 
         Serial.printf("Alarm Buffer: %d digits\n", dialBuffer.size());
-        
-        // Ack beep
         setAudioOutput(OUT_HANDSET);
         playSound("/system/beep.wav", false); 
         
         if (dialBuffer.size() == 4) {
             int h = dialBuffer[0] * 10 + dialBuffer[1];
             int m = dialBuffer[2] * 10 + dialBuffer[3];
-            
             if (h >= 0 && h < 24 && m >= 0 && m < 60) {
-                alarmHour = h;
-                alarmMinute = m;
+                alarmHour = h; alarmMinute = m;
                 Serial.printf("Alarm Set: %02d:%02d\n", alarmHour, alarmMinute);
-                // Confirmation Sound "Alarm Set"
-                 playSound("/system/timer_set.mp3", false); // reusing timer sound or need specific?
+                playSound("/system/timer_set.mp3", false); 
             } else {
-                Serial.println("Invalid Time Dialed");
                 playSound("/system/error_tone.wav", false);
             }
             dialBuffer.clear();
         }
         return;
     }
-    
-    // Check for Ringtone Setting Mode (Button NOT Held, Logic Removed/Changed?)
-    // Original logic: "if (dial.isButtonDown())" -> this block is now taken by Alarm Set
-    // User Guide says: "Press Button enabled alarm clock mode. In this mode, dialing 0715..."
-    // So the previous logic for Ringtone setting needs to be moved or removed?
-    // README doesn't mention setting ringtone via button+dial anymore.
-    // It says "Input numbers to request content" in Active Mode. 
-    
-    // Wait, original read_file showed:
-    // if (dial.isButtonDown()) { if (number >= 1 && number <= 5) ... setRingtone ... }
-    // This conflicts. I will overwrite it with the new Alarm Logic requested.
-    
+
     if (dial.isOffHook()) {
-        // Dialing while off-hook -> Interrupt and play new selection
-        speakCompliment(number);
+        // Dialing while off-hook -> Phonebook Lookup
+        // Convert int number to String. But what about multi-digit dialing? 
+        // For now, the library gives us single digits.
+        // We need a buffer for normal dialing too if we want "110"?
+        // Current requirement: "1-4" works.
+        // Let's stick to single digit instant Execution for v1.5, OR introduce a short delay?
+        // Rotary phones are slow. 
+        // Let's implement single digit mapping first as requested (0-4).
+        
+        handleDialedNumber(String(number == 10 ? 0 : number));
+        
     } else {
+        // Timer Logic (On Hook)
         Serial.printf("Setting Timer for %d minutes\n", number);
         alarmEndTime = millis() + (number * 60000);
         timerRunning = true;
-        // statusLed.setWifiConnecting(); 
-        playSound("/system/beep.wav", true); // Confirmation
+        playSound("/system/beep.wav", true); 
     }
 }
 
@@ -713,6 +753,7 @@ void setup() {
     settings.begin();
     ledManager.begin();
     ledManager.setMode(LedManager::CONNECTING); // Start sequence
+    phonebook.begin(); // Load Phonebook from SPIFFS
     
     // Init Audio Codec (ES8311)
     if (!audioCodec.begin()) {

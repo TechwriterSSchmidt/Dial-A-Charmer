@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <Arduino_JSON.h>
+#include <ArduinoJson.h>
 #include "Settings.h"
 
 // Google Translate TTS URL
@@ -16,6 +16,8 @@ public:
     String getCompliment(int number);
     
     String getTTSUrl(String text);
+    
+    bool hasApiKey();
 
 private:
     String callGemini(String prompt);

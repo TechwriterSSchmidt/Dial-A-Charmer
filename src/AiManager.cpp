@@ -2,9 +2,12 @@
 
 AiManager ai;
 
+bool AiManager::hasApiKey() {
+    return settings.getGeminiKey().length() > 0;
+}
+
 String AiManager::getCompliment(int number) {
-    String key = settings.getGeminiKey();
-    if (key.length() == 0) return ""; // No key
+    if (!hasApiKey()) return "";
 
     String prompt = "";
     switch(number) {
@@ -24,19 +27,19 @@ String AiManager::callGemini(String prompt) {
     if (key.length() == 0) return "";
 
     WiFiClientSecure client;
-    client.setInsecure(); // Skip certificate validation for simplicity/memory
+    client.setInsecure(); // Skip certificate validation
     
     HTTPClient http;
     String url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" + key;
     
-    // JSON Payload
-    // { "contents": [{ "parts": [{"text": "PROMPT"}] }] }
-    JSONVar body;
-    JSONVar parts;
-    parts[0]["text"] = prompt;
-    body["contents"][0]["parts"] = parts;
+    // JSON Payload with ArduinoJson v7
+    JsonDocument doc;
+    JsonObject content = doc["contents"].add<JsonObject>();
+    JsonObject part = content["parts"].add<JsonObject>();
+    part["text"] = prompt;
     
-    String payload = JSON.stringify(body);
+    String payload;
+    serializeJson(doc, payload);
     
     Serial.println("Asking Gemini...");
     
@@ -48,14 +51,13 @@ String AiManager::callGemini(String prompt) {
     
     if (httpCode == 200) {
         String response = http.getString();
-        JSONVar myo = JSON.parse(response);
-        if (JSON.typeof(myo) != "undefined") {
-            if (myo.hasOwnProperty("candidates")) {
-                JSONVar candidates = myo["candidates"];
-                JSONVar content = candidates[0]["content"];
-                JSONVar parts = content["parts"];
-                result = (const char*)parts[0]["text"];
-            }
+        // Parse Response
+        JsonDocument respDoc;
+        DeserializationError error = deserializeJson(respDoc, response);
+        
+        if (!error && respDoc.containsKey("candidates")) {
+             const char* text = respDoc["candidates"][0]["content"]["parts"][0]["text"];
+             if (text) result = String(text);
         }
     } else {
         Serial.printf("Gemini Error: %d\n", httpCode);
@@ -64,7 +66,7 @@ String AiManager::callGemini(String prompt) {
     
     http.end();
     
-    // Cleanup text (remove asterisks, markdown, newlines for TTS)
+    // Cleanup text
     result.replace("*", "");
     result.replace("\n", " ");
     result.trim();

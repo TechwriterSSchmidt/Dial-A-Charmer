@@ -21,9 +21,12 @@ private:
     void handleRoot();
     void handleSave();
     void handleHelp();
+    void handlePhonebook();
+    void handlePhonebookApi();
     void handleNotFound();
     
     String getHtml();
+    String getPhonebookHtml();
     String getHelpHtml();
 };
 

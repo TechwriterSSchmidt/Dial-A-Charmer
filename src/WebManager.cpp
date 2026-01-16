@@ -1,5 +1,6 @@
 #include "WebManager.h"
 #include "LedStatus.h"
+#include "PhonebookManager.h"
 #include <ESPmDNS.h>
 
 WebManager webManager;
@@ -144,6 +145,8 @@ void WebManager::begin() {
     }
 
     _server.on("/", [this](){ handleRoot(); });
+    _server.on("/phonebook", [this](){ handlePhonebook(); });
+    _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/help", [this](){ handleHelp(); });
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
@@ -294,7 +297,145 @@ String WebManager::getHtml() {
     
     html += "<button type='submit'>Save Settings</button>";
     html += "</form>";
-    html += "<p style='text-align:center'><a href='/help' style='color:#ffc107'>Usage Help</a></p>";
+    html += "<p style='text-align:center'>";
+    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>Phonebook</a>";
+    html += "<a href='/help' style='color:#ffc107'>Usage Help</a>";
+    html += "</p>";
+    html += "</body></html>";
+    return html;
+}
+
+void WebManager::handlePhonebook() {
+    _server.send(200, "text/html", getPhonebookHtml());
+}
+
+void WebManager::handlePhonebookApi() {
+    if (_server.method() == HTTP_GET) {
+        // Return JSON
+        File f = SPIFFS.open("/phonebook.json", "r");
+        if (!f) {
+            _server.send(500, "application/json", "{\"error\":\"File not found\"}");
+            return;
+        }
+        _server.streamFile(f, "application/json");
+        f.close();
+    } 
+    else if (_server.method() == HTTP_POST) {
+        if (_server.hasArg("plain")) {
+            String body = _server.arg("plain");
+            // Validate JSON
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, body);
+            if (error) {
+                _server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+                return;
+            }
+            // Save via Manager
+            phonebook.saveAll(doc.as<JsonObject>());
+            _server.send(200, "application/json", "{\"status\":\"saved\"}");
+        } else {
+             _server.send(400, "application/json", "{\"error\":\"No Body\"}");
+        }
+    }
+    else {
+        _server.send(405, "text/plain", "Method Not Allowed");
+    }
+}
+
+String WebManager::getPhonebookHtml() {
+    String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
+    html += htmlStyle;
+    html += R"rawliteral(
+<style>
+table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #f0e6d2; }
+th, td { border: 1px solid #333; padding: 10px; text-align: left; }
+th { background-color: #222; color: #d4af37; }
+input.tbl-in { width: 100%; margin: 0; padding: 5px; background: transparent; border: none; color: white; }
+select.tbl-sel { width: 100%; margin: 0; padding: 5px; background: #222; border: none; color: white; }
+.btn-small { padding: 5px 10px; margin: 0; font-size: 0.9rem; width: auto; display: inline-block; background-color: #333; }
+.btn-delete { background-color: #800; }
+</style>
+<script>
+async function load() {
+    try {
+        const res = await fetch('/api/phonebook');
+        const data = await res.json();
+        render(data);
+    } catch(e) { alert('Load Error: ' + e); }
+}
+
+let currentData = {};
+
+function render(data) {
+    currentData = data; // Keep ref
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+    
+    // Convert obj to array and Sort by key (number)
+    const entries = Object.entries(data).sort((a,b) => parseInt(a[0]) - parseInt(b[0]));
+    
+    entries.forEach(([num, entry]) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input class="tbl-in" value="${num}" readonly></td>
+            <td><input class="tbl-in" value="${entry.name}" onchange="update('${num}', 'name', this.value)"></td>
+            <td>
+                <select class="tbl-sel" onchange="update('${num}', 'type', this.value)">
+                    <option value="FUNCTION" ${entry.type=='FUNCTION'?'selected':''}>Function</option>
+                    <option value="AUDIO" ${entry.type=='AUDIO'?'selected':''}>Audio File</option>
+                    <option value="TTS" ${entry.type=='TTS'?'selected':''}>AI Speaking</option>
+                </select>
+            </td>
+            <td><input class="tbl-in" value="${entry.value}" onchange="update('${num}', 'value', this.value)"></td>
+            <td><button class="btn-small btn-delete" onclick="del('${num}')">X</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+function addRow() {
+    const num = prompt("Enter Dial Number (0-99):");
+    if(!num) return;
+    if(currentData[num]) { alert("Number exists!"); return; }
+    
+    currentData[num] = { name: "New Entry", type: "AUDIO", value: "/file.mp3", parameter: "" };
+    render(currentData);
+}
+
+function update(num, field, val) {
+    if(currentData[num]) currentData[num][field] = val;
+}
+function del(num) {
+    if(confirm('Delete '+num+'?')) {
+        delete currentData[num];
+        render(currentData);
+    }
+}
+async function save() {
+    try {
+        await fetch('/api/phonebook', {
+            method: 'POST',
+            body: JSON.stringify(currentData)
+        });
+        alert('Saved!');
+    } catch(e) { alert('Save Error: ' + e); }
+}
+document.addEventListener('DOMContentLoaded', load);
+</script>
+)rawliteral";
+
+    html += "</head><body>";
+    html += "<h2>Phonebook Editor</h2>";
+    html += "<div class='card'>";
+    html += "<p>Manage Dialed Numbers. Use standard numbers (0-9) or shortcuts.</p>";
+    html += "<div style='overflow-x:auto;'>";
+    html += "<table><thead><tr><th width='10%'>#</th><th width='30%'>Name</th><th width='20%'>Type</th><th width='30%'>Value/File</th><th width='10%'>Act</th></tr></thead>";
+    html += "<tbody id='tbody'></tbody></table>";
+    html += "</div>";
+    html += "<button onclick='addRow()' class='btn-small' style='margin-top:20px; background:#444;'>+ Add Entry</button>";
+    html += "<button onclick='save()' style='margin-top:20px;'>Save Changes</button>";
+    html += "</div>";
+    
+    html += "<p style='text-align:center'><a href='/'>Back to Settings</a></p>";
     html += "</body></html>";
     return html;
 }
