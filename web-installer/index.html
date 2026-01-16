@@ -7,105 +7,114 @@
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Times New Roman', Times, serif;
+            background-color: #080808; /* Deep Black */
+            color: #f0e6d2; /* Cream/Champagne */
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
             text-align: center;
-            padding: 2rem;
-            background-color: #2c3e50;
-            color: #ecf0f1;
         }
         .container {
             max-width: 600px;
             margin: 0 auto;
-            background: #34495e;
-            padding: 2rem;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            background: #111;
+            border: 1px solid #222;
+            border-top: 4px solid #d4af37; /* Gold Accent */
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
         }
-        h1 { color: #e74c3c; }
-        p { margin-bottom: 1.5rem; line-height: 1.5; color: #bdc3c7; }
-        a { color: #3498db; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .footer {
-            margin-top: 2rem;
-            font-size: 0.8rem;
-            color: #95a5a6;
+        h1 { 
+            text-transform: uppercase;
+            letter-spacing: 6px; /* Art Deco Spacing */
+            color: #d4af37; /* Metallic Gold */
+            border-bottom: 2px solid #d4af37;
+            margin-bottom: 40px;
+            padding-bottom: 15px;
+            font-weight: normal;
         }
-        /* Style for the button slot */
+        p { margin-bottom: 1.5rem; line-height: 1.5; color: #f0e6d2; font-size: 1.1rem; }
+        
+        /* Style for the button slot to match Webinterface buttons */
         button[slot="activate"] {
-            background-color: #e74c3c;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            font-size: 1.2rem;
-            border-radius: 5px;
+            width: 100%;
+            padding: 18px;
+            margin-top: 10px;
+            background-color: #8b0000; /* Deep Red */
+            color: #f0e6d2;
+            border: 1px solid #a00000;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            font-size: 1.5rem;
             cursor: pointer;
-            font-weight: bold;
-            display: inline-block;
-            transition: background-color 0.3s;
+            transition: all 0.3s;
+            font-family: 'Times New Roman', Times, serif;
+            border-radius: 0; /* Sharp Edges */
         }
         button[slot="activate"]:hover {
-            background-color: #c0392b;
+            background-color: #b22222;
+            color: #fff;
+            border-color: #f00;
+            box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
         }
-        .unsupported { color: #e74c3c; font-weight: bold; }
+
+        .unsupported { color: #8b0000; font-weight: bold; border: 1px solid #8b0000; padding: 10px; margin-top:10px; }
+        
         #error-info {
             margin-top: 1rem;
             padding: 1rem;
-            background-color: #c0392b;
-            color: white;
-            border-radius: 4px;
+            background-color: #300;
+            color: #f00;
+            border: 1px solid #800;
             display: none;
             font-size: 0.9rem;
             text-align: left;
         }
+
+        .footer {
+            margin-top: 2rem;
+            font-size: 0.8rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; transition: 0.3s; }
+        a:hover { color: #fff; border-bottom: 1px solid #fff; }
     </style>
     <script>
         window.addEventListener('load', () => {
-            // Check for file protocol
-            if (window.location.protocol === 'file:') {
+             // Check for file protocol
+             if (window.location.protocol === 'file:') {
                 const err = document.getElementById('error-info');
                 err.style.display = 'block';
                 err.innerHTML = '⚠️ <b>Warning:</b> You are opening this file directly from your computer.<br>' +
                                 'The Web Installer requires a web server (HTTPS or localhost) to work.<br>' +
                                 'Please upload this folder to GitHub Pages or run a local server (e.g. <code>python -m http.server</code>).';
             }
-
-            // Check if component loaded
-            setTimeout(() => {
-                if (!customElements.get('esp-web-install-button')) {
-                    const err = document.getElementById('error-info');
-                    if (err.style.display === 'none') {
-                        err.style.display = 'block';
-                        err.innerHTML = '⚠️ <b>Error:</b> The installer component failed to load.<br>' +
-                                        'Please check your internet connection or disable ad-blockers.<br>' +
-                                        'Ensure you are using Chrome, Edge, or Opera.';
-                    }
-                }
-            }, 2000);
         });
     </script>
 </head>
 <body>
     <div class="container">
-        <h1>⚛️ The Atomic Charmer</h1>
+        <h1>The Atomic Charmer</h1>
         <p>
-            Welcome to the firmware installer for <b>The Atomic Charmer</b>.<br>
-            Make sure your device is connected via USB.
+            Welcome, Time Traveller.<br>
+            Connect your apparatus via USB to update its firmware.
         </p>
-        <p>
-            <em>v1.4.0 - Smart Alarm, Volume Control & New Content</em>
+        <p style="color: #d4af37; font-style: italic;">
+            v1.4.0 - Smart Alarm, Volume Control & New Content
         </p>
         
         <esp-web-install-button manifest="manifest.json">
-            <button slot="activate">Connect & Install</button>
+            <button slot="activate">INITIATE UPDATE</button>
             <div slot="unsupported" class="unsupported">
-                ⚠️ Your browser does not support Web Serial.<br>
-                Please use <b>Google Chrome</b>, <b>Microsoft Edge</b>, or <b>Opera</b> on Desktop or Android.
+                Browser not supported. Please use Chrome, Edge, or Opera.
             </div>
         </esp-web-install-button>
 
-        <p style="margin-top: 2rem; font-size: 0.9rem;">
-            Instructions: Connect device, click button, select port, choose "Install".<br>
-            Hold "BOOT" button if connection fails.
+        <p style="margin-top: 2rem; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 1rem;">
+            Instructions: Connect device, click the red button above, select the port, and confirm installation.
         </p>
     </div>
     
