@@ -1,66 +1,29 @@
 # Release Notes - Dial-A-Charmer
 
-## v1.5.0 (2026-01-16)
-- **Multi-Language Support**:
-  - Added full support for **German (de)** and **English (en)**.
-  - Language selection available via Web Interface.
-  - System prompts and TTS generation adapt to the selected language.
-- **Hardware Dialing Refinement**:
-  - **Dial Mode Pin**: Added support for the rotary dial's secondary contact (GPIO 36) to detect "Dialing Active" state mechanically.
-  - **Robust Input**: Removed reliance on pulse timeouts for digit counting, ensuring perfect digit recognition even with slow dials.
-- **Enhanced Dialing Logic**:
-  - **Multi-Digit Buffer**: Enables entry of 4-digit codes (e.g., 0730) for Alarm setting without timing out between digits.
-  - **Fallback Timeout**: Added a smart timeout (3s) to submit commands if no hardware "Submit" button is used.
-- **Audio & Offline Capability**:
-  - **Local Fallback**: System now prioritizes local MP3 files; falls back to Google Gemini TTS only if enabled and online.
-  - **TTS Generated Files**: Automatic caching of generated speech to SD card to reduce API calls/latency.
+## v1.9.0 (2026-01-16)
+- **Core System Architecture**:
+    - **Hardware Conflict Resolution**: Migrated to `Adafruit_NeoPixel` to resolve FastLED/I2S timing conflicts. 
+    - **Partitioning**: Upgraded to `huge_app.csv` to support larger OTA binaries.
+    - **Pin Mapping**: Optimized pinout for Lolin D32 Pro (I2S DOUT moved to GPIO 27, Dial Mode Pin added on GPIO 36).
+    - **Project Renaming**: Officially renamed to "Dial-A-Charmer".
 
-## v1.4.0 (2026-01-16)
-- **Deployment & Updates**:
-  - **OTA / Web Installer**: Implemented GitHub Actions workflow for automated firmware builds and "Web Installer" deployment.
-  - **Browser-based Flashing**: Updates can now be installed directly via browser (WebSerial).
-- **Web Interface**:
-  - **Dual Volume Control**: Added separate volume sliders for **Handset** (Compliments) and **Ringer** (Alarm/Timer).
-  - **Expanded Range**: Full 0-42 volume range enabled for both outputs.
-- **Content & TTS**:
-  - **Text Optimization**: Optimized text sources (`badran.txt`, `yoda.txt`, `trump.txt`, `neutral.txt`) for Text-to-Speech engines (removed special chars, improved pause punctuation).
-  - **Content Expansion**: Added ~400 new lines of dialogue across all personas.
-- **Alarm Clock Logic**:
-  - **Set Alarm**: Hold Button + Dial 4 digits (e.g. 0730) to set daily alarm.
-  - **Snooze**: Lift handset (don't hang up) to snooze for 9 minutes.
-  - **Stop**: Lift and hang up to stop alarm.
-  - **Delete**: Hold Button + Lift Handset to delete alarm.
+- **Audio & Content**:
+    - **Persona Playlists**: Implemented "Style" dialing (1=Trump, 2=Badran, 3=Yoda, 4=Neutral).
+    - **Smart Shuffle**: Non-repeating playback logic for categories.
+    - **Local Priority**: System prefers offline MP3s over TTS to ensure responsiveness.
+    - **Tools**: Added `split_audio.py` for automated content preparation.
 
-## v1.3.0 (2026-01-15)
-- **Stability Fixes**:
-  - **Crash Fix**: Resolved critical conflict between Audio I2S driver and FastLED by migrating status LEDs to **Adafruit NeoPixel** library.
-  - **Partitioning**: Switched to `huge_app.csv` partition scheme to resolve linker overflow errors and support OTA updates for larger binaries.
-  - **Hardware Abstraction**: Added safety checks to prevent boot loops if peripherals (SD Card, Audio Codec) are disconnected.
-- **Web Interface Updates**:
-  - **LED Brightness Control**: Added sliders for Day and Night brightness (0-42 scale in UI, mapped to 0-255).
-  - **Night Mode Schedule**: Added configurable "Night Start" and "End" hours for automatic dimming.
-- **Hardware Config**:
-  - **Pin Mapping**: Corrected I2S DOUT pin to GPIO 27 (was 22) to resolve conflict with I2C SCL on Lolin D32 Pro.
-- **Project Structure**:
-  - Renamed project repository/folder to "Dial-A-Charmer".
-  - Updated Python utilities to use relative paths.
+- **User Interaction**:
+    - **Multi-Language**: Full DE/EN switching for prompts and TTS.
+    - **Alarm Clock**: Hold-Button + 4-digit input (0730) to set daily alarms.
+    - **Volume Control**: Independent sliders for Handset (Voice) and Ringer (Alarm) in WebUI.
+    - **Night Mode**: Schedule-based LED dimming.
 
-## v1.2.0 (2026-01-15)
-- **New Playlist System**: Compliments are now grouped by style/persona.
-  - **Trump Style**: Dial 1
-  - **Badran Style (Swiss Politics)**: Dial 2
-  - **Yoda Style**: Dial 3
-  - **Neutral/Nerdy**: Dial 4
-  - **Random Mix**: Dial 0 (or Pickup without dial)
-- **SD Card Structure Update**:
-  - Changed folder names to `mp3_group_01` ... `mp3_group_04` for easier expansion.
-- **Tools**:
-  - **`split_audio.py`**: Added tool to split long MP3 recordings into individual files based on silence detection. Removed dependencies on `pydub`.
-  - **Cleanup**: Removed experimental Trump TTS generation scripts.
-- **Smart Shuffle**: Tracks are played without repetition until all in a category are heard.
-- **Firmware Update**: Dynamic directory scanning (`/mp3_group_XX/`) on SD card.
+- **Web & Deployment**:
+    - **Web Installer**: Browser-based flashing (ESP Web Tools).
+    - **OTA**: Fully automated GitHub Actions workflow for builds.
 
-## v1.0.0 (Initial Release)
+## v1.8.0 (Initial Release)
 - **Core Functionality**:
   - Atomic Clock synchronization via GNSS (M10 module).
   - Rotary Dial input processing (Pulse counting with debounce).
