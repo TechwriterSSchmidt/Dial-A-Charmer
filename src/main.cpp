@@ -13,7 +13,7 @@
 #include "Settings.h"
 #include "WebManager.h"
 #include "RotaryDial.h"
-#include "LedStatus.h"
+#include "LedManager.h"
 #include "Es8311Driver.h" // New Audio Codec Driver
 #include "AiManager.h"    // New AI Manager
 
@@ -21,6 +21,7 @@
 TinyGPSPlus gps;
 Audio audio;
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN);
+LedManager ledManager(CONF_PIN_LED);
 
 // Global flag for hardware availability
 bool sdAvailable = false;
@@ -392,7 +393,7 @@ void speakCompliment(int number) {
     String key = settings.getGeminiKey();
     
     if (number != 0 && key.length() > 5) { // Assuming a valid key
-        statusLed.setWifiConnecting(); // Yellow = Thinking
+        // statusLed handled by loop/state
         Serial.println("AI Mode Active");
         
         // --- Retro Thinking Sound ---
@@ -687,12 +688,13 @@ void setup() {
     }
 
     settings.begin();
-    statusLed.begin();
+    ledManager.begin();
+    ledManager.setMode(LedManager::BREATHE_SLOW); // Start sequence
     
     // Init Audio Codec (ES8311)
     if (!audioCodec.begin()) {
         Serial.println("ES8311 Init Failed! (No I2C device?)");
-        statusLed.setWarning();
+        ledManager.setMode(LedManager::SOS);
         audioCodecAvailable = false;
     } else {
         Serial.println("ES8311 Initialized");
@@ -704,7 +706,7 @@ void setup() {
     // Init SD 
     if(!SD.begin(CONF_PIN_SD_CS)){
         Serial.println("SD Card Mount Failed (No Card?)");
-        statusLed.setWarning();
+        ledManager.setMode(LedManager::SOS);
         sdAvailable = false;
     } else {
         Serial.println("SD Card Mounted");
@@ -774,7 +776,26 @@ void loop() {
     }
     
     // Serial.println("L: LED");
-    statusLed.loop(h);
+    // statusLed.loop(h);
+    ledManager.update();
+    
+    // LED State Logic
+    if (isAlarmRinging) {
+        ledManager.setMode(LedManager::BREATHE_FAST);
+    } 
+    else if (snoozeActive) {
+        ledManager.setMode(LedManager::BREATHE_SLOW);
+    }
+    else if (!sdAvailable || !audioCodecAvailable) {
+         ledManager.setMode(LedManager::SOS);
+    }
+    else if (WiFi.status() == WL_CONNECTED) {
+        ledManager.setMode(LedManager::IDLE_GLOW);
+    }
+    else {
+         // Not Connected -> Search Mode
+         ledManager.setMode(LedManager::BREATHE_SLOW);
+    }
     
     if (isAlarmRinging) {
         handleAlarmLogic();
@@ -809,7 +830,8 @@ void loop() {
             esp_sleep_enable_ext0_wakeup((gpio_num_t)CONF_PIN_HOOK, !currentHookState);
             
             // 3. Status LED Off
-            statusLed.off(); // Ensure LED is dark
+            ledManager.setMode(LedManager::OFF);
+            ledManager.update(); // Flush change
             
             // 4. Goodnight
             esp_deep_sleep_start();
@@ -827,7 +849,7 @@ void audio_eof_mp3(const char *info){
         return; // Don't idle LED yet
     }
 
-    statusLed.setIdle();
+    // statusLed.setIdle();
     
     if (isAlarmRinging) {
          // Loop Alarm Sound
@@ -844,5 +866,5 @@ void audio_eof_mp3(const char *info){
 // Called when stream (TTS) finishes
 void audio_eof_stream(const char *info){
     Serial.print("EOF Stream: "); Serial.println(info);
-    statusLed.setIdle();
+    // statusLed.setIdle();
 }
