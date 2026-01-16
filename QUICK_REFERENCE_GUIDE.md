@@ -4,10 +4,10 @@
 1. **Hear a Compliment:**
    - Lift the receiver.
    - **Automatic:** The **Random Surprise Mix** starts immediately.
-   - **Dial 1:** Donald Trump Style (Interrupts mix).
-   - **Dial 2:** Jacqueline Badran Style (Swiss Politics).
-   - **Dial 3:** Yoda Style.
-   - **Dial 4:** Neutral / Classic Nerd Style.
+   - **Dial 1:** Persona 1 Style (Interrupts mix).
+   - **Dial 2:** Persona 2 Style.
+   - **Dial 3:** Persona 3 Style.
+   - **Dial 4:** Persona 4 Style.
    - **Dial 0:** Next Random Surprise Track.
 
 2. **Hear the Time:**
@@ -47,10 +47,10 @@ Ensure your SD card is formatted (FAT32) and structured as follows:
 ├── time_intro.mp3          (Preface for clock)
 ├── ringtones/              
 │   ├── 1.mp3 ... 5.mp3     (Ringtone options)
-├── mp3_group_01/           (Trump Compliments - Dial 1)
-├── mp3_group_02/           (Badran Compliments - Dial 2)
-├── mp3_group_03/           (Yoda Compliments - Dial 3)
-├── mp3_group_04/           (Neutral Compliments - Dial 4)
+├── mp3_group_01/           (Persona 1 - Dial 1)
+├── mp3_group_02/           (Persona 2 - Dial 2)
+├── mp3_group_03/           (Persona 3 - Dial 3)
+├── mp3_group_04/           (Persona 4 - Dial 4)
 ```
 
 ## 🛠️ Content Updates

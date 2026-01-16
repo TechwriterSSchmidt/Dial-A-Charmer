@@ -55,10 +55,10 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Trigger:** Lift the handset (Off-Hook).
 *   **Behavior:** The phone "wakes up" with a dial tone and plays a random compliment after 2s.
 *   **Action (Dialing):** Input numbers to request content:
-    *   **Dial `1`**: Trump Compliments (`mp3_group_01`)
-    *   **Dial `2`**: Badran Compliments (`mp3_group_02`)
-    *   **Dial `3`**: Yoda Compliments (`mp3_group_03`)
-    *   **Dial `4`**: Neutral Compliments (`mp3_group_04`)
+    *   **Dial `1`**: Play from `mp3_group_01` (Persona 1)
+    *   **Dial `2`**: Play from `mp3_group_02` (Persona 2)
+    *   **Dial `3`**: Play from `mp3_group_03` (Persona 3)
+    *   **Dial `4`**: Play from `mp3_group_04` (Persona 4)
     *   **Dial `0`**: Main Menu (Status, Language, etc.)
     *   **Dial `8`**: Speak System IP & Status
     *   **Dial `90`**: Toggle Alarms On/Off
@@ -123,10 +123,10 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 ```text
 /
 ├── startup.mp3                (Played on boot)
-├── mp3_group_01/              (Trump Compliments - Dial 1)
-├── mp3_group_02/              (Badran Compliments - Dial 2)
-├── mp3_group_03/              (Yoda Compliments - Dial 3)
-├── mp3_group_04/              (Neutral Compliments - Dial 4)
+├── mp3_group_01/              (Persona 1 Compliments - Dial 1)
+├── mp3_group_02/              (Persona 2 Compliments - Dial 2)
+├── mp3_group_03/              (Persona 3 Compliments - Dial 3)
+├── mp3_group_04/              (Persona 4 Compliments - Dial 4)
 ├── playlists/                 (System generated automatically)
 ├── ringtones/                 (Ringtones for Alarm/Ring)
 │   ├── 1.wav
@@ -148,17 +148,17 @@ This tool splits large, long audio files (e.g. combined recordings) into individ
 
 ## Status Indication
 
-Single WS2812B LED provides visual feedback.
+Single WS2812B LED provides visual feedback depending on the system state.
 
 | State | Color/Effect | Meaning |
 | :--- | :--- | :--- |
-| **Booting** | 🔵 Blue pulsing | System initializing |
-| **GPS Search** | 🟠 Orange pulsing | Waiting for Satellite Lock |
-| **Ready** | 🟢 Green continuously | Time synced, ready to use |
-| **Error** | 🔴 Red continuously | SD Card missing or Hardware fault |
-| **Battery< 15% ** | Red pulsing | Recharge battery|
-| **Ringing** | ⚪ Warm White Flashing | Alarm active |
-| **Ringing** | 🌸 Pink Flashing | Timer active |
+| **Booting** | 🔵 Blue/Gold Pulsing | System initializing or connecting to WiFi |
+| **Idle** | 🟠 Vintage Orange Glow | Ready, Filament-style flickering |
+| **Alarm Ringing** | ⚪ Warm White Pulsing | Alarm is active (Wake up!) |
+| **Timer Alert** | 🔴 Fast Red Pulsing | Timer finished (Panic Mode) |
+| **Snooze** | ⚪ Warm White Solid | Snooze active (9 min sleep) |
+| **Error / No SD** | 🔴 Red SOS Pattern | Hardware fault or Missing SD Card |
+| **Battery Low** | 🔴 Red Pulsing | Recharge Battery (< 15%) |
 
 ## Acoustic Signals
 
