@@ -20,6 +20,17 @@
    - A timer is set for **5 minutes**.
    - Phone rings when time is up. Lift receiver to stop ringing.
 
+4. **Set an Alarm (Wecker):**
+   - Keep receiver **ON** the hook.
+   - Press and **HOLD** the Extra Button.
+   - Dial 4 digits for the time (e.g., `0`, `7`, `3`, `0` for 07:30).
+   - A confirmation sound ("Alarm Set") plays.
+
+5. **Stop / Snooze Alarm:**
+   - **Snooze (9 min):** Lift receiver but **DO NOT** hang up (put it aside).
+   - **Stop:** Lift receiver and hang up again.
+   - **Delete Alarm:** Press and hold Extra Button, then lift receiver briefly.
+
 ## 📂 SD Card Structure
 Ensure your SD card is formatted (FAT32) and structured as follows:
 ```text

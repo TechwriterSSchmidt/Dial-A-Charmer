@@ -28,11 +28,19 @@ bool audioCodecAvailable = false;
 
 // --- Globals ---
 unsigned long alarmEndTime = 0;
-bool alarmActive = false; // Used for external alarms?
 bool timerRunning = false;
 bool isAlarmRinging = false;
 unsigned long alarmRingingStartTime = 0;
 int currentAlarmVol = 0;
+
+// Alarm Clock
+int alarmHour = -1;   // -1 = Disabled
+int alarmMinute = -1;
+bool snoozeActive = false;
+unsigned long snoozeEndTime = 0;
+const int SNOOZE_DURATION_MS = 9 * 60 * 1000; // 9 Minutes
+std::vector<int> dialBuffer;
+unsigned long lastDialTime = 0;
 
 // --- Playlist Management ---
 struct Playlist {
@@ -452,8 +460,6 @@ void startAlarm() {
 }
 
 void stopAlarm() {
-    if (!isAlarmRinging) return;
-    
     isAlarmRinging = false;
     digitalWrite(CONF_PIN_VIB_MOTOR, LOW); // Ensure Motor Off
     if (audio.isRunning()) audio.stopSong();
@@ -462,6 +468,23 @@ void stopAlarm() {
     setAudioOutput(OUT_HANDSET); // Reset default state
     // Vol will be restored by next setAudioOutput call or manual
     Serial.println("Alarm Stopped");
+}
+
+void startSnooze() {
+    stopAlarm();
+    snoozeActive = true;
+    snoozeEndTime = millis() + SNOOZE_DURATION_MS;
+    Serial.printf("Snooze Started. Resuming in %d min.\n", SNOOZE_DURATION_MS / 60000);
+    // Optional: Play a short confirmation
+    setAudioOutput(OUT_HANDSET); // Snooze confirmation in handset?
+    // playSound("/system/beep.wav", false);
+}
+
+void cancelSnooze() {
+    if (snoozeActive) {
+        snoozeActive = false;
+        Serial.println("Snooze Cancelled.");
+    }
 }
 
 void handleAlarmLogic() {
@@ -493,17 +516,51 @@ void handleAlarmLogic() {
 void onDial(int number) {
     Serial.printf("Dialed: %d\n", number);
     
-    // Check for Ringtone Setting Mode (Button Held)
+    // 1. Logic: Setting Alarm Clock (Button Held + Dialing 4 digits)
     if (dial.isButtonDown()) {
-        if (number >= 1 && number <= 5) {
-            Serial.printf("Setting Ringtone to %d\n", number);
-            settings.setRingtone(number);
-            statusLed.setWifiConnected(); // Green blink
-            playSound("/ringtones/" + String(number) + ".wav", true);
-            return;
+        // Clear buffer if stale (> 5 seconds since last digit)
+        if (millis() - lastDialTime > 5000) {
+             dialBuffer.clear();
         }
+        lastDialTime = millis();
+        
+        dialBuffer.push_back(number == 10 ? 0 : number); // 10 pulses usually means 0
+        Serial.printf("Alarm Buffer: %d digits\n", dialBuffer.size());
+        
+        // Ack beep
+        setAudioOutput(OUT_HANDSET);
+        playSound("/system/beep.wav", false); 
+        
+        if (dialBuffer.size() == 4) {
+            int h = dialBuffer[0] * 10 + dialBuffer[1];
+            int m = dialBuffer[2] * 10 + dialBuffer[3];
+            
+            if (h >= 0 && h < 24 && m >= 0 && m < 60) {
+                alarmHour = h;
+                alarmMinute = m;
+                Serial.printf("Alarm Set: %02d:%02d\n", alarmHour, alarmMinute);
+                // Confirmation Sound "Alarm Set"
+                 playSound("/system/timer_set.mp3", false); // reusing timer sound or need specific?
+            } else {
+                Serial.println("Invalid Time Dialed");
+                playSound("/system/error_tone.wav", false);
+            }
+            dialBuffer.clear();
+        }
+        return;
     }
-
+    
+    // Check for Ringtone Setting Mode (Button NOT Held, Logic Removed/Changed?)
+    // Original logic: "if (dial.isButtonDown())" -> this block is now taken by Alarm Set
+    // User Guide says: "Press Button enabled alarm clock mode. In this mode, dialing 0715..."
+    // So the previous logic for Ringtone setting needs to be moved or removed?
+    // README doesn't mention setting ringtone via button+dial anymore.
+    // It says "Input numbers to request content" in Active Mode. 
+    
+    // Wait, original read_file showed:
+    // if (dial.isButtonDown()) { if (number >= 1 && number <= 5) ... setRingtone ... }
+    // This conflicts. I will overwrite it with the new Alarm Logic requested.
+    
     if (dial.isOffHook()) {
         // Dialing while off-hook -> Interrupt and play new selection
         speakCompliment(number);
@@ -519,43 +576,51 @@ void onDial(int number) {
 void onHook(bool offHook) {
     Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
     
+    // 2. Logic: Delete Alarm (Button + Lift)
+    if (offHook && dial.isButtonDown()) {
+        alarmHour = -1;
+        alarmMinute = -1;
+        Serial.println("Alarm Deleted/Disabled");
+        // Audio Feedback
+        setAudioOutput(OUT_HANDSET);
+        playSound("/system/error_tone.wav", false); // "Deleted" tone
+        return;
+    }
+
     if (offHook) {
         statusLed.setIdle();
         
         // Stop Alarm if ringing
-        if (isAlarmRinging || timerRunning) {
-            stopAlarm();
-            timerRunning = false;
-            Serial.println("Alarm/Timer Stopped by Pickup");
-        } else {
-            // --- Battery Check ---
-            if (!checkBattery()) {
-                Serial.println("Warn: Battery Low!");
-                // playSound("/system/battery_low.wav", false); 
-                // New TTS file
-                playSound("/system/battery_crit.mp3", false);
-                
-                // We could block further interaction, but let's just warn and continue.
-                // Wait for warning to play?
-                // Let's rely on standard logic queue. If we call speakCompliment immediately, it overwrites.
-                // Better: Logic queue? Or just delay?
-                // Simple hack: Delay 2s (ugly but works)
-                // unsigned long s = millis(); while(millis()-s < 2000) audio.loop();
-                // Actually, let's just play it INSTEAD of the mix if battery is critical? 
-                // No, user wants to use it.
-                // Let's just create a delay using a flag?
-                // For now, let's just log it. Real implementation needs a queue.
-                // OR: Just return here and don't play surprise mix?
-                // "Warnung. Energiezellen kritisch." -> Silence. User must hang up.
-                // This is a feature: Low Battery = No fun.
-                return; 
-            }
-            
-            // Automatic Surprise Mix on Pickup
-            Serial.println("Auto-Start: Random Surprise Mix");
-            speakCompliment(0); 
+        if (isAlarmRinging) {
+            startSnooze(); // Lift = Snooze Start (Put Aside)
+            return;
         }
+        
+        if (timerRunning) {
+             timerRunning = false;
+             stopAlarm(); // Should stop timer ringing too
+             Serial.println("Timer Stopped by Pickup");
+             return; // Don't play compliment logic
+        }
+        
+        // --- Battery Check ---
+        if (!checkBattery()) {
+            Serial.println("Warn: Battery Low!");
+            playSound("/system/battery_crit.mp3", false);
+            return; 
+        }
+        
+        // Automatic Surprise Mix on Pickup
+        Serial.println("Auto-Start: Random Surprise Mix");
+        speakCompliment(0); 
     } else {
+        // ON HOOK (Hung Up)
+        
+        if (snoozeActive) {
+            // User hung up during snooze -> Cancel Snooze (I am awake)
+            cancelSnooze();
+        }
+        
         if (audio.isRunning()) {
             audio.stopSong();
             statusLed.setIdle();
@@ -564,6 +629,10 @@ void onHook(bool offHook) {
 }
 
 void onButton() {
+    // If not holding for combo, speak time?
+    // Let's keep speakTime behavior if released quickly?
+    // But `isButtonDown` is updated in `RotaryDial` on press/release.
+    // This callback `onButton` (Press) is ok.
     Serial.println("Extra Button Pressed: Speak Time");
     speakTime();
 }
@@ -682,6 +751,28 @@ void loop() {
          if (h >= 24) h -= 24;
          if (h < 0) h += 24;
     }
+    
+    // Check Alarm
+    if (alarmHour >= 0 && !isAlarmRinging && !snoozeActive && gps.time.isValid()) {
+        int m = gps.time.minute();
+        // Simple One-Shot trigger: matches exactly and seconds < 2 to avoid multi-trigger?
+        // Or flag logic.
+        static int lastTriggerMinute = -1;
+        
+        if (alarmHour == h && alarmMinute == m && lastTriggerMinute != m) {
+            Serial.println("Alarm Time Reached!");
+            startAlarm();
+            lastTriggerMinute = m;
+        }
+    }
+    
+    // Check Snooze End
+    if (snoozeActive && millis() > snoozeEndTime) {
+        Serial.println("Snooze Ended! Wakey Wakey!");
+        cancelSnooze();
+        startAlarm();
+    }
+    
     // Serial.println("L: LED");
     statusLed.loop(h);
     

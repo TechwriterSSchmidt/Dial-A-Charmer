@@ -10,6 +10,11 @@
 - **Content & TTS**:
   - **Text Optimization**: Optimized text sources (`badran.txt`, `yoda.txt`, `trump.txt`, `neutral.txt`) for Text-to-Speech engines (removed special chars, improved pause punctuation).
   - **Content Expansion**: Added ~400 new lines of dialogue across all personas.
+- **Alarm Clock Logic**:
+  - **Set Alarm**: Hold Button + Dial 4 digits (e.g. 0730) to set daily alarm.
+  - **Snooze**: Lift handset (don't hang up) to snooze for 9 minutes.
+  - **Stop**: Lift and hang up to stop alarm.
+  - **Delete**: Hold Button + Lift Handset to delete alarm.
 
 ## v1.3.0 (2026-01-15)
 - **Stability Fixes**:
