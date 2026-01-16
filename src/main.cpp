@@ -851,6 +851,13 @@ void onHook(bool offHook) {
 }
 
 void onButton() {
+    // Interruption Logic: Stop Speaking if Button Pressed
+    if (audio.isRunning()) {
+        Serial.println("Interruption: Button Pressed -> Stopping Audio");
+        audio.stopSong();
+        return; 
+    }
+
     // If not holding for combo, speak time?
     // Let's keep speakTime behavior if released quickly?
     // But `isButtonDown` is updated in `RotaryDial` on press/release.
@@ -1055,6 +1062,26 @@ void loop() {
         timerRunning = false;
         startAlarm(true); // True = Timer
     }
+    
+    // --- HALF-DUPLEX AEC & AGC ---
+    // If Audio is outputting (AI speaking), Mute Mic to prevent Echo.
+    static bool wasAudioRunning = false;
+    bool isAudioRunning = audio.isRunning();
+    
+    if (isAudioRunning && !wasAudioRunning) {
+        // Playback started -> Mute Mic
+        Serial.println("AEC: Audio Start -> Muting Mic");
+        audioCodec.muteMic(true);
+    } 
+    else if (!isAudioRunning && wasAudioRunning) {
+        // Playback finished -> Unmute Mic (Listen)
+        Serial.println("AEC: Audio Stop -> Unmuting Mic");
+        audioCodec.muteMic(false);
+        
+        // Simple AGC Reset (Restore Gain)
+        // audioCodec.setMicGain(200); 
+    }
+    wasAudioRunning = isAudioRunning;
     
     // --- SMART DEEP SLEEP LOGIC ---
     // Prevent sleep if: Off Hook (Active), Audio Playing, Timer Running, or USB Power Detected

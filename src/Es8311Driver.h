@@ -39,17 +39,37 @@ public:
     void setVolume(uint8_t vol) {
         // Map 0-100 to 0-255
         if (!_initialized) return;
-        uint8_t regVol = ::map(vol, 0, 100, 0, 255);
-        writeReg(0x32, regVol);
+        long regVol = ::map((long)vol, 0, 100, 0, 255);
+        writeReg(0x32, (uint8_t)regVol);
     }
     
+    // Output Mute (Speaker)
     void mute(bool m) {
         if (!_initialized) return;
         if (m) {
             writeReg(0x32, 0); 
         } else {
-            writeReg(0x32, 200); // Restore
+            // Restore default or stored volume? 
+            // For now reset to "loud" default, ideally should track current volume.
+            writeReg(0x32, 200); 
         }
+    }
+
+    // Input Mute (Microphone) - For Half-Duplex AEC
+    void muteMic(bool m) {
+        if (!_initialized) return;
+        if (m) {
+            writeReg(0x14, 0); // ADC Volume 0 (Mute)
+        } else {
+            writeReg(0x14, 200); // Restore Gain
+        }
+    }
+
+    // Hardware AGC (Auto Level Control) Simulation setup
+    // Note: ES8311 has ALC registers at 0x16-0x18 usually, but we keep it simple with digital gain for now.
+    void setMicGain(uint8_t gain) {
+         if (!_initialized) return;
+         writeReg(0x14, gain);
     }
 
 private:
