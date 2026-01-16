@@ -276,12 +276,12 @@ void playSound(String filename, bool useSpeaker = false) {
     setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
 
     if (SD.exists(filename)) {
-        statusLed.setTalking();
+        // statusLed handled by loop/state
         audio.connecttoFS(SD, filename.c_str());
     } else {
         Serial.print("File missing: ");
         Serial.println(filename);
-        statusLed.setWarning();
+        // statusLed handled by loop/state
     }
 }
 
@@ -420,12 +420,12 @@ void speakCompliment(int number) {
             // 3. Play
             Serial.println("Streaming TTS...");
             setAudioOutput(OUT_HANDSET);
-            statusLed.setTalking();
+            // statusLed handled by loop/state
             audio.connecttohost(ttsUrl.c_str());
             return;
         } else {
             Serial.println("AI Failed, falling back to SD");
-            statusLed.setWarning();
+            // statusLed handled by loop/state
         }
     }
     
@@ -569,7 +569,7 @@ void onDial(int number) {
         Serial.printf("Setting Timer for %d minutes\n", number);
         alarmEndTime = millis() + (number * 60000);
         timerRunning = true;
-        statusLed.setWifiConnecting(); 
+        // statusLed.setWifiConnecting(); 
         playSound("/system/beep.wav", true); // Confirmation
     }
 }
@@ -589,7 +589,7 @@ void onHook(bool offHook) {
     }
 
     if (offHook) {
-        statusLed.setIdle();
+        // statusLed.setIdle();
         
         // Stop Alarm if ringing
         if (isAlarmRinging) {
