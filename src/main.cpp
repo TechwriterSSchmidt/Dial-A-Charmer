@@ -21,7 +21,7 @@
 
 // --- Objects ---
 // TinyGPSPlus gps; // Removed
-Audio audio;
+Audio *audio = nullptr;
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN, CONF_PIN_DIAL_MODE);
 LedManager ledManager(CONF_PIN_LED);
 
@@ -276,51 +276,36 @@ enum AudioOutput { OUT_NONE, OUT_HANDSET, OUT_SPEAKER };
 AudioOutput currentOutput = OUT_NONE; 
 
 void setAudioOutput(AudioOutput target) {
-    if (currentOutput == target) return; 
-    
-    // Instead of switching pins on the fly (which crashes), 
-    // we just change volume. Pin switching is the killer here if done improperly.
-    // BUT we need different pins for speaker vs handset.
-    
-    // If running, stop and delete audio object logic? 
-    // The library doesn't support easy dynamic pin switching without issues often.
-    // Let's try aggressive stop.
-    
-    if(audio.isRunning()) {
-        audio.stopSong(); 
-        // Allow I2S driver to finish current transaction and idle
-        // Increase delay to ensure full quiescence
-        delay(250); 
+    if (currentOutput == target && audio != nullptr) return; 
+
+    // Destruct existing audio object to thoroughly reset I2S driver state
+    if (audio != nullptr) {
+        delete audio;
+        audio = nullptr;
+        // Small delay to allow ESP-IDF driver to cleanup
+        delay(50);
     }
     
-    // Safety: Clear DMA buffer to prevent playing garbage or accessing freed memory
-    // i2s_zero_dma_buffer(I2S_NUM_0); // Requires driver to be installed. It might fail if not.
-    // Instead, we rely on setPinout to handle it, but we keep MCLK active to avoid extensive driver reconfiguration.
-    
+    // Recreate Audio Object (Installs I2S Driver fresh)
+    // Audio(internalDAC, channelEnabled, i2sPort)
+    audio = new Audio(false, 3, 0);
+
     if (target == OUT_HANDSET) {
         // Handset: Includes Mic (DIN) and MCLK
-        audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT, CONF_I2S_DIN, CONF_I2S_MCLK);
-        
-        // Wait for Pin Re-Muxing
-        delay(50); 
-        
+        audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT, CONF_I2S_DIN, CONF_I2S_MCLK);
         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
-        audio.setVolume(vol);
+        audio->setVolume(vol);
         Serial.printf("Output Switched: HANDSET (Vol: %d)\n", vol);
     } else {
         // Speaker: Output only
-        // TRICK: Keep MCLK enabled (on GPIO 0) even for Speaker to prevent driver "MCLK Toggle" crashes.
-        // The Speaker (MAX98357) ignores MCLK, causing no harm.
-        // We set DIN to -1 (No Mic).
-        audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, CONF_I2S_MCLK);
-        
-        delay(50);
+        // Resetting to strict Speaker config
+        audio->setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, -1);
         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
-        audio.setVolume(vol);
+        audio->setVolume(vol);
         Serial.printf("Output Switched: SPEAKER (Vol: %d)\n", vol);
     }
     currentOutput = target;
-    delay(50); // Final check
+    delay(50); // Settlement
 }
 
 void playSound(String filename, bool useSpeaker = false) {
@@ -332,7 +317,7 @@ void playSound(String filename, bool useSpeaker = false) {
 
     if (SD.exists(filename)) {
         // statusLed handled by loop/state
-        audio.connecttoFS(SD, filename.c_str());
+        audio->connecttoFS(SD, filename.c_str());
     } else {
         Serial.print("File missing: ");
         Serial.println(filename);
@@ -458,11 +443,11 @@ void speakCompliment(int number) {
         playSound("/system/computing.wav", false); // Assuming file exists
         unsigned long startThink = millis();
         // Play for max 3 seconds or until file ends
-        while (audio.isRunning() && (millis() - startThink < 3000)) {
-            audio.loop(); 
+        while (audio->isRunning() && (millis() - startThink < 3000)) {
+            audio->loop(); 
             delay(1);
         }
-        audio.stopSong(); // Clean break
+        audio->stopSong(); // Clean break
         // ----------------------------
         
         // 1. Get Text from Gemini
@@ -476,7 +461,7 @@ void speakCompliment(int number) {
             Serial.println("Streaming TTS...");
             setAudioOutput(OUT_HANDSET);
             // statusLed handled by loop/state
-            audio.connecttohost(ttsUrl.c_str());
+            audio->connecttohost(ttsUrl.c_str());
             return;
         } else {
             Serial.println("AI Failed, falling back to SD");
@@ -502,7 +487,7 @@ void speakCompliment(int number) {
 }
 
 void playPreviewSound(String type, int index) {
-    if (audio.isRunning()) audio.stopSong();
+    if (audio->isRunning()) audio->stopSong();
     
     // Play on Speaker if On-Hook, Handset if Off-Hook
     bool offHook = dial.isOffHook();
@@ -529,7 +514,7 @@ void startAlarm(bool isTimer) {
     Serial.println(isTimer ? "TIMER ALERT STARTED" : "ALARM CLOCK RINGING");
     
     setAudioOutput(OUT_SPEAKER);
-    audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21)); 
+    audio->setVolume(::map(currentAlarmVol, 0, 42, 0, 21)); 
     
     playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
 }
@@ -538,7 +523,7 @@ void stopAlarm() {
     isAlarmRinging = false;
     isTimerRinging = false;
     digitalWrite(CONF_PIN_VIB_MOTOR, LOW); 
-    if (audio.isRunning()) audio.stopSong();
+    if (audio->isRunning()) audio->stopSong();
     
     timeManager.cancelTimer(); 
     
@@ -574,7 +559,7 @@ void handleAlarmLogic() {
     
     if (newVol != currentAlarmVol) {
         currentAlarmVol = newVol;
-        audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
+        audio->setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
     }
 }
 
@@ -613,7 +598,7 @@ void executePhonebookFunction(String func, String param) {
                 "System Menü. Wähle 9 0 um alle Alarme ein- oder auszuschalten. 9 1 um den nächsten Routine-Wecker zu überspringen. 8 für Status." :
                 "System Menu. Dial 9 0 to toggle all alarms. 9 1 to skip the next routine alarm. 8 for status.";
             if (ai.hasApiKey()) {
-                audio.connecttohost(ai.getTTSUrl(text).c_str());
+                audio->connecttohost(ai.getTTSUrl(text).c_str());
             }
         }
     }
@@ -631,7 +616,7 @@ void executePhonebookFunction(String func, String param) {
         
         if (ai.hasApiKey()) {
              setAudioOutput(OUT_HANDSET);
-             audio.connecttohost(ai.getTTSUrl(statusText).c_str());
+             audio->connecttohost(ai.getTTSUrl(statusText).c_str());
         } else {
              Serial.println(statusText);
              playSound("/system/beep.wav", false);
@@ -655,7 +640,7 @@ void executePhonebookFunction(String func, String param) {
                 msg = alarmsEnabled ? "Alarms enabled." : "Alarms disabled.";
             }
             if (ai.hasApiKey()) {
-                audio.connecttohost(ai.getTTSUrl(msg).c_str());
+                audio->connecttohost(ai.getTTSUrl(msg).c_str());
             }
         }
     }
@@ -677,7 +662,7 @@ void executePhonebookFunction(String func, String param) {
                 msg = newState ? "Next recurring alarm skipped." : "Recurring alarm reactivated.";
             }
             if (ai.hasApiKey()) {
-                audio.connecttohost(ai.getTTSUrl(msg).c_str());
+                audio->connecttohost(ai.getTTSUrl(msg).c_str());
             }
         }
     }
@@ -735,11 +720,11 @@ void handleDialedNumber(String numberStr) {
                      // Generate
                       String generated = ai.callGemini(v); // We need to expose callGemini publicly or add method
                       if(generated.length() > 0) {
-                          audio.connecttohost(ai.getTTSUrl(generated).c_str());
+                          audio->connecttohost(ai.getTTSUrl(generated).c_str());
                       }
                  } else {
                      // Read directly
-                     audio.connecttohost(ai.getTTSUrl(v).c_str());
+                     audio->connecttohost(ai.getTTSUrl(v).c_str());
                  }
              }
         }
@@ -825,7 +810,7 @@ void onDial(int number) {
     // Only beep if silence?
     // Ideally: Short mechanical click simulation or just silence (rotary is physical).
     // Let's play a very short beep if nothing is playing?
-    // if (!audio.isRunning()) playSound("/system/click.wav", false);
+    // if (!audio->isRunning()) playSound("/system/click.wav", false);
     
     // Special Case: ALARM SETTING (Button Held)
     // If we have 4 digits, we can execute immediately without waiting for timeout
@@ -883,8 +868,8 @@ void onHook(bool offHook) {
             cancelSnooze();
         }
         
-        if (audio.isRunning()) {
-            audio.stopSong();
+        if (audio->isRunning()) {
+            audio->stopSong();
             // statusLed.setIdle();
         }
     }
@@ -892,9 +877,9 @@ void onHook(bool offHook) {
 
 void onButton() {
     // Interruption Logic: Stop Speaking if Button Pressed
-    if (audio.isRunning()) {
+    if (audio->isRunning()) {
         Serial.println("Interruption: Button Pressed -> Stopping Audio");
-        audio.stopSong();
+        audio->stopSong();
         return; 
     }
 
@@ -1014,7 +999,7 @@ void setup() {
 }
 
 void loop() {
-    audio.loop();
+    if(audio) audio->loop();
     webManager.loop();
     dial.loop();
     timeManager.loop();
@@ -1048,7 +1033,7 @@ void loop() {
     
     // STRICT MODE: DISABLE LEDS WHEN AUDIO IS RUNNING
     // This prevents RMT interrupts from crashing I2S
-    bool isAudioRunning = audio.isRunning();
+    bool isAudioRunning = audio->isRunning();
     unsigned long ledInterval = (isAudioRunning) ? 999999 : 50; 
 
     if (millis() - lastLedUpdate > ledInterval && !isAudioRunning) {
@@ -1088,7 +1073,7 @@ void loop() {
     // DISABLED TEMPORARILY due to I2C Errors causing potential instability
     /*
     static bool wasAudioRunning = false;
-    bool isAudioRunning = audio.isRunning();
+    bool isAudioRunning = audio->isRunning();
     
     if (settings.getHalfDuplex()) {
         if (isAudioRunning && !wasAudioRunning) {
@@ -1124,7 +1109,7 @@ void loop() {
     
     // --- SMART DEEP SLEEP LOGIC ---
     // Prevent sleep if: Off Hook (Active), Audio Playing, Timer Running, or USB Power Detected
-    bool systemBusy = dial.isOffHook() || audio.isRunning() || timeManager.isTimerRunning() || isAlarmRinging || timeManager.isSnoozeActive() || isUsbPowerConnected();
+    bool systemBusy = dial.isOffHook() || audio->isRunning() || timeManager.isTimerRunning() || isAlarmRinging || timeManager.isSnoozeActive() || isUsbPowerConnected();
     
     if (systemBusy) {
         lastActivityTime = millis();
@@ -1171,7 +1156,7 @@ void audio_eof_mp3(const char *info){
          // Our modified playSound calls setAudioOutput. 
          // setAudioOutput resets volume to settings.getBaseVolume().
          // FIXME: We need to force current ramp volume back.
-         audio.setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
+         audio->setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
     }
 }
 
