@@ -273,34 +273,54 @@ String getNextTrack(int category) {
 
 // --- Helper Functions ---
 enum AudioOutput { OUT_NONE, OUT_HANDSET, OUT_SPEAKER };
-AudioOutput currentOutput = OUT_NONE;
+AudioOutput currentOutput = OUT_NONE; 
 
 void setAudioOutput(AudioOutput target) {
-    // Check if we need to switch
     if (currentOutput == target) return; 
     
-    // Force Stop to prevent I2S DMA crash during reconfig
-    if(audio.isRunning()) audio.stopSong();
+    // Instead of switching pins on the fly (which crashes), 
+    // we just change volume. Pin switching is the killer here if done improperly.
+    // BUT we need different pins for speaker vs handset.
     
-    // IMPORTANT: Wait for I2S peripheral to fully idle
-    delay(100); 
-
+    // If running, stop and delete audio object logic? 
+    // The library doesn't support easy dynamic pin switching without issues often.
+    // Let's try aggressive stop.
+    
+    if(audio.isRunning()) {
+        audio.stopSong(); 
+        // Allow I2S driver to finish current transaction and idle
+        // Increase delay to ensure full quiescence
+        delay(250); 
+    }
+    
+    // Safety: Clear DMA buffer to prevent playing garbage or accessing freed memory
+    // i2s_zero_dma_buffer(I2S_NUM_0); // Requires driver to be installed. It might fail if not.
+    // Instead, we rely on setPinout to handle it, but we keep MCLK active to avoid extensive driver reconfiguration.
+    
     if (target == OUT_HANDSET) {
         // Handset: Includes Mic (DIN) and MCLK
         audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT, CONF_I2S_DIN, CONF_I2S_MCLK);
+        
+        // Wait for Pin Re-Muxing
         delay(50); 
+        
         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.printf("Output Switched: HANDSET (Vol: %d)\n", vol);
     } else {
-        // Speaker: Output only (DIN=-1, MCLK=-1)
-        audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, -1);
+        // Speaker: Output only
+        // TRICK: Keep MCLK enabled (on GPIO 0) even for Speaker to prevent driver "MCLK Toggle" crashes.
+        // The Speaker (MAX98357) ignores MCLK, causing no harm.
+        // We set DIN to -1 (No Mic).
+        audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, CONF_I2S_MCLK);
+        
         delay(50);
         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.printf("Output Switched: SPEAKER (Vol: %d)\n", vol);
     }
     currentOutput = target;
+    delay(50); // Final check
 }
 
 void playSound(String filename, bool useSpeaker = false) {
