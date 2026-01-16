@@ -117,6 +117,11 @@ String TimeManager::getAlarmString() {
 }
 
 bool TimeManager::checkAlarmTrigger() {
+    // Limit checks to once per second to prevent NVS saturation/crashes
+    static unsigned long lastCheck = 0;
+    if (millis() - lastCheck < 1000) return false;
+    lastCheck = millis();
+
     DateTime now = getLocalTime();
     if (!now.valid) return false;
 
