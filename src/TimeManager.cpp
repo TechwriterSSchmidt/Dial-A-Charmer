@@ -29,7 +29,7 @@ void TimeManager::loop() {
     if (WiFi.status() == WL_CONNECTED) {
         // configTime keeps syncing in background, we just check if we have time
         struct tm timeinfo;
-        if (getLocalTime(&timeinfo)) {
+        if (::getLocalTime(&timeinfo)) {
             _currentSource = NTP;
         }
     } else {
@@ -49,7 +49,7 @@ void TimeManager::loop() {
 }
 
 TimeManager::DateTime TimeManager::getLocalTime() {
-    DateTime dt = {0,0,0,0,0, 0, false};
+    DateTime dt = {0,0,0,0,0, 0, 0, false};
     
     // Strategy: Prefer System Time (NTP/RTC) if set, else GPS
     struct tm timeinfo;
@@ -61,6 +61,7 @@ TimeManager::DateTime TimeManager::getLocalTime() {
         dt.hour = timeinfo.tm_hour;
         dt.minute = timeinfo.tm_min;
         dt.second = timeinfo.tm_sec;
+        dt.rawTime = mktime(&timeinfo);
         dt.valid = true;
         return dt;
     }
@@ -116,22 +117,76 @@ String TimeManager::getAlarmString() {
 }
 
 bool TimeManager::checkAlarmTrigger() {
-    if (!isAlarmSet()) return false;
-    
     DateTime now = getLocalTime();
     if (!now.valid) return false;
 
-    // Reset trigger if minute changed (simple edge detection)
+    // Reset trigger if minute changed
     if (now.minute != _lastCheckedMinute) {
         _alarmTriggeredToday = false; 
         _lastCheckedMinute = now.minute;
     }
 
-    if (!_alarmTriggeredToday && now.hour == _alarmHour && now.minute == _alarmMinute) {
-        _alarmTriggeredToday = true;
-        return true;
+    if (_alarmTriggeredToday) return false; // Already handled this minute
+
+    if (!_alarmsEnabled) return false;
+
+    // 1. Check Single/Manual Alarm (High Priority, never skipped by "Skip Next")
+    if (isAlarmSet()) {
+        if (now.hour == _alarmHour && now.minute == _alarmMinute) {
+            _alarmTriggeredToday = true;
+            deleteAlarm(); // Single alarm is one-shot
+            return true;
+        }
     }
+
+    // 2. Check Periodic Alarm (From Settings)
+    int pDays = settings.getAlarmDays();
+    if (pDays != 0) {
+        // Current Day: tm_wday 0=Sun, 1=Mon...
+        // Map to our bitmask (Mon=1 aka Bit0 ... Sun=64 aka Bit6)
+        struct tm* raw = localtime(&now.rawTime); // We need wday from tm
+        // Actually getLocalTime gave us DateTime struct which doesn't have wday. 
+        // We need standard struct tm.
+        struct tm tinfo;
+        if (::getLocalTime(&tinfo)) {
+             int dayBit = (tinfo.tm_wday == 0) ? 6 : (tinfo.tm_wday - 1);
+             bool dayActive = (pDays & (1 << dayBit));
+             
+             if (dayActive) {
+                 int pHour = settings.getAlarmHour();
+                 int pMin = settings.getAlarmMinute();
+                 
+                 if (now.hour == pHour && now.minute == pMin) {
+                     _alarmTriggeredToday = true;
+                     
+                     // Check Skip Logic
+                     if (_skipNextAlarm) {
+                         _skipNextAlarm = false; // Consumed
+                         return false; 
+                     }
+                     return true;
+                 }
+             }
+        }
+    }
+    
     return false;
+}
+
+void TimeManager::setAlarmsEnabled(bool enabled) {
+    _alarmsEnabled = enabled;
+}
+
+bool TimeManager::areAlarmsEnabled() {
+    return _alarmsEnabled;
+}
+
+void TimeManager::setSkipNextAlarm(bool skip) {
+    _skipNextAlarm = skip;
+}
+
+bool TimeManager::isSkipNextAlarmSet() {
+    return _skipNextAlarm;
 }
 
 // --- Timer ---
@@ -166,7 +221,8 @@ bool TimeManager::checkTimerTrigger() {
 // --- Snooze ---
 
 void TimeManager::startSnooze() {
-    _snoozeEndTime = millis() + (9 * 60000UL); // 9 Mins standard
+    int mins = settings.getSnoozeMinutes();
+    _snoozeEndTime = millis() + (mins * 60000UL); 
     _snoozeActive = true;
 }
 

@@ -1,6 +1,20 @@
 # Release Notes - Dial-A-Charmer
 
-## v2.0.0 (2026-01-16) - "The Conversationalist"
+## v0.5.0-beta (2026-01-16) - "The Intelligent Timekeeper"
+- **Dual Alarm System**: 
+    - **Single Alarm**: Priority alarm set via Rotary Dial (one-time use).
+    - **Repeating Alarm**: Weekday-aware alarm schedule set via Web Interface.
+    - **Skip Next Logic**: Dial `9 1` to skip the next scheduled recurring alarm without disabling the schedule entirely.
+- **Enhanced Web Interface**:
+    - **Split Design**: Separated into "Basic" (Home) and "Advanced" views to declutter usage.
+    - **Previews**: Added ability to listen to Ringtones and Dial Tones directly in the browser.
+    - **OTA Update**: Firmware can now be updated directly via the Advanced Settings page.
+    - **Snooze Config**: Snooze duration is now user-configurable (0-20 mins).
+- **AI & Directory**:
+    - **Gemini AI Integration**: Phonebook entries can now trigger dynamic AI responses (e.g. "Tell me a joke").
+    - **Phonebook API**: Full management of contacts/functions via JSON API.
+
+## v0.4.0-beta (2026-01-16) - "The Conversationalist"
 - **Audio Intelligence**:
     - **Half-Duplex AEC**: Implemented automatic microphone muting during audio playback to prevent echo and self-triggering when using Gemini AI.
     - **Interruption Logic**: Users can now stop playback/TTS instantly by pressing the Extra Button or placing the receiver on the hook.
@@ -8,7 +22,7 @@
     - Added driver support for ES8311 ADC Volume/Mute control.
     - Automatic mute/unmute management in main loop.
 
-## v1.9.0 (2026-01-16)
+## v0.3.0-alpha (2026-01-16)
 - **Core System Architecture**:
     - **Hardware Conflict Resolution**: Migrated to `Adafruit_NeoPixel` to resolve FastLED/I2S timing conflicts. 
     - **Partitioning**: Upgraded to `huge_app.csv` to support larger OTA binaries.
@@ -31,7 +45,7 @@
     - **Web Installer**: Browser-based flashing (ESP Web Tools).
     - **OTA**: Fully automated GitHub Actions workflow for builds.
 
-## v1.8.0 (Initial Release)
+## v0.1.0-alpha (Initial Release)
 - **Core Functionality**:
   - Atomic Clock synchronization via GNSS (M10 module).
   - Rotary Dial input processing (Pulse counting with debounce).

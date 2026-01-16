@@ -29,14 +29,17 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 
 | Category | Feature | Description |
 | :--- | :--- | :--- |
-| **Timekeeping** | **Atomic Clock** | Syncs time via GNSS (M10 Module) for precision. |
-| | **Alarm Clock** | Wake up to custom sounds or compliments. |
+| **Timekeeping** | **Atomic Clock** | Syncs time via GNSS (M10 Module) for precision + NTP fallback. |
+| | **Dual Alarm System** | **Single Alarm** (via Rotary Dial) for one-off use + **Repeating Alarm** (via Web) for schedules. |
+| | **Smart Skip** | Dial `91` to skip just the *next* recurring alarm (sleep in!) without canceling the schedule. |
 | | **Kitchen Timer** | Set a countdown using the rotary dial (e.g., dial '12' for a perfect 12 minutes Pizza timer). |
 | **Interaction** | **Compliment Dispenser** | Dial specific numbers to hear compliments from different "personas". |
-| | **Multi-Language** | Supports **German** and **English** for both Voice and System prompts. |
-| | **Vintage Feel** | Uses original rotary dial and hook switch mechanics. |
-| **System** | **Standalone** | Operates completely independently without Home Assistant or external servers. |
-| | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple timezone/settings configuration. |
+| | **AI Assistant** | Integrated **Gemini AI** allows the phone to tell jokes or answer prompts via the Phonebook. |
+| | **Multi-Language** | Supports **German** and **English** for Voice, System prompts, and Web Interface. |
+| | **Half-Duplex Audio** | Intelligent echo-cancellation ensures AI prompts aren't interrupted by their own output. |
+| **System** | **Advanced Web UI** | Configure everything from Ringtones to OTA Updates via a responsive split-view interface. |
+| | **OTA Updates** | Update firmware wirelessly via the Web Interface. |
+| | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple initial setup. |
 
 ## Operational Logic
 
@@ -44,29 +47,29 @@ The device differentiates between two main usage modes based on the handset stat
 
 ### 1. Idle Mode (Handset On-Hook)
 *   **State:** The phone is waiting on the cradle.
-*   **Action (Dialing):** Rotating the dial sets the **Timer**.
+*   **Action (Dialing):** Rotating the dial sets the **Kitchen Timer**.
     *   Dial `5` -> Sets 5 minute timer.
-    *   Lift the handset shortly off the cradle -> Resets timer and the alarm.
-*   **Action (Set Alarm):** Hold the extra button down while dialing 4 digits.
+    *   Lift the handset shortly off the cradle or dial another number to reset.
+*   **Action (Set Single Alarm):** Hold the extra button down while dialing 4 digits.
     *   Dial `0730` (while holding button) -> Sets alarm for 07:30.
-    *   Hold button and lift handset -> Deletes current alarm.
+    *   This alarm has **Priority** and rings once, then clears itself.
 
 ### 2. Active Mode (Handset Lifted)
 *   **Trigger:** Lift the handset (Off-Hook).
-*   **Behavior:** The phone "wakes up" with a dial tone and plays a random compliment after 2s.
+*   **Behavior:** The phone "wakes up" with a dial tone and plays a random compliment (Surprise Mix) after 2s.
 *   **Action (Dialing):** Input numbers to request content:
-    *   **Dial `1`**: Play from `mp3_group_01` (Persona 1)
-    *   **Dial `2`**: Play from `mp3_group_02` (Persona 2)
-    *   **Dial `3`**: Play from `mp3_group_03` (Persona 3)
-    *   **Dial `4`**: Play from `mp3_group_04` (Persona 4)
-    *   **Dial `0`**: Main Menu (Status, Language, etc.)
-    *   **Dial `8`**: Speak System IP & Status
-    *   **Dial `90`**: Toggle Alarms On/Off
+    *   **Dial `1`-`4`**: Switch to specific Persona Playlist (Trump, Badran, Yoda, Neutral).
+    *   **Dial `0`**: Play next random track.
+    *   **Dial `8`**: Speak System IP & Status.
+    *   **Dial `9`**: Voice Menu Instructions.
+    *   **Dial `90`**: Toggle **ALL** Alarms (On/Off).
+    *   **Dial `91`**: Toggle **Skip Next Repeating Alarm**.
 
 ### 3. Ringing Mode (Alarm/Timer)
 *   **Trigger:** Countdown expires or Alarm time is reached.
 *   **Behavior:** Ringtones play, Vibration motor activates, LED flashes.
-*   **Stop:** Lift the handset or toggle the hook switch to reset and silence.
+*   **Stop:** Lift the handset and hang up again to stop the ringing.
+*   **Snooze:** Lift the handset but **do not** hang up. The alarm snoozes for the configured duration (0-20 min).
 
 ### 4. LED Signaling (Visual Interface)
 The device communicates distinct states via the integrated WS2812 LED using organic, vintage-style animations:
@@ -86,15 +89,15 @@ The device communicates distinct states via the integrated WS2812 LED using orga
 | :--- | :--- | :--- | :--- |
 | **I2S Audio** | BCLK | `GPIO 26` | ES8311 / NS4150B |
 | | LRC | `GPIO 25` | |
-| | DOUT | `GPIO 27` | *Modified from 22 to avoid conflict* |
+| | DOUT | `GPIO 27` | Modified to avoid I2C conflict |
 | **I2C Bus** | SDA | `GPIO 21` | Codec Configuration |
 | | SCL | `GPIO 22` | |
-| **Input** | Dial Pulse | `GPIO 5` | Input with Internal Pull-Up (No Resistor needed!) |
-| | Dial Mode | `GPIO 36` | Optional: Contact detecting rotation active (Input Only) |
+| **Input** | Dial Pulse | `GPIO 5` | Input with Internal Pull-Up |
+| | Dial Mode | `GPIO 36` | Detects when dial assumes active position |
 | | Hook Switch | `GPIO 32` | |
 | | Extra Button | `GPIO 33` | |
-| **GNSS (GPS)** | RX | `GPIO 35` | M10 Module |
-| | TX | `GPIO 0` | |
+| **GNSS (GPS)** | RX | `GPIO 34` | M10 Module (Input Only) |
+| | TX | `GPIO 0` | Moved to boot-safe pin |
 | **Output** | Vibration | `GPIO 2` | Haptic Feedback |
 | | LED Data | `GPIO 13` | WS2812B |
 | **Storage** | SD CS | `GPIO 4` | On-board SD Slot |

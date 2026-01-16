@@ -25,6 +25,7 @@ public:
         int hour;
         int minute;
         int second;
+        time_t rawTime; // Added for easy tm conversion
         bool valid;
     };
 
@@ -41,6 +42,12 @@ public:
     void deleteAlarm();
     bool isAlarmSet();
     String getAlarmString(); // HH:MM
+    
+    // Global Alarm Control
+    void setAlarmsEnabled(bool enabled);
+    bool areAlarmsEnabled();
+    void setSkipNextAlarm(bool skip);
+    bool isSkipNextAlarmSet(); // Added getter
 
     // Timer Management
     void setTimer(int minutes);
@@ -67,6 +74,8 @@ private:
     int _alarmMinute = -1;
     bool _alarmTriggeredToday = false;
     int _lastCheckedMinute = -1;
+    bool _alarmsEnabled = true;
+    bool _skipNextAlarm = false;
 
     // Timer
     unsigned long _timerEndTime = 0;

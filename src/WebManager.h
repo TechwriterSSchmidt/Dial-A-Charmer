@@ -11,6 +11,8 @@ class WebManager {
 public:
     void begin();
     void loop();
+    void startAp();
+    void stopAp();
 
 private:
     WebServer _server;
@@ -30,8 +32,6 @@ private:
     
     // Helpers
     void resetApTimer();
-    void startAp();
-    void stopAp();
     
     String getHtml();
     String getAdvancedHtml(); // New

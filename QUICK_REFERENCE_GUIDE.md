@@ -4,40 +4,41 @@
 1. **Hear a Compliment:**
    - Lift the receiver.
    - **Automatic:** The **Random Surprise Mix** starts immediately.
-   - **Dial 1:** Persona 1 Style (Interrupts mix).
-   - **Dial 2:** Persona 2 Style.
-   - **Dial 3:** Persona 3 Style.
-   - **Dial 4:** Persona 4 Style.
+   - **Dial 1:** Persona 1 Style (Trump).
+   - **Dial 2:** Persona 2 Style (Badran).
+   - **Dial 3:** Persona 3 Style (Yoda).
+   - **Dial 4:** Persona 4 Style (Neutral).
    - **Dial 0:** Next Random Surprise Track.
 
 2. **Hear the Time:**
    - Press the **Extra Button** (if available).
-   - *Note: Default Firmware v1.3 maps 'Pickup' to Random Playlist and 'Button' to Time.*
-
-3. **Set a Timer:**
+   
+3. **Set a Kitchen Timer:**
    - Keep receiver **ON** the hook.
    - Dial a number (e.g., 5).
    - A timer is set for **5 minutes**.
    - Phone rings when time is up. Lift receiver to stop ringing.
 
-4. **Set an Alarm (Wecker):**
+4. **Set a Single Priority Alarm:**
    - Keep receiver **ON** the hook.
    - Press and **HOLD** the Extra Button.
    - Dial 4 digits for the time (e.g., `0`, `7`, `3`, `0` for 07:30).
    - A confirmation sound ("Alarm Set") plays.
+   - *Note: This alarm rings once and then clears itself.*
 
 5. **Stop / Snooze Alarm:**
-   - **Snooze (9 min):** Lift receiver but **DO NOT** hang up (put it aside).
+   - **Stop:** Lift receiver and hang up again.
+   - **Snooze:** Lift receiver but **DO NOT** hang up (put it aside). 
+   - *Snooze duration is configurable in Web Interface (Default: 9 min).*
 
 6. **Voice Menu & Admin:**
    - **Dial 9:** Hear current status and menu options.
-   - **Dial 90:** Toggle Alarms (On/Off).
-   - **Dial 91:** Skip Next Alarm.
+   - **Dial 90:** Toggle **ALL** Alarms (On/Off).
+   - **Dial 91:** Skip **Next Repeating Alarm** (e.g. skip tomorrow morning, but keep schedule active).
    - **Dial 8:** Speak full system status (IP, Signal, etc.).
-   - **Stop:** Lift receiver and hang up again.
-   - **Delete Alarm:** Press and hold Extra Button, then lift receiver briefly.
+   - **Delete Single Alarm:** Press and hold Extra Button, then lift receiver briefly.
 
-## 📂 SD Card Structure
+## 📂 Content Management (SD Card)
 Ensure your SD card is formatted (FAT32) and structured as follows:
 ```text
 /
@@ -52,30 +53,24 @@ Ensure your SD card is formatted (FAT32) and structured as follows:
 ├── mp3_group_03/           (Persona 3 - Dial 3)
 ├── mp3_group_04/           (Persona 4 - Dial 4)
 ```
-
-## 🛠️ Content Updates
-To add new compliments:
-1. **Prepare Audio:** Recording or TTS.
-2. **Split Files:** If you have one long file, use `python utils/split_audio.py` to chop it into pieces.
-3. **Copy to SD:** Save mp3s into the respective folder (`mp3_group_XX`) on the SD card.
-4. **Reboot:** Reboot the Dial-A-Charmer (Power Cycle) to re-index the playlists.
+*Note: Use `python utils/split_audio.py` to chop long files into individual clips.*
 
 ## ⚙️ Web Configuration
-Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) to access settings.
+Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your local network IP to access settings.
 
-Once connected (either directly or if the device is in your home WiFi), open:
 👉 **http://dial-a-charmer.local**
 
-**Configurable Options:**
-- **General Settings**:
-  - **Language**: Switch system voice and prompts between **German** and **English**.
-- **WiFi Settings**: Connect Dial-A-Charmer to your home network.
-- **Time Settings**: Set your timezone offset.
-- **Audio Settings**: 
-  - **Handset Volume**: Adjust the volume for voice/compliments (0-42).
-  - **Ringer Volume**: Adjust the volume for alarms and timers (0-42).
-- **LED Settings**: 
-  - **Day Brightness**: 0-42
-  - **Night Brightness**: 0-42
-  - **Night Schedule**: Start/End hours for auto-dimming.
-- **AI Settings**: Gemini API Key for dynamic compliments.
+**Basic Settings (Home Page):**
+- **Language**: German/English.
+- **Volume**: Separate sliders for Handset (Voice) and Ringer (Alarm).
+- **Ringtones**: Select and Preview from 5 distinct styles.
+- **Repeating Alarm**: Set a daily schedule (Time + Active Days) for your regular wake-up call.
+- **Snooze Duration**: Configurable 0-20 minutes.
+- **LED Brightness**: Day/Night levels.
+
+**Advanced Settings (/advanced):**
+- **WiFi**: Scan and connect logic.
+- **Timezone**: Set offset (e.g. UTC+1 Zurich).
+- **Half-Duplex**: Enhanced echo cancellation for AI features.
+- **AI Settings**: Gemini API Key for dynamic interaction.
+- **Firmware Update**: OTA upload for system updates.

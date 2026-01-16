@@ -19,6 +19,14 @@ public:
     int getTimezoneOffset();
     void setTimezoneOffset(int offset); // in hours
     
+    // Periodic Alarm (Web Interface)
+    int getAlarmHour();
+    void setAlarmHour(int h);
+    int getAlarmMinute();
+    void setAlarmMinute(int m);
+    int getAlarmDays(); // Bitmask: 1=Mon, 2=Tue ... 64=Sun, 0=Off
+    void setAlarmDays(int days); // Bitmask
+    
     // AI
     String getGeminiKey();
     void setGeminiKey(String key);
@@ -28,6 +36,8 @@ public:
     void setVolume(int vol);
     int getBaseVolume();
     void setBaseVolume(int vol);
+    int getSnoozeMinutes(); // Added
+    void setSnoozeMinutes(int min); 
     int getRingtone();
     void setRingtone(int toneIndex);
     int getDialTone(); // New

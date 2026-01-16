@@ -2,6 +2,7 @@
 #include "LedManager.h"
 #include "PhonebookManager.h"
 #include <ESPmDNS.h>
+#include <Update.h>
 
 WebManager webManager;
 
@@ -149,6 +150,31 @@ void WebManager::begin() {
     _server.on("/phonebook", [this](){ handlePhonebook(); });
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); }); // New
+    
+    // OTA Update
+    _server.on("/update", HTTP_POST, [this](){
+            _server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+            ESP.restart();
+        }, [this](){
+            HTTPUpload& upload = _server.upload();
+            if (upload.status == UPLOAD_FILE_START) {
+                Serial.printf("Update: %s\n", upload.filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { 
+                    Update.printError(Serial);
+                }
+            } else if (upload.status == UPLOAD_FILE_WRITE) {
+                if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+                    Update.printError(Serial);
+                }
+            } else if (upload.status == UPLOAD_FILE_END) {
+                if (Update.end(true)) { 
+                    Serial.printf("Update Success: %uB\n", upload.totalSize);
+                } else {
+                    Update.printError(Serial);
+                }
+            }
+        });
+
     _server.on("/help", [this](){ handleHelp(); });
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
@@ -250,6 +276,7 @@ void WebManager::handleSave() {
     // Audio Settings
     if (_server.hasArg("vol")) settings.setVolume(_server.arg("vol").toInt());
     if (_server.hasArg("base_vol")) settings.setBaseVolume(_server.arg("base_vol").toInt());
+    if (_server.hasArg("snooze")) settings.setSnoozeMinutes(_server.arg("snooze").toInt()); // Added
     if (_server.hasArg("ring")) settings.setRingtone(_server.arg("ring").toInt());
     if (_server.hasArg("dt")) settings.setDialTone(_server.arg("dt").toInt());
     
@@ -258,6 +285,20 @@ void WebManager::handleSave() {
     if (_server.arg("form_id") == "advanced") {
         bool hd = _server.hasArg("hd"); 
         settings.setHalfDuplex(hd);
+    }
+    
+    if (_server.arg("form_id") == "basic") {
+        if (_server.hasArg("alm_h")) settings.setAlarmHour(_server.arg("alm_h").toInt());
+        if (_server.hasArg("alm_m")) settings.setAlarmMinute(_server.arg("alm_m").toInt());
+        
+        // Days Bitmask
+        int mask = 0;
+        for(int i=0; i<7; i++) {
+            if(_server.hasArg("day_" + String(i+1))) {
+                mask |= (1 << i);
+            }
+        }
+        settings.setAlarmDays(mask);
     }
 
     // LED Settings
@@ -351,6 +392,10 @@ String WebManager::getHtml() {
     html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
     html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
 
+    // Snooze Time
+    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
+    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
+
     // Ringtone
     html += "<label>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>";
     int r = settings.getRingtone();
@@ -367,6 +412,24 @@ String WebManager::getHtml() {
     }
     html += "</select>";
     html += "</div>";
+
+    // Repeating Alarm
+    html += "<div class='card'><h3>" + String(isDe ? "Wecker (Wiederholend)" : "Alarm (Repeating)") + "</h3>";
+    html += "<label>" + String(isDe ? "Zeit (Std:Min)" : "Time (Hr:Min)") + "</label>";
+    html += "<div style='display:flex; gap:10px;'>";
+    html += "<input type='number' name='alm_h' min='0' max='23' value='" + String(settings.getAlarmHour()) + "' style='width:48%'>";
+    html += "<input type='number' name='alm_m' min='0' max='59' value='" + String(settings.getAlarmMinute()) + "' style='width:48%'>";
+    html += "</div>";
+    
+    html += "<label>" + String(isDe ? "Aktive Tage" : "Active Days") + "</label>";
+    html += "<div style='display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-top:10px;'>";
+    String dNames[] = { "Mo", "Di/Tu", "Mi/We", "Do/Th", "Fr", "Sa", "So/Su" };
+    int days = settings.getAlarmDays();
+    for(int i=0; i<7; i++) {
+        bool checked = (days & (1 << i));
+        html += "<label style='font-size:1rem; text-transform:none; margin-top:0;'><input type='checkbox' name='day_" + String(i+1) + "' value='1'" + (checked?" checked":"") + " style='width:auto; transform: scale(1.5); margin-right:10px;'>" + dNames[i] + "</label>";
+    }
+    html += "</div></div>";
 
     html += "<div class='card'><h3>" + t_led + "</h3>";
     
@@ -462,6 +525,14 @@ String WebManager::getAdvancedHtml() {
     
     html += "<button type='submit'>" + t_save + "</button>";
     html += "</form>";
+
+    // OTA Update Form
+    html += "<div class='card'><h3>Firmware Update (OTA)</h3>";
+    html += "<form method='POST' action='/update' enctype='multipart/form-data'>";
+    html += "<input type='file' name='update' accept='.bin'>";
+    html += "<button type='submit' style='background-color:#444; margin-top:10px;'>Start Update</button>";
+    html += "</form></div>";
+    
     html += "<p style='text-align:center'>";
     html += "<a href='/' style='color:#ffc107'>" + t_back + "</a>";
     html += "</p>";

@@ -34,6 +34,11 @@ bool isTimerRinging = false;
 unsigned long ringingStartTime = 0;
 int currentAlarmVol = 0;
 
+// Dialing State
+String dialBuffer = "";
+unsigned long lastDialTime = 0;
+#define DIAL_CMD_TIMEOUT 3000
+
 // --- Playlist Management ---
 struct Playlist {
     std::vector<String> tracks;
@@ -288,7 +293,7 @@ bool checkBattery() {
     // Ensure width is configured (once, or every time?)
     // Note: It's safe to call multiple times.
     adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_11); // 11dB for 3.3V range
+    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_12); // 11dB for 3.3V range
 
     int raw = adc1_get_raw(ADC1_CHANNEL_7);
     
@@ -571,7 +576,8 @@ void executePhonebookFunction(String func, String param) {
         }
     }
     else if (func == "TOGGLE_ALARMS") {
-        alarmsEnabled = !alarmsEnabled;
+        timeManager.setAlarmsEnabled(!timeManager.areAlarmsEnabled());
+        bool alarmsEnabled = timeManager.areAlarmsEnabled();
         
         // Try playing file first
         String fName = alarmsEnabled ? "alarms_on" : "alarms_off";
@@ -592,13 +598,22 @@ void executePhonebookFunction(String func, String param) {
         }
     }
     else if (func == "SKIP_NEXT_ALARM") {
-        skipNextAlarm = true;
-        String path = "/system/alarm_skipped_" + lang + ".mp3";
+        bool newState = !timeManager.isSkipNextAlarmSet();
+        timeManager.setSkipNextAlarm(newState);
+        
+        // File paths: alarm_skipped (Active Skip) vs alarm_active (Normal)
+        String fName = newState ? "alarm_skipped" : "alarm_active";
+        String path = "/system/" + fName + "_" + lang + ".mp3";
         
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
-            String msg = (lang == "de") ? "Nächster Alarm übersprungen." : "Next alarm skipped.";
+            String msg = "";
+            if (lang == "de") {
+                msg = newState ? "Nächster wiederkehrender Alarm übersprungen." : "Wiederkehrender Alarm wieder aktiv.";
+            } else {
+                msg = newState ? "Next recurring alarm skipped." : "Recurring alarm reactivated.";
+            }
             if (ai.hasApiKey()) {
                 audio.connecttohost(ai.getTTSUrl(msg).c_str());
             }

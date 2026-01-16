@@ -31,6 +31,32 @@ void Settings::setTimezoneOffset(int offset) {
     _prefs.putInt("tz_offset", offset);
 }
 
+// Periodic Alarm
+int Settings::getAlarmHour() {
+    return _prefs.getInt("alm_h", 7); // Default 07:00
+}
+
+void Settings::setAlarmHour(int h) {
+    _prefs.putInt("alm_h", h);
+}
+
+int Settings::getAlarmMinute() {
+    return _prefs.getInt("alm_m", 0);
+}
+
+void Settings::setAlarmMinute(int m) {
+    _prefs.putInt("alm_m", m);
+}
+
+int Settings::getAlarmDays() {
+    // Default: Mon-Fri (1+2+4+8+16 = 31)
+    return _prefs.getInt("alm_d", 0); // Default OFF (0) to avoid surprises
+}
+
+void Settings::setAlarmDays(int days) {
+    _prefs.putInt("alm_d", days);
+}
+
 String Settings::getGeminiKey() {
     return _prefs.getString("gemini_key", "");
 }
@@ -57,6 +83,16 @@ void Settings::setBaseVolume(int vol) {
     if (vol < 0) vol = 0;
     if (vol > 42) vol = 42;
     _prefs.putInt("base_vol", vol);
+}
+
+int Settings::getSnoozeMinutes() {
+    return _prefs.getInt("snooze", 9); // Default 9
+}
+
+void Settings::setSnoozeMinutes(int min) {
+    if (min < 0) min = 0;
+    if (min > 20) min = 20;
+    _prefs.putInt("snooze", min);
 }
 
 int Settings::getRingtone() {
