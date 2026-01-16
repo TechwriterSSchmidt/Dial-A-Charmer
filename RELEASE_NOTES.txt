@@ -1,5 +1,13 @@
 # Release Notes - Dial-A-Charmer
 
+## v2.0.0 (2026-01-16) - "The Conversationalist"
+- **Audio Intelligence**:
+    - **Half-Duplex AEC**: Implemented automatic microphone muting during audio playback to prevent echo and self-triggering when using Gemini AI.
+    - **Interruption Logic**: Users can now stop playback/TTS instantly by pressing the Extra Button or placing the receiver on the hook.
+- **Microphone Control**:
+    - Added driver support for ES8311 ADC Volume/Mute control.
+    - Automatic mute/unmute management in main loop.
+
 ## v1.9.0 (2026-01-16)
 - **Core System Architecture**:
     - **Hardware Conflict Resolution**: Migrated to `Adafruit_NeoPixel` to resolve FastLED/I2S timing conflicts. 
