@@ -9,22 +9,17 @@ void PhonebookManager::begin() {
         Serial.println("Phonebook not found, creating default...");
         
         // --- Core Functions ---
-        addEntry("0", "Time Announce", "FUNCTION", "ANNOUNCE_TIME");
+        addEntry("110", "Zeitauskunft", "FUNCTION", "ANNOUNCE_TIME");
+        addEntry("0", "Gemini AI", "FUNCTION", "GEMINI_CHAT"); // Assuming ID 0 is generic chat
         
-        // --- Personas / Characters (1-6) ---
-        addEntry("1", "Persona 01 (Donald)", "FUNCTION", "COMPLIMENT_CAT", "1");
-        addEntry("2", "Persona 02 (Jaqueline)", "FUNCTION", "COMPLIMENT_CAT", "2");
-        addEntry("3", "Persona 03 (Yoda)", "FUNCTION", "COMPLIMENT_CAT", "3");
-        addEntry("4", "Persona 04 (Neutral)", "FUNCTION", "COMPLIMENT_CAT", "4");
-        addEntry("5", "Nerd Joke", "TTS", "Erzähle mir einen kurzen Programmierer-Witz.");
-        addEntry("50", "Life Coach", "TTS", "Sag mir etwas inspirierendes wie ein Guru.");
+        // --- Personas / Characters (1-4) ---
+        addEntry("1", "Persona 1 (Donald)", "FUNCTION", "COMPLIMENT_CAT", "1");
+        addEntry("2", "Persona 2 (Jaqueline)", "FUNCTION", "COMPLIMENT_CAT", "2");
+        addEntry("3", "Persona 3 (Yoda)", "FUNCTION", "COMPLIMENT_CAT", "3");
+        addEntry("4", "Persona 4 (Neutral)", "FUNCTION", "COMPLIMENT_CAT", "4");
         
-        // --- Admin / System (8-9) ---
-        addEntry("8", "System Status", "FUNCTION", "SYSTEM_STATUS");
-        
-        // Admin Menu: Voice Menu
-        // Changed to FUNCTION to support multi-language audio files
-        addEntry("9", "Admin Menu", "FUNCTION", "VOICE_MENU");
+        // --- Admin / System ---
+        addEntry("9", "Voice Admin Menu", "FUNCTION", "VOICE_MENU");
         
         // --- Control Commands ---
         addEntry("90", "Toggle Alarms", "FUNCTION", "TOGGLE_ALARMS");

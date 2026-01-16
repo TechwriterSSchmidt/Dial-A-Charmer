@@ -32,29 +32,40 @@ void Settings::setTimezoneOffset(int offset) {
 }
 
 // Periodic Alarm
-int Settings::getAlarmHour() {
-    return _prefs.getInt("alm_h", 7); // Default 07:00
+int Settings::getAlarmHour(int day) {
+    if(day < 0 || day > 6) return 7;
+    char key[10]; sprintf(key, "alm_h_%d", day);
+    return _prefs.getInt(key, 7);
 }
 
-void Settings::setAlarmHour(int h) {
-    _prefs.putInt("alm_h", h);
+void Settings::setAlarmHour(int day, int h) {
+    if(day < 0 || day > 6) return;
+    char key[10]; sprintf(key, "alm_h_%d", day);
+    _prefs.putInt(key, h);
 }
 
-int Settings::getAlarmMinute() {
-    return _prefs.getInt("alm_m", 0);
+int Settings::getAlarmMinute(int day) {
+    if(day < 0 || day > 6) return 0;
+    char key[10]; sprintf(key, "alm_m_%d", day);
+    return _prefs.getInt(key, 0);
 }
 
-void Settings::setAlarmMinute(int m) {
-    _prefs.putInt("alm_m", m);
+void Settings::setAlarmMinute(int day, int m) {
+    if(day < 0 || day > 6) return;
+    char key[10]; sprintf(key, "alm_m_%d", day);
+    _prefs.putInt(key, m);
 }
 
-int Settings::getAlarmDays() {
-    // Default: Mon-Fri (1+2+4+8+16 = 31)
-    return _prefs.getInt("alm_d", 0); // Default OFF (0) to avoid surprises
+bool Settings::isAlarmEnabled(int day) {
+    if(day < 0 || day > 6) return false;
+    char key[10]; sprintf(key, "alm_en_%d", day);
+    return _prefs.getBool(key, false); 
 }
 
-void Settings::setAlarmDays(int days) {
-    _prefs.putInt("alm_d", days);
+void Settings::setAlarmEnabled(int day, bool enabled) {
+    if(day < 0 || day > 6) return;
+    char key[10]; sprintf(key, "alm_en_%d", day);
+    _prefs.putBool(key, enabled);
 }
 
 String Settings::getGeminiKey() {

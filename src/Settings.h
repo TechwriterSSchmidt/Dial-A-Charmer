@@ -19,13 +19,13 @@ public:
     int getTimezoneOffset();
     void setTimezoneOffset(int offset); // in hours
     
-    // Periodic Alarm (Web Interface)
-    int getAlarmHour();
-    void setAlarmHour(int h);
-    int getAlarmMinute();
-    void setAlarmMinute(int m);
-    int getAlarmDays(); // Bitmask: 1=Mon, 2=Tue ... 64=Sun, 0=Off
-    void setAlarmDays(int days); // Bitmask
+    // Per-Day Alarms (0=Monday ... 6=Sunday)
+    int getAlarmHour(int day);
+    void setAlarmHour(int day, int h);
+    int getAlarmMinute(int day);
+    void setAlarmMinute(int day, int m);
+    bool isAlarmEnabled(int day);
+    void setAlarmEnabled(int day, bool enabled);
     
     // AI
     String getGeminiKey();

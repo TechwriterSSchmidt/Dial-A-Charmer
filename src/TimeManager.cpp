@@ -140,24 +140,18 @@ bool TimeManager::checkAlarmTrigger() {
     }
 
     // 2. Check Periodic Alarm (From Settings)
-    int pDays = settings.getAlarmDays();
-    if (pDays != 0) {
-        // Current Day: tm_wday 0=Sun, 1=Mon...
-        // Map to our bitmask (Mon=1 aka Bit0 ... Sun=64 aka Bit6)
-        struct tm* raw = localtime(&now.rawTime); // We need wday from tm
-        // Actually getLocalTime gave us DateTime struct which doesn't have wday. 
-        // We need standard struct tm.
-        struct tm tinfo;
-        if (::getLocalTime(&tinfo)) {
-             int dayBit = (tinfo.tm_wday == 0) ? 6 : (tinfo.tm_wday - 1);
-             bool dayActive = (pDays & (1 << dayBit));
+    struct tm tinfo;
+    if (::getLocalTime(&tinfo)) {
+         // tm_wday: 0=Sun, 1=Mon... 6=Sat
+         // Our Settings: 0=Mon, 1=Tue... 6=Sun
+         int dayIndex = (tinfo.tm_wday == 0) ? 6 : (tinfo.tm_wday - 1);
+         
+         if (settings.isAlarmEnabled(dayIndex)) {
+             int pHour = settings.getAlarmHour(dayIndex);
+             int pMin = settings.getAlarmMinute(dayIndex);
              
-             if (dayActive) {
-                 int pHour = settings.getAlarmHour();
-                 int pMin = settings.getAlarmMinute();
-                 
-                 if (now.hour == pHour && now.minute == pMin) {
-                     _alarmTriggeredToday = true;
+             if (now.hour == pHour && now.minute == pMin) {
+                 _alarmTriggeredToday = true;
                      
                      // Check Skip Logic
                      if (_skipNextAlarm) {
@@ -168,7 +162,6 @@ bool TimeManager::checkAlarmTrigger() {
                  }
              }
         }
-    }
     
     return false;
 }

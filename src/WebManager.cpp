@@ -3,8 +3,43 @@
 #include "PhonebookManager.h"
 #include <ESPmDNS.h>
 #include <Update.h>
+#include <SD.h>
+#include <vector>
+#include <algorithm>
 
 WebManager webManager;
+
+// Helper to list files for dropdown
+String getSdFileOptions(String folder, int currentSelection) {
+    String options = "";
+    File dir = SD.open(folder);
+    if(!dir || !dir.isDirectory()) return "<option>No Folder " + folder + "</option>";
+
+    std::vector<String> files;
+    File file = dir.openNextFile();
+    while(file){
+        if(!file.isDirectory()) {
+            String name = file.name();
+            if (name.startsWith(".")) { file = dir.openNextFile(); continue; } // skip hidden
+            files.push_back(name);
+        }
+        file = dir.openNextFile();
+    }
+    
+    // Sort Alphabetically to ensure consistent Indexing
+    std::sort(files.begin(), files.end());
+    
+    // Add "None" or "Default" if index 0 is special? 
+    // Usually index 1 is first file.
+    
+    for(size_t i=0; i<files.size(); i++) {
+        // IDs start at 1 usually in this system
+        int id = i + 1;
+        String sel = (id == currentSelection) ? " selected" : "";
+        options += "<option value='" + String(id) + "'" + sel + ">" + files[i] + "</option>";
+    }
+    return options;
+}
 
 const char* htmlStyle = R"rawliteral(
 <style>
@@ -145,11 +180,12 @@ void WebManager::begin() {
         Serial.println(WiFi.softAPIP());
     }
 
-    _server.on("/", [this](){ handleRoot(); });
-    _server.on("/advanced", [this](){ handleAdvanced(); }); // New
-    _server.on("/phonebook", [this](){ handlePhonebook(); });
+    _server.on("/", [this](){ handlePhonebook(); /* Was Root */ }); 
+    _server.on("/settings", [this](){ handleRoot(); /* Old Root is now Settings */ }); // New
+    _server.on("/advanced", [this](){ handleAdvanced(); }); 
+    _server.on("/phonebook", [this](){ handlePhonebook(); }); // Keep alias
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
-    _server.on("/api/preview", [this](){ handlePreviewApi(); }); // New
+    _server.on("/api/preview", [this](){ handlePreviewApi(); });
     
     // OTA Update
     _server.on("/update", HTTP_POST, [this](){
@@ -288,17 +324,13 @@ void WebManager::handleSave() {
     }
     
     if (_server.arg("form_id") == "basic") {
-        if (_server.hasArg("alm_h")) settings.setAlarmHour(_server.arg("alm_h").toInt());
-        if (_server.hasArg("alm_m")) settings.setAlarmMinute(_server.arg("alm_m").toInt());
-        
-        // Days Bitmask
-        int mask = 0;
+        // Save 7 Alarms
         for(int i=0; i<7; i++) {
-            if(_server.hasArg("day_" + String(i+1))) {
-                mask |= (1 << i);
-            }
+             String s = String(i);
+             if(_server.hasArg("alm_h_"+s)) settings.setAlarmHour(i, _server.arg("alm_h_"+s).toInt());
+             if(_server.hasArg("alm_m_"+s)) settings.setAlarmMinute(i, _server.arg("alm_m_"+s).toInt());
+             settings.setAlarmEnabled(i, _server.hasArg("alm_en_"+s));
         }
-        settings.setAlarmDays(mask);
     }
 
     // LED Settings
@@ -352,10 +384,10 @@ String WebManager::getHtml() {
     // Translations
     String t_title = isDe ? "Dial-A-Charmer" : "Dial-A-Charmer";
     String t_audio = isDe ? "Audio Einstellungen" : "Audio Settings";
-    String t_h_vol = isDe ? "Hörer Lautstärke" : "Handset Volume";
-    String t_r_vol = isDe ? "Klingelton Lautstärke (Basis)" : "Ringer Volume (Base)";
+    String t_h_vol = isDe ? "H&ouml;rer Lautst&auml;rke" : "Handset Volume";
+    String t_r_vol = isDe ? "Klingelton Lautst&auml;rke (Basis)" : "Ringer Volume (Base)";
     String t_ring = isDe ? "Klingelton" : "Ringtone";
-    String t_dt = isDe ? "Wählton" : "Dial Tone";
+    String t_dt = isDe ? "W&auml;hlton" : "Dial Tone";
     String t_led = isDe ? "LED Einstellungen" : "LED Settings";
     String t_day = isDe ? "Helligkeit (Tag)" : "Day Brightness";
     String t_night = isDe ? "Helligkeit (Nacht)" : "Night Brightness";
@@ -367,91 +399,55 @@ String WebManager::getHtml() {
     String t_lang = isDe ? "Sprache" : "Language";
     String t_adv = isDe ? "Erweiterte Einstellungen" : "Advanced Settings";
 
-    String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
+    String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
-    html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>";
+    html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>"; // Save Lang
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
-    html += "<form action='/save' method='POST'>";
-    html += "<input type='hidden' name='form_id' value='basic'>";
 
-    // Language Selector
+    // Language Selector (Auto-Save)
     html += "<div class='card'><h3>" + t_lang + "</h3>";
-    html += "<label>" + t_lang + "</label>";
-    html += "<select name='lang'>";
+    html += "<select onchange='sl(this.value)'>";
     html += "<option value='de'" + String(isDe ? " selected" : "") + ">Deutsch</option>";
     html += "<option value='en'" + String(!isDe ? " selected" : "") + ">English</option>";
     html += "</select>";
     html += "</div>";
-    
-    html += "<div class='card'><h3>" + t_audio + "</h3>";
-    
-    html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
-    html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    
-    html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
-    html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
 
-    // Snooze Time
-    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
-    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
+    html += "<form action='/save' method='POST'>";
+    html += "<input type='hidden' name='form_id' value='basic'>";
+    html += "<input type='hidden' name='redirect' value='/settings'>"; // Redirect back to settings
 
-    // Ringtone
-    html += "<label>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>";
-    int r = settings.getRingtone();
-    for(int i=1; i<=5; i++) {
-        html += "<option value='" + String(i) + "'" + (r==i?" selected":"") + ">Ringtone " + String(i) + " (" + (i==5?"Digital":"Mechanical") + ")</option>";
-    }
-    html += "</select>";
+    // Audio & LED removed from here
     
-    // Dial Tone
-    html += "<label>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>";
-    int dt = settings.getDialTone();
-    for(int i=1; i<=3; i++) {
-        html += "<option value='" + String(i) + "'" + (dt==i?" selected":"") + ">Dial Tone " + String(i) + " (" + (i==1?"DE": (i==2?"US":"UK")) + ")</option>";
-    }
-    html += "</select>";
-    html += "</div>";
-
     // Repeating Alarm
-    html += "<div class='card'><h3>" + String(isDe ? "Wecker (Wiederholend)" : "Alarm (Repeating)") + "</h3>";
-    html += "<label>" + String(isDe ? "Zeit (Std:Min)" : "Time (Hr:Min)") + "</label>";
-    html += "<div style='display:flex; gap:10px;'>";
-    html += "<input type='number' name='alm_h' min='0' max='23' value='" + String(settings.getAlarmHour()) + "' style='width:48%'>";
-    html += "<input type='number' name='alm_m' min='0' max='59' value='" + String(settings.getAlarmMinute()) + "' style='width:48%'>";
-    html += "</div>";
-    
-    html += "<label>" + String(isDe ? "Aktive Tage" : "Active Days") + "</label>";
-    html += "<div style='display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-top:10px;'>";
+    html += "<div class='card'><h3>" + String(isDe ? "T&auml;gliche Wecker" : "Daily Alarms") + "</h3>";
+    html += "<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#888; font-size:0.8rem;'><span>Day</span><span>Active</span><span>Time</span></div>";
     String dNames[] = { "Mo", "Di/Tu", "Mi/We", "Do/Th", "Fr", "Sa", "So/Su" };
-    int days = settings.getAlarmDays();
+    
     for(int i=0; i<7; i++) {
-        bool checked = (days & (1 << i));
-        html += "<label style='font-size:1rem; text-transform:none; margin-top:0;'><input type='checkbox' name='day_" + String(i+1) + "' value='1'" + (checked?" checked":"") + " style='width:auto; transform: scale(1.5); margin-right:10px;'>" + dNames[i] + "</label>";
+         html += "<div style='display:flex; align-items:center; margin-bottom:10px; border-bottom:1px dotted #333; padding-bottom:10px;'>";
+         // Label
+         html += "<div style='width:50px; font-weight:bold; color:#d4af37'>" + dNames[i] + "</div>";
+         
+         // Enabled (Checkbox)
+         bool en = settings.isAlarmEnabled(i);
+         html += "<input type='checkbox' name='alm_en_" + String(i) + "' value='1'" + (en?" checked":"") + " style='width:30px; height:30px; margin:0 15px 0 0;'>";
+         
+         // Time Inputs
+         html += "<input type='number' name='alm_h_" + String(i) + "' min='0' max='23' value='" + String(settings.getAlarmHour(i)) + "' style='width:70px; margin-right:5px;'>";
+         html += "<span style='font-size:1.5rem; margin-top:-5px;'>:</span>";
+         html += "<input type='number' name='alm_m_" + String(i) + "' min='0' max='59' value='" + String(settings.getAlarmMinute(i)) + "' style='width:70px; margin-left:5px;'>";
+         
+         html += "</div>";
     }
-    html += "</div></div>";
-
-    html += "<div class='card'><h3>" + t_led + "</h3>";
-    
-    int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
-    html += "<label>" + t_day + " (0-42) <output>" + String(dayVal) + "</output></label>";
-    html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    
-    int nightVal = map(settings.getLedNightBright(), 0, 255, 0, 42);
-    html += "<label>" + t_night + " (0-42) <output>" + String(nightVal) + "</output></label>";
-    html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    
-    html += "<label>" + t_n_start + " (0-23)</label>";
-    html += "<input type='number' name='night_start' min='0' max='23' value='" + String(settings.getNightStartHour()) + "'>";
-    
-    html += "<label>" + t_n_end + " (0-23)</label>";
-    html += "<input type='number' name='night_end' min='0' max='23' value='" + String(settings.getNightEndHour()) + "'>";
     html += "</div>";
+
+    // LED Moved to Advanced
 
     html += "<button type='submit'>" + t_save + "</button>";
     html += "</form>";
     html += "<p style='text-align:center'>";
-    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
+    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
     html += "<a href='/advanced' style='color:#ffc107; margin-right: 20px;'>" + t_adv + "</a>";
     html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
     html += "</p>";
@@ -464,17 +460,29 @@ String WebManager::getAdvancedHtml() {
     bool isDe = (lang == "de");
 
     String t_title = isDe ? "Erweiterte Einstellungen" : "Advanced Settings";
+    String t_audio = isDe ? "Audio Einstellungen" : "Audio Settings";
+    String t_h_vol = isDe ? "H&ouml;rer Lautst&auml;rke" : "Handset Volume";
+    String t_r_vol = isDe ? "Klingelton Lautst&auml;rke (Basis)" : "Ringer Volume (Base)";
+    String t_ring = isDe ? "Klingelton" : "Ringtone";
+    String t_dt = isDe ? "W&auml;hlton" : "Dial Tone";
+    String t_led = isDe ? "LED Einstellungen" : "LED Settings";
+    String t_day = isDe ? "Helligkeit (Tag)" : "Day Brightness";
+    String t_night = isDe ? "Helligkeit (Nacht)" : "Night Brightness";
+    String t_n_start = isDe ? "Nachtmodus Start (Std)" : "Night Start Hour";
+    String t_n_end = isDe ? "Nachtmodus Ende (Std)" : "Night End Hour";
+    
+    // Existing Advanced Strings...
     String t_wifi = isDe ? "WLAN Einstellungen" : "WiFi Settings";
     String t_ssid = "SSID";
     String t_pass = isDe ? "Passwort" : "Password";
     String t_time = isDe ? "Zeit Einstellungen" : "Time Settings";
     String t_tz = isDe ? "Zeitzone" : "Timezone";
-    String t_hd = isDe ? "Half-Duplex (Echo-Unterdrückung)" : "Half-Duplex (AEC)";
+    String t_hd = isDe ? "Half-Duplex (Echo-Unterdr&uuml;ckung)" : "Half-Duplex (AEC)";
     String t_audio_adv = isDe ? "Audio Erweitert" : "Audio Advanced";
     String t_ai = isDe ? "KI Einstellungen" : "AI Settings";
-    String t_key = isDe ? "Gemini API Schlüssel (Optional)" : "Gemini API Key (Optional)";
+    String t_key = isDe ? "Gemini API Schl&uuml;ssel (Optional)" : "Gemini API Key (Optional)";
     String t_save = isDe ? "Speichern" : "Save Settings";
-    String t_back = isDe ? "Zurück" : "Back";
+    String t_back = isDe ? "Zur&uuml;ck" : "Back";
 
     // Scan for networks
     int n = WiFi.scanNetworks();
@@ -483,14 +491,45 @@ String WebManager::getAdvancedHtml() {
         ssidOptions += "<option value='" + WiFi.SSID(i) + "'>";
     }
 
-    String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
+    String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
+    html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>";
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
     html += "<form action='/save' method='POST'>";
     html += "<input type='hidden' name='redirect' value='/advanced'>";
     html += "<input type='hidden' name='form_id' value='advanced'>";
     
+    // --- MOVED AUDIO SECTIONS ---
+    html += "<div class='card'><h3>" + t_audio + "</h3>";
+    html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
+    html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
+    html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
+    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
+    html += "<label>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>";
+    html += getSdFileOptions("/ringtones", settings.getRingtone());
+    html += "</select>";
+    html += "<label>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>";
+    html += getSdFileOptions("/system", settings.getDialTone()); 
+    html += "</select>";
+    html += "</div>";
+
+    // --- MOVED LED SECTIONS ---
+    html += "<div class='card'><h3>" + t_led + "</h3>";
+    int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
+    html += "<label>" + t_day + " (0-42) <output>" + String(dayVal) + "</output></label>";
+    html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    int nightVal = map(settings.getLedNightBright(), 0, 255, 0, 42);
+    html += "<label>" + t_night + " (0-42) <output>" + String(nightVal) + "</output></label>";
+    html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    html += "<label>" + t_n_start + " (0-23)</label>";
+    html += "<input type='number' name='night_start' min='0' max='23' value='" + String(settings.getNightStartHour()) + "'>";
+    html += "<label>" + t_n_end + " (0-23)</label>";
+    html += "<input type='number' name='night_end' min='0' max='23' value='" + String(settings.getNightEndHour()) + "'>";
+    html += "</div>";
+
     html += "<div class='card'><h3>" + t_wifi + "</h3>";
     html += "<label>" + t_ssid + "</label>";
     html += "<input type='text' name='ssid' list='ssidList' value='" + settings.getWifiSSID() + "' placeholder='Select or type SSID'>";
@@ -534,7 +573,7 @@ String WebManager::getAdvancedHtml() {
     html += "</form></div>";
     
     html += "<p style='text-align:center'>";
-    html += "<a href='/' style='color:#ffc107'>" + t_back + "</a>";
+    html += "<a href='/settings' style='color:#ffc107'>" + t_back + "</a>";
     html += "</p>";
     html += "</body></html>";
     return html;
@@ -578,100 +617,124 @@ void WebManager::handlePhonebookApi() {
 }
 
 String WebManager::getPhonebookHtml() {
-    String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += htmlStyle;
+    String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
+    
     html += R"rawliteral(
 <style>
-table { width: 100%; border-collapse: collapse; margin-top: 20px; color: #f0e6d2; }
-th, td { border: 1px solid #333; padding: 10px; text-align: left; }
-th { background-color: #222; color: #d4af37; }
-input.tbl-in { width: 100%; margin: 0; padding: 5px; background: transparent; border: none; color: white; }
-select.tbl-sel { width: 100%; margin: 0; padding: 5px; background: #222; border: none; color: white; }
-.btn-small { padding: 5px 10px; margin: 0; font-size: 0.9rem; width: auto; display: inline-block; background-color: #333; }
-.btn-delete { background-color: #800; }
-</style>
-<script>
-async function load() {
-    try {
-        const res = await fetch('/api/phonebook');
-        const data = await res.json();
-        render(data);
-    } catch(e) { alert('Load Error: ' + e); }
+body { 
+    margin: 0; padding: 0;
+    font-family: 'Courier New', Courier, monospace;
+    background-color: #e8e8e0;
+    background-image: radial-gradient(#d0d0c0 1px, transparent 1px);
+    background-size: 20px 20px;
+    height: 100vh;
+    padding: 20px; 
 }
+.notepad {
+    background: #fdfbf7;
+    max-width: 900px;
+    margin: 0 auto;
+    min-height: 80vh;
+    padding: 0;
+    position: relative;
+    box-shadow: 0 0 5px rgba(0,0,0,0.2);
+    background-image: linear-gradient(#99ccff 1px, transparent 1px);
+    background-size: 100% 3.0rem;
+}
+.notepad::before {
+    content: ''; position: absolute; top:0; bottom:0; left: 4rem;
+    border-left: 2px solid #ff9999; z-index: 10;
+}
+.header {
+    background: transparent; padding: 2rem 0 1rem 5rem;
+    border-bottom: 3px double #b00; margin-bottom: 0;
+}
+h2 {
+    margin: 0; color: #b00; font-size: 2.5rem;
+    font-family: 'Brush Script MT', cursive; transform: rotate(-2deg);
+}
+table { width: 100%; border-collapse: collapse; position: relative; z-index: 20; }
+tr { height: 3.0rem; }
+th {
+    text-align: left; color: #b00; font-family: sans-serif; font-size: 0.8rem;
+    padding-left: 10px; vertical-align: bottom; padding-bottom: 5px;
+}
+th.num-col { padding-left: 5rem; width: 3rem; }
+td { vertical-align: bottom; padding: 0 10px; border: none; }
+input, select {
+    width: 100%; background: transparent; border: none;
+    font-family: 'Courier New', Courier, monospace; font-weight: bold; font-size: 1.3rem;
+    color: #000080; height: 2.5rem; outline: none;
+}
+.fab {
+    position: fixed; bottom: 30px; right: 30px;
+    width: 60px; height: 60px; background: #d4af37; border-radius: 50%;
+    color: #fff; font-size: 30px; cursor: pointer; z-index: 100; border:none;
+}
+.btn-del {
+    color: #a00; background: transparent; border: 1px solid #a00; border-radius: 50%;
+    width: 25px; height: 25px; cursor: pointer;
+}
+.nav-back {
+    position: absolute; top: 1rem; right: 2rem;
+    text-decoration: none; font-weight: bold; color: #b00;
+    font-family: sans-serif; border: 2px solid #b00; padding: 5px 10px;
+}
+</style>
 
+<script>
+async function load() { try { const res = await fetch('/api/phonebook'); render(await res.json()); } catch(e){} }
 let currentData = {};
-
 function render(data) {
-    currentData = data; // Keep ref
+    currentData = data;
     const tbody = document.getElementById('tbody');
     tbody.innerHTML = '';
-    
-    // Convert obj to array and Sort by key (number)
-    const entries = Object.entries(data).sort((a,b) => parseInt(a[0]) - parseInt(b[0]));
-    
+    const entries = Object.entries(data).sort((a,b) => {
+        let nA = parseInt(a[0]); let nB = parseInt(b[0]);
+        if(!isNaN(nA) && !isNaN(nB)) return nA - nB;
+        return a[0].localeCompare(b[0]);
+    });
     entries.forEach(([num, entry]) => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><input class="tbl-in" value="${num}" readonly></td>
-            <td><input class="tbl-in" value="${entry.name}" onchange="update('${num}', 'name', this.value)"></td>
-            <td>
-                <select class="tbl-sel" onchange="update('${num}', 'type', this.value)">
+            <td style="padding-left: 4.5rem; text-align:right;"><input value="${num}" readonly style="text-align:right; font-family:sans-serif; color:#555;"></td>
+            <td><input value="${entry.name}" onchange="update('${num}', 'name', this.value)"></td>
+            <td style="width:120px;">
+                <select onchange="update('${num}', 'type', this.value)">
                     <option value="FUNCTION" ${entry.type=='FUNCTION'?'selected':''}>Function</option>
-                    <option value="AUDIO" ${entry.type=='AUDIO'?'selected':''}>Audio File</option>
-                    <option value="TTS" ${entry.type=='TTS'?'selected':''}>AI Speaking</option>
+                    <option value="AUDIO" ${entry.type=='AUDIO'?'selected':''}>Audio</option>
+                    <option value="TTS" ${entry.type=='TTS'?'selected':''}>AI/TTS</option>
                 </select>
             </td>
-            <td><input class="tbl-in" value="${entry.value}" onchange="update('${num}', 'value', this.value)"></td>
-            <td><button class="btn-small btn-delete" onclick="del('${num}')">X</button></td>
+            <td><input value="${entry.value}" onchange="update('${num}', 'value', this.value)"></td>
+            <td style="width:40px;"><button class="btn-del" onclick="del('${num}')">x</button></td>
         `;
         tbody.appendChild(tr);
     });
 }
-function addRow() {
-    const num = prompt("Enter Dial Number (0-99):");
-    if(!num) return;
-    if(currentData[num]) { alert("Number exists!"); return; }
-    
-    currentData[num] = { name: "New Entry", type: "AUDIO", value: "/file.mp3", parameter: "" };
+function update(n,f,v){ if(currentData[n]) currentData[n][f]=v; }
+function del(n){ if(confirm('Del?')){ delete currentData[n]; render(currentData); } }
+function addRow(){
+    const n = prompt("Number:"); if(!n || currentData[n]) return;
+    currentData[n] = { name: "New", type: "TTS", value: "Hello", parameter: "" };
     render(currentData);
 }
-
-function update(num, field, val) {
-    if(currentData[num]) currentData[num][field] = val;
-}
-function del(num) {
-    if(confirm('Delete '+num+'?')) {
-        delete currentData[num];
-        render(currentData);
-    }
-}
-async function save() {
-    try {
-        await fetch('/api/phonebook', {
-            method: 'POST',
-            body: JSON.stringify(currentData)
-        });
-        alert('Saved!');
-    } catch(e) { alert('Save Error: ' + e); }
-}
-document.addEventListener('DOMContentLoaded', load);
+async function save(){ await fetch('/api/phonebook', { method:'POST', body:JSON.stringify(currentData) }); alert('Saved!'); }
 </script>
+</head>
+<body onload="load()">
+    <div class="notepad">
+        <a href="/settings" class="nav-back">Settings</a>
+        <div class="header"><h2>Phone Directory</h2></div>
+        <table>
+            <thead><tr><th class="num-col">#</th><th>Name</th><th>Type</th><th>Details</th><th></th></tr></thead>
+            <tbody id="tbody"></tbody>
+        </table>
+    </div>
+    <button class="fab" onclick="save()" title="Save">💾</button>
+    <button class="fab" style="bottom: 110px; background: #4caf50;" onclick="addRow()" title="Add">+</button>
+</body></html>
 )rawliteral";
-
-    html += "</head><body>";
-    html += "<h2>Phonebook Editor</h2>";
-    html += "<div class='card'>";
-    html += "<p>Manage Dialed Numbers. Use standard numbers (0-9) or shortcuts.</p>";
-    html += "<div style='overflow-x:auto;'>";
-    html += "<table><thead><tr><th width='10%'>#</th><th width='30%'>Name</th><th width='20%'>Type</th><th width='30%'>Value/File</th><th width='10%'>Act</th></tr></thead>";
-    html += "<tbody id='tbody'></tbody></table>";
-    html += "</div>";
-    html += "<button onclick='addRow()' class='btn-small' style='margin-top:20px; background:#444;'>+ Add Entry</button>";
-    html += "<button onclick='save()' style='margin-top:20px;'>Save Changes</button>";
-    html += "</div>";
-    
-    html += "<p style='text-align:center'><a href='/'>Back to Settings</a></p>";
-    html += "</body></html>";
     return html;
 }
 
@@ -697,7 +760,7 @@ String WebManager::getHelpHtml() {
     html += "<ul><li><b>Change Ringtone:</b> Hold the 'Extra Button' and dial 1-5.</li>";
     html += "<li><b>Web Config:</b> Connect to 'DialACharmer' WiFi.</li></ul></div>";
     
-    html += "<div class='card'><a href='/' class='btn' style='background:#444;color:#fff;text-align:center;text-decoration:none;display:block'>Back to Settings</a></div>";
+    html += "<div class='card'><a href='/settings' class='btn' style='background:#444;color:#fff;text-align:center;text-decoration:none;display:block'>Back to Settings</a></div>";
     
     html += "</body></html>";
     return html;
