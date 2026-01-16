@@ -9,8 +9,12 @@ import shutil
 SAMPLE_RATE = 44100
 AMPLITUDE = 16000 # Max 32767
 
-def generate_tone(filename, frequency, duration_sec, pulse_on_ms=0, pulse_off_ms=0):
-    print(f"Generating {filename} ({frequency}Hz)...")
+def generate_tone(filename, frequencies, duration_sec, pulse_on_ms=0, pulse_off_ms=0):
+    if not isinstance(frequencies, list):
+        frequencies = [frequencies]
+        
+    freq_str = "+".join(str(f) for f in frequencies)
+    print(f"Generating {filename} ({freq_str}Hz)...")
     
     num_samples = int(SAMPLE_RATE * duration_sec)
     
@@ -37,28 +41,28 @@ def generate_tone(filename, frequency, duration_sec, pulse_on_ms=0, pulse_off_ms
                     is_silent = True
             
             if is_silent:
-                sample = 0
+                final_sample = 0
             else:
-                # Sine Wave
-                # standard sine
-                val = math.sin(2.0 * math.pi * frequency * i / SAMPLE_RATE)
+                # Mix Sine Waves
+                val = 0
+                for freq in frequencies:
+                    val += math.sin(2.0 * math.pi * freq * i / SAMPLE_RATE)
                 
-                # "Authentic Wobbling" mentioned in ROTARI
-                # Mix small amount of 50Hz or similar? 
-                # ROTARI says "authentic wobbling and background noise"
-                # Let's add slight 50Hz hum (mains hum)
-                hum = 0.05 * math.sin(2.0 * math.pi * 50 * i / SAMPLE_RATE)
+                # Normalize and Scale
+                # Divide by count to prevent clipping, then apply amplitude
+                val = (val / len(frequencies)) * AMPLITUDE
                 
-                # And minimal noise?
-                noise = 0.02 * (random.random() - 0.5)
+                # Add Hum
+                hum = 0.05 * math.sin(2.0 * math.pi * 50 * i / SAMPLE_RATE) * AMPLITUDE
                 
-                sample = int((val + hum + noise) * AMPLITUDE)
-                # Clip
-                if sample > 32767: sample = 32767
-                if sample < -32768: sample = -32768
+                final_sample = int(val + hum)
                 
-            data.append(struct.pack('<h', sample))
+            # Clip
+            if final_sample > 32767: final_sample = 32767
+            if final_sample < -32768: final_sample = -32768
             
+            data.append(struct.pack('<h', final_sample))
+
         wav_file.writeframes(b''.join(data))
 
 def generate_startup_sound(output_path, ffmpeg_path="ffmpeg.exe"):
@@ -135,19 +139,18 @@ if __name__ == "__main__":
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
-    # 1. Dial Tone (Continuous 425Hz) - 10 Seconds
-    generate_tone(os.path.join(out_dir, "dial_tone.wav"), 425, 10)
+    # 1. Dial Tone DE (Continuous 425Hz)
+    generate_tone(os.path.join(out_dir, "dialtone_0.wav"), [425], 10)
     
-    # 2. Busy Tone (425Hz, 480ms ON, 480ms OFF) - 10 Seconds
-    generate_tone(os.path.join(out_dir, "busy_tone.wav"), 425, 10, 480, 480)
+    # 2. Dial Tone US (350+440Hz)
+    generate_tone(os.path.join(out_dir, "dialtone_1.wav"), [350, 440], 10)
     
-    # 3. Error / Off-Hook Warning (Fast Busy: 200ms/200ms)
-    generate_tone(os.path.join(out_dir, "error_tone.wav"), 425, 5, 200, 200)
+    # 3. Busy Tone (425Hz, 480ms ON, 480ms OFF)
+    generate_tone(os.path.join(out_dir, "busy_tone.wav"), [425], 10, 480, 480)
+    
+    # Error Tone and Beep are handled by generate_sounds.py
 
-    # 4. Success Beep / Timer Set (1000Hz, single beep 200ms)
-    generate_tone(os.path.join(out_dir, "beep.wav"), 1000, 0.2)
-
-    # 5. Startup Sound (MP3)
+    # 4. Startup Sound (MP3)
     startup_path = os.path.join(project_root, "sd_card_template", "startup.mp3")
     ffmpeg_exe = os.path.join(script_dir, "ffmpeg.exe")
     generate_startup_sound(startup_path, ffmpeg_exe)

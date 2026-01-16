@@ -332,7 +332,7 @@ void speakTime() {
 
     setAudioOutput(OUT_HANDSET);
     timeState = TIME_INTRO;
-    playSound("/time/intro.wav", false);
+    playSound("/time/intro.mp3", false);
 }
 
 void processTimeQueue() {
@@ -344,12 +344,12 @@ void processTimeQueue() {
     switch (timeState) {
         case TIME_INTRO: // Intro finished, play Hour
             timeState = TIME_HOUR;
-            nextFile = "/time/h_" + String(currentHour) + ".wav";
+            nextFile = "/time/h_" + String(currentHour) + ".mp3";
             break;
             
         case TIME_HOUR: // Hour finished, play "Uhr"
             timeState = TIME_UHR;
-            nextFile = "/time/uhr.wav";
+            nextFile = "/time/uhr.mp3";
             break;
             
         case TIME_UHR: // "Uhr" finished, play Minute (if not 0)
@@ -360,9 +360,9 @@ void processTimeQueue() {
                 timeState = TIME_MINUTE;
                 if (currentMinute < 10) {
                      // Play "null five" format? 
-                     nextFile = "/time/m_0" + String(currentMinute) + ".wav";
+                     nextFile = "/time/m_0" + String(currentMinute) + ".mp3";
                 } else {
-                     nextFile = "/time/m_" + String(currentMinute) + ".wav";
+                     nextFile = "/time/m_" + String(currentMinute) + ".mp3";
                 }
             }
             break;
@@ -548,8 +548,8 @@ void executePhonebookFunction(String func, String param) {
         } else {
             // Fallback TTS if file missing
             String text = (lang == "de") ? 
-                "System Menü. Wähle 9 0 für Alarm Umschaltung. 9 1 um nächsten Alarm zu überspringen. 8 für Status." :
-                "System Menu. Dial 9 0 to toggle alarms. 9 1 to skip next alarm. 8 for status.";
+                "System Menü. Wähle 9 0 um alle Alarme ein- oder auszuschalten. 9 1 um den nächsten Routine-Wecker zu überspringen. 8 für Status." :
+                "System Menu. Dial 9 0 to toggle all alarms. 9 1 to skip the next routine alarm. 8 for status.";
             if (ai.hasApiKey()) {
                 audio.connecttohost(ai.getTTSUrl(text).c_str());
             }

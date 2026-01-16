@@ -160,12 +160,34 @@ def make_battery_low_sound():
         
     save_wav("battery_low.wav", audio)
 
+def make_system_beeps():
+    # Standard UI Beep (Short, high)
+    save_wav("beep.wav", generate_tone(1200, 50, 'sine'))
+    
+    # Error Tone (Low, abrasive)
+    # Mix of two low frequencies for dissonance
+    freq1 = 150
+    freq2 = 180
+    duration = 400
+    num_samples = int(SAMPLE_RATE * duration / 1000.0)
+    samples = []
+    
+    for i in range(num_samples):
+        t = float(i) / SAMPLE_RATE
+        # Sawtooth-ish approximation
+        val1 = AMPLITUDE * 0.5 * (math.sin(2 * math.pi * freq1 * t) + 0.5 * math.sin(2 * math.pi * freq1 * 2 * t))
+        val2 = AMPLITUDE * 0.5 * (math.sin(2 * math.pi * freq2 * t) + 0.5 * math.sin(2 * math.pi * freq2 * 2 * t))
+        samples.append((val1 + val2) / 2)
+        
+    save_wav("error_tone.wav", samples)
+
 if __name__ == "__main__":
     print("Generating classic retro UI sounds...")
     make_computing_sound()
     make_battery_low_sound()
+    make_system_beeps()
     
-    # Generate Voice Messages
+    # Generate Voice Messages (Extra system messages)
     generate_tts_mp3("Warnung. Energiezellen kritisch.", "battery_crit.mp3")
     generate_tts_mp3("System bereit.", "system_ready.mp3")
     
