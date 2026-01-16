@@ -3,182 +3,287 @@
 
 Settings settings;
 
+// --- Interne Cache-Struktur (Trick, um Header nicht ändern zu müssen) ---
+struct InternalCache {
+    bool loaded = false;
+    
+    // Alle Werte, die wir cachen müssen
+    String ssid;
+    String pass;
+    String geminiKey;
+    String lang;
+    int tzOffset;
+    int vol;
+    int baseVol;
+    int snooze;
+    int ringtone;
+    int dialTone;
+    int ledDay;
+    int ledNight;
+    int nightStart;
+    int nightEnd;
+    bool halfDuplex;
+};
+
+static InternalCache ic; // Statische Instanz, nur in dieser Datei sichtbar
+
 void Settings::begin() {
     _prefs.begin(_ns, false);
+    loadCache();
+}
+
+void Settings::loadCache() {
+    // 1. Alarme Cachen (wie gehabt)
+    if (!_cacheLoaded) {
+        for(int i=0; i<7; i++) {
+            char kH[10], KM[10], kE[10];
+            sprintf(kH, "alm_h_%d", i);
+            sprintf(KM, "alm_m_%d", i);
+            sprintf(kE, "alm_en_%d", i);
+            
+            _alarms[i].h = (int8_t)_prefs.getInt(kH, 7);
+            _alarms[i].m = (int8_t)_prefs.getInt(KM, 0);
+            _alarms[i].en = _prefs.getBool(kE, false);
+        }
+        _cacheLoaded = true;
+    }
+
+    // 2. Restliche Einstellungen in unseren internen Cache laden
+    if (!ic.loaded) {
+        ic.ssid = _prefs.getString("ssid", "");
+        ic.pass = _prefs.getString("pass", "");
+        ic.geminiKey = _prefs.getString("gemini_key", "");
+        ic.lang = _prefs.getString("lang", "de");
+        ic.tzOffset = _prefs.getInt("tz_offset", CONF_DEFAULT_TZ);
+        ic.vol = _prefs.getInt("vol", CONF_DEFAULT_VOL);
+        ic.baseVol = _prefs.getInt("base_vol", 30);
+        ic.snooze = _prefs.getInt("snooze", 9);
+        ic.ringtone = _prefs.getInt("ring", CONF_DEFAULT_RING);
+        ic.dialTone = _prefs.getInt("dt_idx", 1);
+        ic.ledDay = _prefs.getInt("led_day_b", 100);
+        ic.ledNight = _prefs.getInt("led_night_b", 10);
+        ic.nightStart = _prefs.getInt("night_start", 22);
+        ic.nightEnd = _prefs.getInt("night_end", 6);
+        ic.halfDuplex = _prefs.getBool("half_duplex", true);
+        
+        ic.loaded = true;
+        Serial.println("[Settings] Full Cache Loaded (RAM)");
+    }
 }
 
 String Settings::getWifiSSID() {
-    return _prefs.getString("ssid", "");
+    if(!ic.loaded) loadCache();
+    return ic.ssid;
 }
 
 void Settings::setWifiSSID(String ssid) {
-    _prefs.putString("ssid", ssid);
+    ic.ssid = ssid; // Update Cache
+    _prefs.putString("ssid", ssid); // Update Flash
 }
 
 String Settings::getWifiPass() {
-    return _prefs.getString("pass", "");
+    if(!ic.loaded) loadCache();
+    return ic.pass;
 }
 
 void Settings::setWifiPass(String pass) {
+    ic.pass = pass;
     _prefs.putString("pass", pass);
 }
 
 int Settings::getTimezoneOffset() {
-    return _prefs.getInt("tz_offset", CONF_DEFAULT_TZ); 
+    if(!ic.loaded) loadCache();
+    return ic.tzOffset;
 }
 
 void Settings::setTimezoneOffset(int offset) {
+    ic.tzOffset = offset;
     _prefs.putInt("tz_offset", offset);
 }
 
 // Periodic Alarm
 int Settings::getAlarmHour(int day) {
     if(day < 0 || day > 6) return 7;
-    char key[10]; sprintf(key, "alm_h_%d", day);
-    return _prefs.getInt(key, 7);
+    if(!_cacheLoaded) loadCache();
+    return _alarms[day].h;
 }
 
 void Settings::setAlarmHour(int day, int h) {
     if(day < 0 || day > 6) return;
+    if(!_cacheLoaded) loadCache();
+    _alarms[day].h = (int8_t)h;
+    
     char key[10]; sprintf(key, "alm_h_%d", day);
     _prefs.putInt(key, h);
 }
 
 int Settings::getAlarmMinute(int day) {
     if(day < 0 || day > 6) return 0;
-    char key[10]; sprintf(key, "alm_m_%d", day);
-    return _prefs.getInt(key, 0);
+    if(!_cacheLoaded) loadCache();
+    return _alarms[day].m;
 }
 
 void Settings::setAlarmMinute(int day, int m) {
     if(day < 0 || day > 6) return;
+    if(!_cacheLoaded) loadCache();
+    _alarms[day].m = (int8_t)m;
+
     char key[10]; sprintf(key, "alm_m_%d", day);
     _prefs.putInt(key, m);
 }
 
 bool Settings::isAlarmEnabled(int day) {
     if(day < 0 || day > 6) return false;
-    char key[10]; sprintf(key, "alm_en_%d", day);
-    return _prefs.getBool(key, false); 
+    if(!_cacheLoaded) loadCache();
+    return _alarms[day].en;
 }
 
 void Settings::setAlarmEnabled(int day, bool enabled) {
     if(day < 0 || day > 6) return;
+    if(!_cacheLoaded) loadCache();
+    _alarms[day].en = enabled;
+
     char key[10]; sprintf(key, "alm_en_%d", day);
     _prefs.putBool(key, enabled);
 }
 
 String Settings::getGeminiKey() {
-    return _prefs.getString("gemini_key", "");
+    if(!ic.loaded) loadCache();
+    return ic.geminiKey;
 }
 
 void Settings::setGeminiKey(String key) {
+    ic.geminiKey = key;
     _prefs.putString("gemini_key", key);
 }
 
 int Settings::getVolume() {
-    return _prefs.getInt("vol", CONF_DEFAULT_VOL);
+    if(!ic.loaded) loadCache();
+    return ic.vol;
 }
 
 void Settings::setVolume(int vol) {
     if (vol < 0) vol = 0;
     if (vol > 42) vol = 42;
+    ic.vol = vol;
     _prefs.putInt("vol", vol);
 }
 
 int Settings::getBaseVolume() {
-    return _prefs.getInt("base_vol", 30); // Default reasonable vol
+     if(!ic.loaded) loadCache();
+    return ic.baseVol;
 }
 
 void Settings::setBaseVolume(int vol) {
     if (vol < 0) vol = 0;
     if (vol > 42) vol = 42;
+    ic.baseVol = vol;
     _prefs.putInt("base_vol", vol);
 }
 
 int Settings::getSnoozeMinutes() {
-    return _prefs.getInt("snooze", 9); // Default 9
+    if(!ic.loaded) loadCache();
+    return ic.snooze;
 }
 
 void Settings::setSnoozeMinutes(int min) {
     if (min < 0) min = 0;
     if (min > 20) min = 20;
+    ic.snooze = min;
     _prefs.putInt("snooze", min);
 }
 
 int Settings::getRingtone() {
-    return _prefs.getInt("ring", CONF_DEFAULT_RING);
+    if(!ic.loaded) loadCache();
+    return ic.ringtone;
 }
 
 void Settings::setRingtone(int toneIndex) {
+    ic.ringtone = toneIndex;
     _prefs.putInt("ring", toneIndex);
 }
 
 int Settings::getDialTone() {
-    return _prefs.getInt("dt_idx", 1); // Default 1
+    if(!ic.loaded) loadCache();
+    return ic.dialTone;
 }
 
 void Settings::setDialTone(int toneIndex) {
+    ic.dialTone = toneIndex;
     _prefs.putInt("dt_idx", toneIndex);
 }
 
 bool Settings::getHalfDuplex() {
-    return _prefs.getBool("half_duplex", true); // Default ON
+    if(!ic.loaded) loadCache();
+    return ic.halfDuplex;
 }
 
 void Settings::setHalfDuplex(bool enabled) {
+    ic.halfDuplex = enabled;
     _prefs.putBool("half_duplex", enabled);
 }
 
 int Settings::getLedDayBright() {
-    return _prefs.getInt("led_day_b", 100); // Default 100 (approx 40%)
+    if(!ic.loaded) loadCache();
+    return ic.ledDay;
 }
 
 void Settings::setLedDayBright(int bright) {
     if (bright < 0) bright = 0;
     if (bright > 255) bright = 255;
+    ic.ledDay = bright;
     _prefs.putInt("led_day_b", bright);
 }
 
 int Settings::getLedNightBright() {
-    return _prefs.getInt("led_night_b", 10); // Default 10 (very dim)
+     if(!ic.loaded) loadCache();
+    return ic.ledNight;
 }
 
 void Settings::setLedNightBright(int bright) {
     if (bright < 0) bright = 0;
     if (bright > 255) bright = 255;
+    ic.ledNight = bright;
     _prefs.putInt("led_night_b", bright);
 }
 
 int Settings::getNightStartHour() {
-    return _prefs.getInt("night_start", 22); // 22:00
+    if(!ic.loaded) loadCache();
+    return ic.nightStart;
 }
 
 void Settings::setNightStartHour(int hour) {
     if (hour < 0) hour = 0;
     if (hour > 23) hour = 23;
+    ic.nightStart = hour;
     _prefs.putInt("night_start", hour);
 }
 
 int Settings::getNightEndHour() {
-    return _prefs.getInt("night_end", 6); // 06:00
+    if(!ic.loaded) loadCache();
+    return ic.nightEnd;
 }
 
 void Settings::setNightEndHour(int hour) {
     if (hour < 0) hour = 0;
     if (hour > 23) hour = 23;
+    ic.nightEnd = hour;
     _prefs.putInt("night_end", hour);
 }
 
 String Settings::getLanguage() {
-    return _prefs.getString("lang", "de");
+    if(!ic.loaded) loadCache();
+    return ic.lang;
 }
 
 void Settings::setLanguage(String lang) {
     if (lang != "de" && lang != "en") lang = "de";
+    ic.lang = lang;
     _prefs.putString("lang", lang);
 }
 
 void Settings::clear() {
     _prefs.clear();
+    ic.loaded = false;
+    _cacheLoaded = false;
 }

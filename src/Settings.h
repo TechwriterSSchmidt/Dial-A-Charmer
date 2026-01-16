@@ -65,6 +65,17 @@ public:
 private:
     Preferences _prefs;
     const char* _ns = CONF_PREFS_NS;
+    
+    // RAM Cache to prevent NVS saturation/crashes
+    struct AlarmCache { 
+        int8_t h; 
+        int8_t m; 
+        bool en; 
+    };
+    AlarmCache _alarms[7];
+    bool _cacheLoaded = false;
+    
+    void loadCache();
 };
 
 extern Settings settings; // Global instance

@@ -32,8 +32,8 @@ void LedManager::setMode(Mode mode) {
 void LedManager::update() {
     unsigned long now = millis();
     
-    // Framerate Begrenzung (ca. 60 FPS)
-    if (now - _lastUpdate < 16) return;
+    // Framerate Begrenzung (ca. 30 FPS saves CPU/RMT load)
+    if (now - _lastUpdate < 33) return; 
     _lastUpdate = now;
 
     float brightness = 0;
@@ -41,9 +41,9 @@ void LedManager::update() {
 
     switch (_currentMode) {
         case OFF:
+             setColor(0,0,0); return; 
         case FULL_ON:
-            // Statisch, nichts zu tun
-            return;
+             setColor(255,255,255); return;
 
         case IDLE_GLOW:
             // Vintage Glühfaden: Warmes Orange/Gold (255, 120, 0)
@@ -58,7 +58,7 @@ void LedManager::update() {
 
         case CONNECTING:
             // Cyan/Blau für Verbindung/Wait
-            _pulsePhase += 0.05; 
+            _pulsePhase += 0.10; // Faster for 30fps
             if (_pulsePhase > 6.283) _pulsePhase -= 6.283;
             
             brightness = 10 + (int)((sin(_pulsePhase) + 1.0) / 2.0 * 100.0);
@@ -74,7 +74,7 @@ void LedManager::update() {
 
         case ALARM_CLOCK:
             // Warmweißes Pulsieren
-            _pulsePhase += 0.10; 
+            _pulsePhase += 0.20; 
             if (_pulsePhase > 6.283) _pulsePhase -= 6.283;
             
             brightness = (int)((sin(_pulsePhase) + 1.0) / 2.0 * 255.0);
@@ -88,7 +88,7 @@ void LedManager::update() {
 
         case TIMER_ALERT:
             // Schnelles rotes Pulsieren
-            _pulsePhase += 0.20; // Sehr schnell
+            _pulsePhase += 0.40; 
             if (_pulsePhase > 6.283) _pulsePhase -= 6.283;
             
             brightness = (int)((sin(_pulsePhase) + 1.0) / 2.0 * 255.0);
@@ -111,7 +111,11 @@ void LedManager::update() {
 }
 
 void LedManager::setColor(uint8_t r, uint8_t g, uint8_t b) {
+    // Delta Check: Don't write to RMT if color matches (saves CPU/Crash Risk)
+    uint32_t newColor = _pixels.Color(r, g, b);
+    if (_pixels.getPixelColor(0) == newColor) return;
+
     // Da wir nur 1 Pixel haben: Index 0
-    _pixels.setPixelColor(0, _pixels.Color(r, g, b));
+    _pixels.setPixelColor(0, newColor);
     _pixels.show();
 }

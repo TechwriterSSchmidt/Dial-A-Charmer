@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <FS.h>
+#include <SPIFFS.h>
 #include <vector>
 #include <algorithm>
 #include <random>
@@ -932,6 +933,12 @@ void setup() {
     settings.begin();
     ledManager.begin();
     ledManager.setMode(LedManager::CONNECTING); // Start sequence
+    
+    // Init SPIFFS for Phonebook
+    if(!SPIFFS.begin(true)){
+        Serial.println("SPIFFS Mount Failed");
+    }
+
     phonebook.begin(); // Load Phonebook from SPIFFS
     timeManager.begin(); // Added TimeManager
     

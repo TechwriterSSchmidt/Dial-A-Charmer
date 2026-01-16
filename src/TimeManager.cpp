@@ -28,8 +28,9 @@ void TimeManager::loop() {
     // 2. NTP Sync Check (If WiFi is there)
     if (WiFi.status() == WL_CONNECTED) {
         // configTime keeps syncing in background, we just check if we have time
+        // Use non-blocking overload (tm struct, ms timeout)
         struct tm timeinfo;
-        if (::getLocalTime(&timeinfo)) {
+        if (::getLocalTime(&timeinfo, 0)) {
             _currentSource = NTP;
         }
     } else {
@@ -117,7 +118,7 @@ String TimeManager::getAlarmString() {
 }
 
 bool TimeManager::checkAlarmTrigger() {
-    // Limit checks to once per second to prevent NVS saturation/crashes
+    // Limit checks to prevent NVS saturation (though now Cached)
     static unsigned long lastCheck = 0;
     if (millis() - lastCheck < 1000) return false;
     lastCheck = millis();

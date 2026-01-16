@@ -76,10 +76,15 @@ private:
     bool _initialized = false;
 
     bool writeReg(uint8_t reg, uint8_t val) {
-        Wire.beginTransmission(ES8311_ADDR);
-        Wire.write(reg);
-        Wire.write(val);
-        return (Wire.endTransmission() == 0);
+        for(int i=0; i<3; i++) {
+            Wire.beginTransmission(ES8311_ADDR);
+            Wire.write(reg);
+            Wire.write(val);
+            if(Wire.endTransmission() == 0) return true;
+            delay(10);
+        }
+        Serial.printf("ES8311 Write Failed: Reg 0x%02X Val 0x%02X\n", reg, val);
+        return false;
     }
 };
 
