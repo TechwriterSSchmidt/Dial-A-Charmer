@@ -183,6 +183,7 @@ void WebManager::handleSave() {
     if (_server.hasArg("tz")) settings.setTimezoneOffset(_server.arg("tz").toInt());
     if (_server.hasArg("gemini")) settings.setGeminiKey(_server.arg("gemini"));
     if (_server.hasArg("vol")) settings.setVolume(_server.arg("vol").toInt());
+    if (_server.hasArg("base_vol")) settings.setBaseVolume(_server.arg("base_vol").toInt());
     
     // LED Settings
     if (_server.hasArg("led_day")) {
@@ -262,8 +263,11 @@ String WebManager::getHtml() {
     html += "</div>";
 
     html += "<div class='card'><h3>Audio Settings</h3>";
-    html += "<label>Volume (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
+    html += "<label>Handset Volume (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
     html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    
+    html += "<label>Ringer Volume (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
+    html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     html += "</div>";
 
     html += "<div class='card'><h3>LED Settings</h3>";
