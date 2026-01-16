@@ -1,5 +1,16 @@
 # Release Notes - Dial-A-Charmer
 
+## v1.4.0 (2026-01-16)
+- **Deployment & Updates**:
+  - **OTA / Web Installer**: Implemented GitHub Actions workflow for automated firmware builds and "Web Installer" deployment.
+  - **Browser-based Flashing**: Updates can now be installed directly via browser (WebSerial).
+- **Web Interface**:
+  - **Dual Volume Control**: Added separate volume sliders for **Handset** (Compliments) and **Ringer** (Alarm/Timer).
+  - **Expanded Range**: Full 0-42 volume range enabled for both outputs.
+- **Content & TTS**:
+  - **Text Optimization**: Optimized text sources (`badran.txt`, `yoda.txt`, `trump.txt`, `neutral.txt`) for Text-to-Speech engines (removed special chars, improved pause punctuation).
+  - **Content Expansion**: Added ~400 new lines of dialogue across all personas.
+
 ## v1.3.0 (2026-01-15)
 - **Stability Fixes**:
   - **Crash Fix**: Resolved critical conflict between Audio I2S driver and FastLED by migrating status LEDs to **Adafruit NeoPixel** library.

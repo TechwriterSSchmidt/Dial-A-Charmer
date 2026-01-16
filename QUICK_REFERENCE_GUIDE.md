@@ -52,7 +52,9 @@ Once connected (either directly or if the device is in your home WiFi), open:
 **Configurable Options:**
 - **WiFi Settings**: Connect Dial-A-Charmer to your home network.
 - **Time Settings**: Set your timezone offset.
-- **Audio Settings**: Adjustable Base Volume (0-42).
+- **Audio Settings**: 
+  - **Handset Volume**: Adjust the volume for voice/compliments (0-42).
+  - **Ringer Volume**: Adjust the volume for alarms and timers (0-42).
 - **LED Settings**: 
   - **Day Brightness**: 0-42
   - **Night Brightness**: 0-42

@@ -2,6 +2,8 @@
 
 Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on? Created for my mentor Sandra, whose nerdiness and warmth outshine even the fanciest electronics.
 
+**Easy to Install:** No coding skills required! Use the [Web Installer](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/) to flash your ESP32 directly from the browser. Future updates can be done wirelessly via OTA (Over-The-Air) using the [latest firmware file](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/firmware.bin).
+
 ## Support my projects
 
 If you like this project, consider a tip. Your tip motivates me to continue developing useful stuff for the DIY community. Thank you very much for your support!
@@ -174,9 +176,7 @@ The system uses specific WAV files in `/system/` for feedback:
 *   **Dial logic:** Implement phone book for special functionalities such as `voice menu` and a number to call Gemini chat bot or time announcement 
 *   **Dial TTS voice Menu:** Implement a classic `dial a number` menu to turn on/off services such as alarms or to enable/disable snooze or to change the ringtone and other basic functions.
 *   **Snooze functionality:** Implement `put handset aside for snooze` option. Snooze time should be selectable in the Webinterface.
-*   **Webinterface:** Add separate volume control for base speaker and handset
 *   **Main Code:** AGC for mic and, if possible, AEC for Gemini AI usage
-*   **OTA:** Update with GitHub runner same as Chain Juicer
 
 ## Maintenance
 
