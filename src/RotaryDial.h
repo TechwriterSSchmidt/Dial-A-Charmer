@@ -5,7 +5,7 @@
 
 class RotaryDial {
 public:
-    RotaryDial(int pulsePin, int hookPin, int extraButtonPin);
+    RotaryDial(int pulsePin, int hookPin, int extraButtonPin, int modePin = -1);
     void begin();
     void loop();
     
@@ -21,6 +21,7 @@ private:
     int _pulsePin;
     int _hookPin;
     int _btnPin;
+    int _modePin;
     
     // Debounce & Pulse Counting
     int _pulseCount = 0;

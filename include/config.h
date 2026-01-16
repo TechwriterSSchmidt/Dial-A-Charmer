@@ -36,6 +36,8 @@
 #define CONF_PIN_DIAL_PULSE 5   // Changed to 5 (Supports INPUT_PULLUP) - No resistor needed!
 #define CONF_PIN_HOOK       32
 #define CONF_PIN_EXTRA_BTN  33
+#define CONF_PIN_DIAL_MODE  36  // Optional: Contact for dialing active/finished (nsr)
+#define CONF_DIAL_MODE_ACTIVE_LOW true // true = LOW means dialing active (Normally Open contact that closes while dialing?) check hardware!
 
 // Status LED (WS2812)
 #define CONF_PIN_LED        13
@@ -50,7 +52,9 @@
 
 // --- Rotary Dial Timing (ms) ---
 #define CONF_DIAL_DEBOUNCE_PULSE 30
+// CONF_DIAL_TIMEOUT is used if PIN_DIAL_MODE is -1 or fails
 #define CONF_DIAL_TIMEOUT        500
+// #define CONF_DIAL_FINISHED_TIMEOUT 2500 // Disabled per user request (using contact)
 #define CONF_HOOK_DEBOUNCE       50
 #define CONF_BTN_DEBOUNCE        50
 

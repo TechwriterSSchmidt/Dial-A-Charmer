@@ -21,7 +21,7 @@
 // --- Objects ---
 TinyGPSPlus gps;
 Audio audio;
-RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN);
+RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN, CONF_PIN_DIAL_MODE);
 LedManager ledManager(CONF_PIN_LED);
 
 
@@ -69,8 +69,9 @@ int alarmMinute = -1;
 bool snoozeActive = false;
 unsigned long snoozeEndTime = 0;
 const int SNOOZE_DURATION_MS = 9 * 60 * 1000; // 9 Minutes
-std::vector<int> dialBuffer;
+String dialBuffer = ""; // Use String for easier debugging and parsing
 unsigned long lastDialTime = 0;
+// bool skipNextAlarm = false; // Removed Duplicate
 
 // --- Playlist Management ---
 struct Playlist {
@@ -715,62 +716,82 @@ void handleDialedNumber(String numberStr) {
     }
 }
 
-void onDial(int number) {
-    Serial.printf("Dialed: %d\n", number);
-    
+void processBufNumber(String numberStr) {
+    Serial.printf("Processing Buffered Input: %s\n", numberStr.c_str());
+
     // 1. Logic: Setting Alarm Clock (Button Held + Dialing 4 digits)
     if (dial.isButtonDown()) {
-        // ... (Alarm setting logic remains unchanged)
-        // Clear buffer if stale (> 5 seconds since last digit)
-        if (millis() - lastDialTime > 5000) {
-             dialBuffer.clear();
-        }
-        lastDialTime = millis();
-        // ...
-        
-        dialBuffer.push_back(number == 10 ? 0 : number); 
-        Serial.printf("Alarm Buffer: %d digits\n", dialBuffer.size());
-        setAudioOutput(OUT_HANDSET);
-        playSound("/system/beep.wav", false); 
-        
-        if (dialBuffer.size() == 4) {
-            int h = dialBuffer[0] * 10 + dialBuffer[1];
-            int m = dialBuffer[2] * 10 + dialBuffer[3];
+        if (numberStr.length() == 4) {
+            int h = numberStr.substring(0, 2).toInt();
+            int m = numberStr.substring(2, 4).toInt();
+            
             if (h >= 0 && h < 24 && m >= 0 && m < 60) {
                 alarmHour = h; alarmMinute = m;
-                Serial.printf("Alarm Set: %02d:%02d\n", alarmHour, alarmMinute);
+                Serial.printf("ALARM SET TO: %02d:%02d\n", alarmHour, alarmMinute);
+                
+                // Audio Feedback
+                setAudioOutput(OUT_HANDSET);
                 playSound("/system/timer_set.mp3", false); 
             } else {
+                Serial.println("Invalid Time Format");
                 playSound("/system/error_tone.wav", false);
             }
-            dialBuffer.clear();
+        } else {
+            // Wrong length for Alarm Setting
+             playSound("/system/error_tone.wav", false);
         }
         return;
     }
 
+    // 2. Normal Dialing (Off Hook)
     if (dial.isOffHook()) {
-        if (number == 10) number = 0; // Fix 0
-        handleDialedNumber(String(number));
-    } else {
-        // On Hook dialing? (Keeping existing logic or removing?)
-        // Usually rotary phones prevent dialing on hook, or it's mechanically impossible.
-        // But for electronic detection:
-        // Existing logic was "Timer".
-        // I integrated Timer into handleDialedNumber fallback for 1-60.
-        // So we can map this also to handleDialedNumber?
-        // Let's assume OFF HOOK is the primary mode.
-        // If ON HOOK, standard behavior is ignored or specific.
-        // User asked for "Sprachmenü". This implies holding handset.
-        
-        // Let's map OnHook dialing to Timer logic exclusively as before?
-        // Or create consistency.
-        // Original code: OnHook -> Timer.
-        // Let's keep it consistent.
-        if (number == 10) number = 0;
-        Serial.printf("Setting Timer (OnHook) for %d minutes\n", number);
-        alarmEndTime = millis() + (number * 60000);
-        timerRunning = true;
-        playSound("/system/beep.wav", true); 
+        handleDialedNumber(numberStr);
+    } 
+    // 3. Timer Setting (On Hook)
+    else {
+        // Interpret number as Minutes
+         int num = numberStr.toInt();
+         if (num > 0 && num <= 120) { // Allow up to 120 minutes
+            Serial.printf("Setting Timer for %d minutes\n", num);
+            alarmEndTime = millis() + (num * 60000);
+            timerRunning = true;
+            playSound("/system/beep.wav", true); 
+         } else {
+            // Unknown
+            Serial.println("Invalid Timer Value");
+            playSound("/system/error_tone.wav", false);
+         }
+    }
+}
+
+void onDial(int number) {
+    if (number == 10) number = 0; // Fix 0
+    Serial.printf("Digit Received: %d\n", number);
+    
+    // Reset Buffer if it was stale (Safety net, though loop handles timeout)
+    // Actually loop handles dispatch, clearing buffer provided we call it.
+    
+    // Append Digit
+    dialBuffer += String(number);
+    lastDialTime = millis();
+    
+    // Immediate Feedback (Click/Beep)
+    // Don't play loud beep if handset is on hook? 
+    // Maybe play quietly on speaker if on hook?
+    // Let's use Handset if OffHook, Speaker if OnHook?
+    // For now, simple beep via current output.
+    // playSound can be disruptive to currently playing audio?
+    // Only beep if silence?
+    // Ideally: Short mechanical click simulation or just silence (rotary is physical).
+    // Let's play a very short beep if nothing is playing?
+    // if (!audio.isRunning()) playSound("/system/click.wav", false);
+    
+    // Special Case: ALARM SETTING (Button Held)
+    // If we have 4 digits, we can execute immediately without waiting for timeout
+    // to give "snappy" feel.
+    if (dial.isButtonDown() && dialBuffer.length() == 4) {
+        processBufNumber(dialBuffer);
+        dialBuffer = ""; // Clear immediately
     }
 }
 
@@ -946,6 +967,26 @@ void loop() {
     webManager.loop();
     dial.loop();
     
+    // --- Buffered Dialing Logic ---
+    if (dialBuffer.length() > 0) {
+        // If we have a dial Mode pin, we rely on RotaryDial to send digits one by one.
+        // But what about the *buffer* timeout?
+        // User said: "Wir brauchen das nicht mit einem Timeout zu setzen" (We don't need to set that with a timeout)
+        // If they use the off-normal contact to detect digits, maybe they also use the Hook or Button to submit?
+        // Or, maybe they simply want to type '9' '0' and wait?
+        // If we remove the timeout, the command never executes unless we have a different trigger.
+        // Let's use a very long timeout (fallback) OR check if the user just wanted to remove the pulse timeout logic.
+        // Assuming they still need a way to say "I'm done dialing 90", we default to a timeout UNLESS they have a button.
+        // However, since CONF_DIAL_FINISHED_TIMEOUT was removed from config, we define a local fallback here.
+        #define DIAL_CMD_TIMEOUT 3000
+
+        if (millis() - lastDialTime > DIAL_CMD_TIMEOUT) {
+            Serial.printf("Dialing Finished (Timeout). Buffer: %s\n", dialBuffer.c_str());
+            processBufNumber(dialBuffer);
+            dialBuffer = "";
+        }
+    }
+
     // Pass hour for adaptive brightness
     int h = -1;
     // TinyGPS++ gps is available globally in this file

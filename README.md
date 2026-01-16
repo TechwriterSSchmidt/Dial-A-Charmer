@@ -31,6 +31,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | | **Alarm Clock** | Wake up to custom sounds or compliments. |
 | | **Kitchen Timer** | Set a countdown using the rotary dial (e.g., dial '12' for a perfect 12 minutes Pizza timer). |
 | **Interaction** | **Compliment Dispenser** | Dial specific numbers to hear compliments from different "personas". |
+| | **Multi-Language** | Supports **German** and **English** for both Voice and System prompts. |
 | | **Vintage Feel** | Uses original rotary dial and hook switch mechanics. |
 | **System** | **Standalone** | Operates completely independently without Home Assistant or external servers. |
 | | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple timezone/settings configuration. |
@@ -83,6 +84,7 @@ The device communicates distinct states via the integrated WS2812 LED using orga
 | **I2C Bus** | SDA | `GPIO 21` | Codec Configuration |
 | | SCL | `GPIO 22` | |
 | **Input** | Dial Pulse | `GPIO 5` | Input with Internal Pull-Up (No Resistor needed!) |
+| | Dial Mode | `GPIO 36` | Optional: Contact detecting rotation active (Input Only) |
 | | Hook Switch | `GPIO 32` | |
 | | Extra Button | `GPIO 33` | |
 | **GNSS (GPS)** | RX | `GPIO 35` | M10 Module |
@@ -181,11 +183,9 @@ The system uses specific WAV files in `/system/` for feedback:
 
 ## Future Options
 
-*   **Clock:** Add option to set individual alarms for for each day of the week via Webinterface 
-*   **Dial logic:** Implement multi-digit dialing to set longer timers and alarms.
-*   **Dial logic:** Implement phone book for special functionalities such as `voice menu` and a number to call Gemini chat bot or time announcement 
-*   **Dial TTS voice Menu:** Implement a classic `dial a number` menu to turn on/off services such as alarms or to enable/disable snooze or to change the ringtone and other basic functions.
-*   **Main Code:** AGC for mic and, if possible, AEC for Gemini AI usage
+*   **Clock:** Add option to set individual alarms for for each day of the week via Webinterface.
+*   **Voice Menu:** Implement a classic `dial a number` interactive voice menu to guide users through settings (e.g., "Press 1 to change Ringtone").
+*   **Media:** AGC for mic and, if possible, AEC for Gemini AI usage.
 
 ## Maintenance
 

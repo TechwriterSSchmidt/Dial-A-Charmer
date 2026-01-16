@@ -67,6 +67,8 @@ Once connected (either directly or if the device is in your home WiFi), open:
 👉 **http://dial-a-charmer.local**
 
 **Configurable Options:**
+- **General Settings**:
+  - **Language**: Switch system voice and prompts between **German** and **English**.
 - **WiFi Settings**: Connect Dial-A-Charmer to your home network.
 - **Time Settings**: Set your timezone offset.
 - **Audio Settings**: 

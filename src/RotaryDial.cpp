@@ -3,8 +3,8 @@
 
 RotaryDial* RotaryDial::_instance = nullptr;
 
-RotaryDial::RotaryDial(int pulsePin, int hookPin, int extraButtonPin) 
-    : _pulsePin(pulsePin), _hookPin(hookPin), _btnPin(extraButtonPin) {
+RotaryDial::RotaryDial(int pulsePin, int hookPin, int extraButtonPin, int modePin) 
+    : _pulsePin(pulsePin), _hookPin(hookPin), _btnPin(extraButtonPin), _modePin(modePin) {
     _instance = this;
 }
 
@@ -29,6 +29,10 @@ void RotaryDial::begin() {
     if (_hookPin >= 34 && _hookPin <= 39) pinMode(_hookPin, INPUT); else pinMode(_hookPin, INPUT_PULLUP);
     if (_btnPin >= 34 && _btnPin <= 39) pinMode(_btnPin, INPUT); else pinMode(_btnPin, INPUT_PULLUP); 
     
+    if (_modePin >= 0) {
+        if (_modePin >= 34 && _modePin <= 39) pinMode(_modePin, INPUT); else pinMode(_modePin, INPUT_PULLUP);
+    }
+
     attachInterrupt(digitalPinToInterrupt(_pulsePin), isrPulse, FALLING);
 }
 
@@ -36,16 +40,45 @@ void RotaryDial::loop() {
     unsigned long now = millis();
     
     // 1. Dial Logic
-    if (_dialing && (now - _lastPulseTime > CONF_DIAL_TIMEOUT)) {
-        // Timeout -> Digit Complete
-        _dialing = false;
-        int digit = _pulseCount;
-        if (digit > 9) digit = 0; 
-        if (digit == 10) digit = 0; 
+    // If Mode Pin is defined, we use it to determine "Finished" instead of Timeout
+    if (_modePin >= 0) {
+        bool modeActive = (digitalRead(_modePin) == (CONF_DIAL_MODE_ACTIVE_LOW ? LOW : HIGH));
         
-        _pulseCount = 0;
-        
-        if (_dialCallback) _dialCallback(digit);
+        // State Machine via Pin
+        if (modeActive) {
+            _dialing = true;
+            // We are dialing, just collect pulses (via ISR)
+            // Reset timeout timer just in case we fallback
+            _lastPulseTime = now; 
+        } else {
+            // Not dialing (Idle)
+            if (_dialing) {
+                // Falling Edge of "Dialing Active" -> Dailing Finished immediately
+                _dialing = false;
+                
+                // Process Digit
+                int digit = _pulseCount;
+                if (digit > 0) { // Only if we actually counted something
+                    if (digit > 9) digit = 0; 
+                    if (digit == 10) digit = 0; 
+                    if(_dialCallback) _dialCallback(digit);
+                }
+                _pulseCount = 0;
+            }
+        }
+    } else {
+        // Fallback: Timeout Logic
+        if (_dialing && (now - _lastPulseTime > CONF_DIAL_TIMEOUT)) {
+            // ... (Original Logic)
+            _dialing = false;
+            int digit = _pulseCount;
+            if (digit > 9) digit = 0; 
+            if (digit == 10) digit = 0; 
+            
+            _pulseCount = 0;
+            
+            if (_dialCallback) _dialCallback(digit);
+        }
     }
     
     // 2. Hook Logic
