@@ -272,30 +272,40 @@ String getNextTrack(int category) {
 
 
 // --- Helper Functions ---
-enum AudioOutput { OUT_HANDSET, OUT_SPEAKER };
-AudioOutput currentOutput = OUT_HANDSET;
+enum AudioOutput { OUT_NONE, OUT_HANDSET, OUT_SPEAKER };
+AudioOutput currentOutput = OUT_NONE;
 
 void setAudioOutput(AudioOutput target) {
     // Check if we need to switch
     if (currentOutput == target) return; 
     
     // Stop ensuring clean switch
-    if(audio.isRunning()) audio.stopSong();
+    if(audio.isRunning()) { 
+        audio.stopSong(); 
+        delay(100); // Give time for DMA to stop
+    }
+    
+    // Mute before switch to prevent pop?
+    // audioCodec.mute(true); // I2C is flaky
     
     if (target == OUT_HANDSET) {
         // Handset: Includes Mic (DIN) and MCLK
+        // NOTE: MCLK 0 is tricky. If issues persist, try -1 or check hardware strapping.
         audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT, CONF_I2S_DIN, CONF_I2S_MCLK);
+        delay(100); // Allow drivers to re-init
         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
-        Serial.println("Output: Handset");
+        Serial.printf("Output Switched: HANDSET (Vol: %d)\n", vol);
     } else {
         // Speaker: Output only (DIN=-1, MCLK=-1)
         audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, -1);
+        delay(100); // Allow drivers to re-init
         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
-        Serial.println("Output: Speaker");
+        Serial.printf("Output Switched: SPEAKER (Vol: %d)\n", vol);
     }
     currentOutput = target;
+    // audioCodec.mute(false);
 }
 
 void playSound(String filename, bool useSpeaker = false) {
@@ -1018,10 +1028,20 @@ void loop() {
     }
 
     // --- LED Updates ---
-    TimeManager::DateTime dt = timeManager.getLocalTime();
-    int h = dt.valid ? dt.hour : -1;
+    // Throttle LED updates to prevent starving the Audio loop
+    static unsigned long lastLedUpdate = 0;
     
-    ledManager.update();
+    // STRICT MODE: DISABLE LEDS WHEN AUDIO IS RUNNING
+    // This prevents RMT interrupts from crashing I2S
+    bool isAudioRunning = audio.isRunning();
+    unsigned long ledInterval = (isAudioRunning) ? 999999 : 50; 
+
+    if (millis() - lastLedUpdate > ledInterval && !isAudioRunning) {
+        lastLedUpdate = millis();
+        TimeManager::DateTime dt = timeManager.getLocalTime();
+        int h = dt.valid ? dt.hour : -1;
+        ledManager.update();
+    }
     
     // LED State Logic
     if (isAlarmRinging) {
@@ -1050,6 +1070,8 @@ void loop() {
     }
     
     // --- HALF-DUPLEX AEC ---
+    // DISABLED TEMPORARILY due to I2C Errors causing potential instability
+    /*
     static bool wasAudioRunning = false;
     bool isAudioRunning = audio.isRunning();
     
@@ -1067,7 +1089,8 @@ void loop() {
         audioCodec.muteMic(false);
     }
     wasAudioRunning = isAudioRunning;
-    
+    */
+
     // --- AP Mode Long Press ---
     static unsigned long btnPressStart = 0;
     if (dial.isButtonDown()) {
