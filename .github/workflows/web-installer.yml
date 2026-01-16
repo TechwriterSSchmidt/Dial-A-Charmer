@@ -39,39 +39,12 @@ jobs:
       - name: Prepare Web Installer
         run: |
           mkdir public
-          
-          # Debug: List workspace contents to ensure web-installer exists
-          echo "Listing workspace root:"
-          ls -F
-          
-          # Copy web installer files if they exist, otherwise ignore
-          if [ -d "web-installer" ]; then
-            echo "Copying web-installer files..."
-            cp -v web-installer/* public/
-          else
-             echo "ERROR: web-installer directory NOT found!"
-          fi
-          
-          # Copy firmware binaries
-          # Check if the build directory exists
-          if [ -d ".pio/build/lolin_d32_pro" ]; then
-            cp .pio/build/lolin_d32_pro/bootloader.bin public/ || true
-            cp .pio/build/lolin_d32_pro/partitions.bin public/ || true
-            cp .pio/build/lolin_d32_pro/firmware.bin public/ || true
-          else
-            echo "Build directory not found!"
-            exit 1
-          fi
-          
+          cp web-installer/* public/
+          cp .pio/build/lolin_d32_pro/bootloader.bin public/
+          cp .pio/build/lolin_d32_pro/partitions.bin public/
+          cp .pio/build/lolin_d32_pro/firmware.bin public/
           # boot_app0.bin is part of the framework. Use wildcard to handle versioned directories.
-          find ~/.platformio/packages/framework-arduinoespressif32* -name boot_app0.bin -exec cp {} public/ \; -quit
-          
-          # Create .nojekyll to bypass Jekyll processing
-          touch public/.nojekyll
-          
-          # Debug: List public folder content
-          echo "Content of public folder to be deployed:"
-          ls -R public/
+          find ~/.platformio/packages/framework-arduinoespressif32* -name boot_app0.bin -exec cp {} public/ \;
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
