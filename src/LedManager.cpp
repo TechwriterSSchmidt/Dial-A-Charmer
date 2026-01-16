@@ -39,38 +39,52 @@ void LedManager::update() {
             return;
 
         case IDLE_GLOW:
-            // Vintage Glühfaden: Warmes Orange/Gold (255, 140, 0)
+            // Vintage Glühfaden: Warmes Orange/Gold (255, 120, 0)
             // Leichtes Flackern für Realismus
-            brightness = 20 + random(0, 5); 
+            brightness = 15 + random(0, 10); 
             // Skaliere Farbe basierend auf Helligkeit
             r = (255 * brightness) / 255;
-            g = (100 * brightness) / 255; // Weniger Grün macht es oranger
+            g = (100 * brightness) / 255; // Mehr rotteil
             b = 0;
             setColor(r, g, b);
             break;
 
-        case BREATHE_SLOW:
-            // Cyan/Blau für Verbindung/Wait oder Warmweiß für Snooze
+        case CONNECTING:
+            // Cyan/Blau für Verbindung/Wait
             _pulsePhase += 0.05; 
             if (_pulsePhase > 6.283) _pulsePhase -= 6.283;
             
-            // Helligkeit 10 bis 150
-            brightness = 10 + (int)((sin(_pulsePhase) + 1.0) / 2.0 * 140.0);
-            
-            // Gold passend zum Thema
-            r = (255 * ((int)brightness)) / 255;
-            g = (160 * ((int)brightness)) / 255;
-            b = (20 * ((int)brightness)) / 255;
-            setColor(r, g, b);
+            brightness = 10 + (int)((sin(_pulsePhase) + 1.0) / 2.0 * 100.0);
+            // Teal/Cyan
+            setColor(0, brightness, brightness);
             break;
 
-        case BREATHE_FAST:
-            // ALARM: Rot (255, 0, 0)
-            _pulsePhase += 0.15; 
+        case SNOOZE_MODE:
+            // Warmweißes Dauerleuchten (Stabil)
+            // Warm White: 255, 220, 100
+            setColor(100, 80, 20); // Gedimmt aber stabil
+            break;
+
+        case ALARM_CLOCK:
+            // Warmweißes Pulsieren
+            _pulsePhase += 0.10; 
             if (_pulsePhase > 6.283) _pulsePhase -= 6.283;
             
             brightness = (int)((sin(_pulsePhase) + 1.0) / 2.0 * 255.0);
             
+            // Warm White R,G,B logic
+            r = brightness;
+            g = (uint8_t)((200.0/255.0) * brightness);
+            b = (uint8_t)((50.0/255.0) * brightness);
+            setColor(r, g, b);
+            break;
+
+        case TIMER_ALERT:
+            // Schnelles rotes Pulsieren
+            _pulsePhase += 0.20; // Sehr schnell
+            if (_pulsePhase > 6.283) _pulsePhase -= 6.283;
+            
+            brightness = (int)((sin(_pulsePhase) + 1.0) / 2.0 * 255.0);
             setColor((int)brightness, 0, 0);
             break;
 

@@ -61,6 +61,16 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Behavior:** Ringtones play, Vibration motor activates, LED flashes.
 *   **Stop:** Lift the handset or toggle the hook switch to reset and silence.
 
+### 4. LED Signaling (Visual Interface)
+The device communicates distinct states via the integrated WS2812 LED using organic, vintage-style animations:
+
+*   **Boot / Connecting:** Breathing Slow (Blue/Teal & Gold Mix).
+*   **Idle / Ready:** Vintage Filament Glow (Flickering Warm Orange/Gold).
+*   **Alarm Clock (Ringing):** Pulsing Warm White.
+*   **Timer (Alert):** Fast Pulsing Red (Panic Mode).
+*   **Snooze Mode:** Solid Warm White (Steady Glow).
+*   **Error / Missing SD:** SOS Pattern (Red).
+
 ## Hardware Support & Pinout
 
 **Target Board:** Wemos Lolin D32 Pro (ESP32)

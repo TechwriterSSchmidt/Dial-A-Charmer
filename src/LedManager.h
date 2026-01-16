@@ -8,10 +8,12 @@ class LedManager {
 public:
     enum Mode {
         OFF,            // Komplett aus
-        IDLE_GLOW,      // Warmes, goldenes Glimmen
-        BREATHE_SLOW,   // Langsames Pulsieren (Blau/Gold) - Verbinden/Snooze
-        BREATHE_FAST,   // Schnelles rotes Pulsieren - Alarm
-        FULL_ON,        // Weißes Licht (Taschenlampe/Test)
+        IDLE_GLOW,      // Warmes, goldenes Glimmen (Flackernd)
+        CONNECTING,     // Langsames Pulsieren (Blau/Gold)
+        SNOOZE_MODE,    // Warmweißes Dauerleuchten
+        ALARM_CLOCK,    // Warmweißes Pulsieren
+        TIMER_ALERT,    // Schnelles rotes Pulsieren
+        FULL_ON,        // Test/Flashlight
         SOS             // Rotes SOS Signal
     };
 
