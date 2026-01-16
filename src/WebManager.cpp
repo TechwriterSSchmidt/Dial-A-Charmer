@@ -1,5 +1,5 @@
 #include "WebManager.h"
-#include "LedStatus.h"
+#include "LedManager.h"
 #include "PhonebookManager.h"
 #include <ESPmDNS.h>
 
@@ -200,7 +200,7 @@ void WebManager::handleSave() {
     if (_server.hasArg("night_start")) settings.setNightStartHour(_server.arg("night_start").toInt());
     if (_server.hasArg("night_end")) settings.setNightEndHour(_server.arg("night_end").toInt());
 
-    statusLed.reloadSettings(); // Apply new LED settings immediately
+    ledManager.reloadSettings(); // Apply new LED settings immediately
 
     String html = "<html><body><h1>Saved!</h1>";
     if (wifiChanged) {

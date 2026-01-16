@@ -18,9 +18,10 @@ public:
     String getTTSUrl(String text);
     
     bool hasApiKey();
+    String callGemini(String prompt);
 
 private:
-    String callGemini(String prompt);
+
 };
 
 extern AiManager ai;

@@ -28,6 +28,7 @@ public:
     void removeEntry(String number);
     String getJson(); 
     void saveFromJson(String jsonString);
+    void saveAll(JsonObject json); // New method
 
 private:
     const char* _filename = "/phonebook.json";

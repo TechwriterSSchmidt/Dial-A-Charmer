@@ -12,6 +12,13 @@ void LedManager::begin() {
     _pixels.show(); // Alles aus initial
 }
 
+void LedManager::reloadSettings() {
+    // Placeholder - refresh LED state if needed
+    if (_currentMode != OFF) {
+        _pixels.show();
+    }
+}
+
 void LedManager::setMode(Mode mode) {
     if (_currentMode != mode) {
         _currentMode = mode;

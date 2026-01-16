@@ -29,8 +29,19 @@ LedManager ledManager(CONF_PIN_LED);
 bool sdAvailable = false;
 bool audioCodecAvailable = false;
 
-// Loop Alarm Sound
-bool isTimerRinging = false; // Flag to distinguish Alarm Clock from Timer
+// --- Globals (Moved Up) ---
+unsigned long alarmEndTime = 0;
+bool timerRunning = false;
+bool isAlarmRinging = false;
+bool isTimerRinging = false; 
+bool isTimerActiveRinging = false; 
+
+// Alarm Control Flags
+bool alarmsEnabled = true;
+bool skipNextAlarm = false;
+
+unsigned long alarmRingingStartTime = 0;
+int currentAlarmVol = 0;
 
 void startAlarm() {
   // Overloaded for backward compatibility if needed, but we changed logic
@@ -46,15 +57,10 @@ void startAlarm() {
 // Actual implementation (moved logic here or kept separate? Wait, tool failure above meant I probably didn't replace the declaration)
 // Let's fix the variable declaration block cleanly.
 
-// --- Globals ---
-unsigned long alarmEndTime = 0;
-bool timerRunning = false;
-bool isAlarmRinging = false;
-// NEW FLAG
-bool isTimerActiveRinging = false; 
-
-unsigned long alarmRingingStartTime = 0;
-int currentAlarmVol = 0;
+// --- Globals (Deleted) ---
+// Moved up to fix scope issues
+// unsigned long alarmEndTime = 0; ...
+// ...
 // ...
 
 // Alarm Clock
@@ -539,23 +545,75 @@ void handleAlarmLogic() {
 }
 
 // --- Callbacks ---
+
+// Helper to format IP for speech
+String formatIpForSpeech(IPAddress ip) {
+    String s = ip.toString();
+    s.replace(".", " punkt ");
+    return s;
+}
+
+void executePhonebookFunction(String func, String param) {
+    Serial.printf("Executing Function: %s [%s]\n", func.c_str(), param.c_str());
+
+    if (func == "ANNOUNCE_TIME" || func == "SPEAK_TIME") {
+        speakTime();
+    }
+    else if (func == "COMPLIMENT_MIX") {
+        speakCompliment(0);
+    }
+    else if (func == "COMPLIMENT_CAT") {
+        // Param should contain the int ID (1-4)
+        int cat = param.toInt();
+        speakCompliment(cat > 0 ? cat : 0);
+    }
+    else if (func == "SYSTEM_STATUS") {
+        String statusText = "System Status. ";
+        statusText += "WLAN Signalstärke " + String(WiFi.RSSI()) + " Dezibel. ";
+        statusText += "IP Adresse ist " + formatIpForSpeech(WiFi.localIP()) + ". ";
+        statusText += "Speicherplatz frei: " + String(ESP.getFreeHeap() / 1024) + " Kilobyte.";
+        
+        // Speak via AI TTS (assuming Gemini/TTS is available) or basic status. Only works if AI is active.
+        if (ai.hasApiKey()) {
+             String ttsUrl = ai.getTTSUrl(statusText);
+             setAudioOutput(OUT_HANDSET);
+             audio.connecttohost(ttsUrl.c_str());
+        } else {
+             Serial.println(statusText);
+             // Fallback: Just beep
+             playSound("/system/beep.wav", false);
+        }
+    }
+    else if (func == "TOGGLE_ALARMS") {
+        alarmsEnabled = !alarmsEnabled;
+        String msg = alarmsEnabled ? "Alle Alarme sind nun aktiviert." : "Alle Alarme wurden deaktiviert.";
+        if (ai.hasApiKey()) {
+            audio.connecttohost(ai.getTTSUrl(msg).c_str());
+        }
+    }
+    else if (func == "SKIP_NEXT_ALARM") {
+        skipNextAlarm = true;
+        String msg = "Der nächste geplante Alarm wird übersprungen.";
+         if (ai.hasApiKey()) {
+            audio.connecttohost(ai.getTTSUrl(msg).c_str());
+        }
+    }
+    else {
+        Serial.println("Unknown Function type");
+    }
+}
+
 // Central Logic for Dialed Numbers (Phonebook + Features)
 void handleDialedNumber(String numberStr) {
-    auto entry = phonebook.getEntry(numberStr);
+    
+    // Check Phonebook First
+    PhonebookEntry entry = phonebook.getEntry(numberStr);
     
     if (entry.type.length() > 0) {
         Serial.printf("Phonebook Match: %s (%s)\n", entry.name.c_str(), entry.type.c_str());
         
         if (entry.type == "FUNCTION") {
-            if (entry.value == "COMPLIMENT_CAT" || entry.value == "COMPLIMENT_MIX") {
-                // Call old SpeakCompliment logic with CAT ID (stored in parameter)
-                // Assuming param is int category
-                int cat = entry.parameter.toInt();
-                speakCompliment(cat);
-            }
-            else if (entry.value == "SPEAK_TIME") {
-                speakTime();
-            }
+             executePhonebookFunction(entry.value, entry.parameter);
         }
         else if (entry.type == "AUDIO") {
             // Play specific file
@@ -563,20 +621,58 @@ void handleDialedNumber(String numberStr) {
              playSound(entry.value, false);
         }
         else if (entry.type == "TTS") {
-            // TODO: Simple static TTS via Google? Or reuse Gemini?
              Serial.printf("TTS Req: %s\n", entry.value.c_str());
              if (ai.hasApiKey()) {
-                 String url = ai.getTTSUrl(entry.value);
-                 audio.connecttohost(url.c_str());
+                 // Add parameter hint (e.g. style) if needed
+                 String text = entry.value; 
+                 // If value is a prompt (not direct text), we might need to ask Gemini first?
+                 // But Current Phonebook Spec says "value" is the prompt / text.
+                 // Let's assume for "TTS" type we feed it to Gemini to generate the audio, 
+                 // OR if it's static text, we just read it (via Google TTS).
+                 // For "Admin Menu" text, we want direct TTS.
+                 // For "Make a joke", we want Gemini Generation.
+                 
+                 // Distinction: Is it a Prompt or Text to Read?
+                 // If Type is TTS, we assume it is TEXT TO READ directly (like Menu).
+                 // If we want generation, we should use a FUNCTION "GEMINI_PROMPT" or similar?
+                 // Or we detect based on content?
+                 // Current implementation of 'getCompliment' generates.
+                 // Let's keep it simple: TTS type = Direct Speech. 
+                 // If phonebook has "Erzähle einen Witz", that's a prompt for generation.
+                 // Let's change those defaults to FUNCTION "AI_PROMPT" or handle TTS as prompt?
+                 
+                 // Refined Logic based on user request:
+                 // The "Nerd Joke" entry 5 has value "Erzähle einen Witz". This is a PROMPT.
+                 // The "Admin Menu" entry 9 has "Willkommen...". This is TEXT.
+                 
+                 // HEURISTIC: If value starts with "Erzähle", "Sag", "Generiere", "Gib" -> Prompt.
+                 // Otherwise -> Read.
+                 String v = entry.value;
+                 if (v.startsWith("Erzähle") || v.startsWith("Sag") || v.startsWith("Generiere") || v.startsWith("Gib")) {
+                     // Generate
+                      String generated = ai.callGemini(v); // We need to expose callGemini publicly or add method
+                      if(generated.length() > 0) {
+                          audio.connecttohost(ai.getTTSUrl(generated).c_str());
+                      }
+                 } else {
+                     // Read directly
+                     audio.connecttohost(ai.getTTSUrl(v).c_str());
+                 }
              }
         }
     } else {
-        // Unknown Number
-        Serial.println("Unknown Number Dialed");
-        // Fallback or specific reaction?
-        // Default behavior for 1-4 was handled by phonebook defaults now.
-        // If unknown:
-        playSound("/system/error_tone.wav", false);
+        // Fallback for Timer setting (1-60)
+         int num = numberStr.toInt();
+         if (num > 0 && num <= 60 && numberStr.length() <= 2) {
+            Serial.printf("Setting Timer for %d minutes\n", num);
+            alarmEndTime = millis() + (num * 60000);
+            timerRunning = true;
+            playSound("/system/beep.wav", true); 
+         } else {
+            // Unknown
+            Serial.println("Unknown Number Dialed");
+            playSound("/system/error_tone.wav", false);
+         }
     }
 }
 
@@ -592,9 +688,6 @@ void onDial(int number) {
         }
         lastDialTime = millis();
         // ...
-        // Re-injecting alarm logic in next edit if needed, or keeping it?
-        // Wait, I am replacing ON DIAL. I need to keep the alarm logic!
-        // Let me copy the alarm logic from context or previous reads.
         
         dialBuffer.push_back(number == 10 ? 0 : number); 
         Serial.printf("Alarm Buffer: %d digits\n", dialBuffer.size());
@@ -617,20 +710,25 @@ void onDial(int number) {
     }
 
     if (dial.isOffHook()) {
-        // Dialing while off-hook -> Phonebook Lookup
-        // Convert int number to String. But what about multi-digit dialing? 
-        // For now, the library gives us single digits.
-        // We need a buffer for normal dialing too if we want "110"?
-        // Current requirement: "1-4" works.
-        // Let's stick to single digit instant Execution for v1.5, OR introduce a short delay?
-        // Rotary phones are slow. 
-        // Let's implement single digit mapping first as requested (0-4).
-        
-        handleDialedNumber(String(number == 10 ? 0 : number));
-        
+        if (number == 10) number = 0; // Fix 0
+        handleDialedNumber(String(number));
     } else {
-        // Timer Logic (On Hook)
-        Serial.printf("Setting Timer for %d minutes\n", number);
+        // On Hook dialing? (Keeping existing logic or removing?)
+        // Usually rotary phones prevent dialing on hook, or it's mechanically impossible.
+        // But for electronic detection:
+        // Existing logic was "Timer".
+        // I integrated Timer into handleDialedNumber fallback for 1-60.
+        // So we can map this also to handleDialedNumber?
+        // Let's assume OFF HOOK is the primary mode.
+        // If ON HOOK, standard behavior is ignored or specific.
+        // User asked for "Sprachmenü". This implies holding handset.
+        
+        // Let's map OnHook dialing to Timer logic exclusively as before?
+        // Or create consistency.
+        // Original code: OnHook -> Timer.
+        // Let's keep it consistent.
+        if (number == 10) number = 0;
+        Serial.printf("Setting Timer (OnHook) for %d minutes\n", number);
         alarmEndTime = millis() + (number * 60000);
         timerRunning = true;
         playSound("/system/beep.wav", true); 

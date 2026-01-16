@@ -8,18 +8,31 @@ void PhonebookManager::begin() {
     if (!SPIFFS.exists(_filename)) {
         Serial.println("Phonebook not found, creating default...");
         
-        // Default Personas (Kompatibilität mit Tasten 0-4)
-        addEntry("0", "Surprise Mix", "FUNCTION", "COMPLIMENT_MIX", "0");
+        // --- Core Functions ---
+        addEntry("0", "Time Announce", "FUNCTION", "ANNOUNCE_TIME");
+        
+        // --- Personas / Characters (1-6) ---
         addEntry("1", "Persona 01 (Donald)", "FUNCTION", "COMPLIMENT_CAT", "1");
         addEntry("2", "Persona 02 (Jaqueline)", "FUNCTION", "COMPLIMENT_CAT", "2");
         addEntry("3", "Persona 03 (Yoda)", "FUNCTION", "COMPLIMENT_CAT", "3");
         addEntry("4", "Persona 04 (Neutral)", "FUNCTION", "COMPLIMENT_CAT", "4");
+        addEntry("5", "Nerd Joke", "TTS", "Erzähle mir einen kurzen Programmierer-Witz.");
+        addEntry("50", "Life Coach", "TTS", "Sag mir etwas inspirierendes wie ein Guru.");
         
-        // Beispiele für Zukünftige Funktionen
-        addEntry("100", "Zeitansage", "FUNCTION", "SPEAK_TIME", "");
-        addEntry("999", "Self Destruct", "AUDIO", "/system/error_tone.wav", "");
-        addEntry("888", "Gemini AI", "FUNCTION", "GEMINI_CHAT", "");
+        // --- Admin / System (8-9) ---
+        addEntry("8", "System Status", "FUNCTION", "SYSTEM_STATUS");
         
+        // Admin Menu: Voice Menu
+        String menuText = "Willkommen im System-Menü. ";
+        menuText += "Wähle Neun-Null, um alle Alarme umzuschalten. ";
+        menuText += "Wähle Neun-Eins, um den nächsten Alarm zu überspringen. ";
+        menuText += "Wähle Acht, für den Systemstatus.";
+        addEntry("9", "Admin Menu", "TTS", menuText);
+        
+        // --- Control Commands ---
+        addEntry("90", "Toggle Alarms", "FUNCTION", "TOGGLE_ALARMS");
+        addEntry("91", "Skip Next Alarm", "FUNCTION", "SKIP_NEXT_ALARM");
+
     } else {
         load();
     }
@@ -59,12 +72,31 @@ void PhonebookManager::load() {
     Serial.printf("Phonebook loaded. %d entries.\n", _entries.size());
 }
 
+void PhonebookManager::saveAll(JsonObject json) {
+    _entries.clear();
+    for (JsonPair kv : json) {
+        String number = kv.key().c_str();
+        JsonObject val = kv.value().as<JsonObject>();
+        // Add safety check
+        if (val.isNull()) continue;
+        
+        PhonebookEntry entry;
+        entry.name = val["name"] | "Unknown";
+        entry.type = val["type"] | "TTS";
+        entry.value = val["value"] | "";
+        entry.parameter = val["parameter"] | "";
+        _entries[number] = entry;
+    }
+    save();
+}
+
 void PhonebookManager::save() {
     JsonDocument doc;
     JsonObject root = doc.to<JsonObject>();
 
     for (auto const& [number, entry] : _entries) {
-        JsonObject obj = root.createNestedObject(number);
+        // Fix deprecated createNestedObject
+        JsonObject obj = root[number].to<JsonObject>();
         obj["name"] = entry.name;
         obj["type"] = entry.type;
         obj["value"] = entry.value;

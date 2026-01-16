@@ -22,6 +22,7 @@ public:
     void begin();
     void update();
     void setMode(Mode mode);
+    void reloadSettings();
 
 private:
     Adafruit_NeoPixel _pixels;
@@ -35,5 +36,7 @@ private:
     // Hilfsfunktion für Farben (R, G, B)
     void setColor(uint8_t r, uint8_t g, uint8_t b);
 };
+
+extern LedManager ledManager;
 
 #endif
