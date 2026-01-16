@@ -10,13 +10,16 @@ String AiManager::getCompliment(int number) {
     if (!hasApiKey()) return "";
 
     String prompt = "";
+    String lang = settings.getLanguage();
+    String langPrompt = (lang == "de") ? " Deutsch." : " English.";
+
     switch(number) {
-        case 1: prompt = "Generiere ein kurzes, nerdiges Kompliment für eine technische Redakteurin namens Sandra. Max 2 Sätze. Deutsch."; break;
-        case 2: prompt = "Erzähle einen kurzen Witz über XML oder DITA. Deutsch."; break;
-        case 3: prompt = "Gib mir eine kurze, inspirierende Weisheit aus der Science Fiction Welt. Deutsch."; break;
-        case 4: prompt = "Beschreibe Sandra als Kapitänin eines Raumschiffs in 2 Sätzen. Deutsch."; break;
-        case 5: prompt = "Generiere eine kurze Entschuldigung dafür, dass ich (der Computer) noch keinen Kaffee hatte. Deutsch."; break;
-        default: prompt = "Sag etwas nettes zu Sandra. Kurz. Deutsch."; break;
+        case 1: prompt = "Generiere ein kurzes, nerdiges Kompliment für eine technische Redakteurin namens Sandra. Max 2 Sätze." + langPrompt; break;
+        case 2: prompt = "Erzähle einen kurzen Witz über XML oder DITA." + langPrompt; break;
+        case 3: prompt = "Gib mir eine kurze, inspirierende Weisheit aus der Science Fiction Welt." + langPrompt; break;
+        case 4: prompt = "Beschreibe Sandra als Kapitänin eines Raumschiffs in 2 Sätzen." + langPrompt; break;
+        case 5: prompt = "Generiere eine kurze Entschuldigung dafür, dass ich (der Computer) noch keinen Kaffee hatte." + langPrompt; break;
+        default: prompt = "Sag etwas nettes zu Sandra. Kurz." + langPrompt; break;
     }
 
     return callGemini(prompt);
@@ -107,7 +110,8 @@ String AiManager::getTTSUrl(String text) {
         }
     }
     
+    String lang = settings.getLanguage(); // "de" or "en"
+    
     // Construct Google TTS URL
-    // &tl=de for German
-    return String(GTTS_URL) + encoded + "&tl=de";
+    return String(GTTS_URL) + encoded + "&tl=" + lang;
 }

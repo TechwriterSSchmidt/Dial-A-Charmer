@@ -549,12 +549,14 @@ void handleAlarmLogic() {
 // Helper to format IP for speech
 String formatIpForSpeech(IPAddress ip) {
     String s = ip.toString();
-    s.replace(".", " punkt ");
+    String dot = (settings.getLanguage() == "de") ? " punkt " : " dot ";
+    s.replace(".", dot);
     return s;
 }
 
 void executePhonebookFunction(String func, String param) {
     Serial.printf("Executing Function: %s [%s]\n", func.c_str(), param.c_str());
+    String lang = settings.getLanguage();
 
     if (func == "ANNOUNCE_TIME" || func == "SPEAK_TIME") {
         speakTime();
@@ -563,39 +565,76 @@ void executePhonebookFunction(String func, String param) {
         speakCompliment(0);
     }
     else if (func == "COMPLIMENT_CAT") {
-        // Param should contain the int ID (1-4)
         int cat = param.toInt();
         speakCompliment(cat > 0 ? cat : 0);
     }
+    else if (func == "VOICE_MENU") {
+        // Plays /system/menu_de.mp3 or /system/menu_en.mp3
+        String path = "/system/menu_" + lang + ".mp3";
+        if (SD.exists(path)) {
+            playSound(path, false);
+        } else {
+            // Fallback TTS if file missing
+            String text = (lang == "de") ? 
+                "System Menü. Wähle 9 0 für Alarm Umschaltung. 9 1 um nächsten Alarm zu überspringen. 8 für Status." :
+                "System Menu. Dial 9 0 to toggle alarms. 9 1 to skip next alarm. 8 for status.";
+            if (ai.hasApiKey()) {
+                audio.connecttohost(ai.getTTSUrl(text).c_str());
+            }
+        }
+    }
     else if (func == "SYSTEM_STATUS") {
-        String statusText = "System Status. ";
-        statusText += "WLAN Signalstärke " + String(WiFi.RSSI()) + " Dezibel. ";
-        statusText += "IP Adresse ist " + formatIpForSpeech(WiFi.localIP()) + ". ";
-        statusText += "Speicherplatz frei: " + String(ESP.getFreeHeap() / 1024) + " Kilobyte.";
+        String statusText = "";
+        if (lang == "de") {
+            statusText += "System Status. ";
+            statusText += "WLAN Signal " + String(WiFi.RSSI()) + " dB. ";
+            statusText += "IP Adresse " + formatIpForSpeech(WiFi.localIP()) + ". ";
+        } else {
+            statusText += "System Status. ";
+            statusText += "WiFi Signal " + String(WiFi.RSSI()) + " dB. ";
+            statusText += "IP Address " + formatIpForSpeech(WiFi.localIP()) + ". ";
+        }
         
-        // Speak via AI TTS (assuming Gemini/TTS is available) or basic status. Only works if AI is active.
         if (ai.hasApiKey()) {
-             String ttsUrl = ai.getTTSUrl(statusText);
              setAudioOutput(OUT_HANDSET);
-             audio.connecttohost(ttsUrl.c_str());
+             audio.connecttohost(ai.getTTSUrl(statusText).c_str());
         } else {
              Serial.println(statusText);
-             // Fallback: Just beep
              playSound("/system/beep.wav", false);
         }
     }
     else if (func == "TOGGLE_ALARMS") {
         alarmsEnabled = !alarmsEnabled;
-        String msg = alarmsEnabled ? "Alle Alarme sind nun aktiviert." : "Alle Alarme wurden deaktiviert.";
-        if (ai.hasApiKey()) {
-            audio.connecttohost(ai.getTTSUrl(msg).c_str());
+        
+        // Try playing file first
+        String fName = alarmsEnabled ? "alarms_on" : "alarms_off";
+        String path = "/system/" + fName + "_" + lang + ".mp3";
+        
+        if (SD.exists(path)) {
+            playSound(path, false);
+        } else {
+            String msg = "";
+            if (lang == "de") {
+                msg = alarmsEnabled ? "Alarme aktiviert." : "Alarme deaktiviert.";
+            } else {
+                msg = alarmsEnabled ? "Alarms enabled." : "Alarms disabled.";
+            }
+            if (ai.hasApiKey()) {
+                audio.connecttohost(ai.getTTSUrl(msg).c_str());
+            }
         }
     }
     else if (func == "SKIP_NEXT_ALARM") {
         skipNextAlarm = true;
-        String msg = "Der nächste geplante Alarm wird übersprungen.";
-         if (ai.hasApiKey()) {
-            audio.connecttohost(ai.getTTSUrl(msg).c_str());
+        String path = "/system/alarm_skipped_" + lang + ".mp3";
+        
+        if (SD.exists(path)) {
+            playSound(path, false);
+        } else {
+            String msg = (lang == "de") ? "Nächster Alarm übersprungen." : "Next alarm skipped.";
+            if (ai.hasApiKey()) {
+                audio.connecttohost(ai.getTTSUrl(msg).c_str());
+            }
         }
     }
     else {

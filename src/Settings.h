@@ -42,6 +42,8 @@ public:
     void setNightEndHour(int hour);
 
     // System
+    String getLanguage(); // "de" or "en"
+    void setLanguage(String lang);
     void clear();
 
 private:

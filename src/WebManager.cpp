@@ -183,6 +183,7 @@ void WebManager::handleSave() {
         }
     }
     
+    if (_server.hasArg("lang")) settings.setLanguage(_server.arg("lang"));
     if (_server.hasArg("tz")) settings.setTimezoneOffset(_server.arg("tz").toInt());
     if (_server.hasArg("gemini")) settings.setGeminiKey(_server.arg("gemini"));
     if (_server.hasArg("vol")) settings.setVolume(_server.arg("vol").toInt());
@@ -230,6 +231,31 @@ void WebManager::handleNotFound() {
 }
 
 String WebManager::getHtml() {
+    String lang = settings.getLanguage();
+    bool isDe = (lang == "de");
+
+    // Translations
+    String t_title = isDe ? "Dial-A-Charmer Einstellungen" : "Dial-A-Charmer Setup";
+    String t_wifi = isDe ? "WLAN Einstellungen" : "WiFi Settings";
+    String t_ssid = "SSID";
+    String t_pass = isDe ? "Passwort" : "Password";
+    String t_time = isDe ? "Zeit Einstellungen" : "Time Settings";
+    String t_tz = isDe ? "Zeitzone (Europa)" : "Timezone (Europe)";
+    String t_audio = isDe ? "Audio Einstellungen" : "Audio Settings";
+    String t_h_vol = isDe ? "Hörer Lautstärke" : "Handset Volume";
+    String t_r_vol = isDe ? "Klingelton Lautstärke" : "Ringer Volume";
+    String t_led = isDe ? "LED Einstellungen" : "LED Settings";
+    String t_day = isDe ? "Helligkeit (Tag)" : "Day Brightness";
+    String t_night = isDe ? "Helligkeit (Nacht)" : "Night Brightness";
+    String t_n_start = isDe ? "Nachtmodus Start (Std)" : "Night Start Hour";
+    String t_n_end = isDe ? "Nachtmodus Ende (Std)" : "Night End Hour";
+    String t_ai = isDe ? "KI Einstellungen" : "AI Settings";
+    String t_key = isDe ? "Gemini API Schlüssel (Optional)" : "Gemini API Key (Optional)";
+    String t_save = isDe ? "Speichern" : "Save Settings";
+    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+    String t_help = isDe ? "Hilfe" : "Usage Help";
+    String t_lang = isDe ? "Sprache" : "Language";
+
     // Scan for networks
     int n = WiFi.scanNetworks();
     String ssidOptions = "";
@@ -240,19 +266,28 @@ String WebManager::getHtml() {
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
     html += "</head><body>";
-    html += "<h2>Dial-A-Charmer Setup</h2>";
+    html += "<h2>" + t_title + "</h2>";
     html += "<form action='/save' method='POST'>";
+
+    // Language Selector
+    html += "<div class='card'><h3>" + t_lang + "</h3>";
+    html += "<label>" + t_lang + "</label>";
+    html += "<select name='lang'>";
+    html += "<option value='de'" + String(isDe ? " selected" : "") + ">Deutsch</option>";
+    html += "<option value='en'" + String(!isDe ? " selected" : "") + ">English</option>";
+    html += "</select>";
+    html += "</div>";
     
-    html += "<div class='card'><h3>WiFi Settings</h3>";
-    html += "<label>SSID</label>";
+    html += "<div class='card'><h3>" + t_wifi + "</h3>";
+    html += "<label>" + t_ssid + "</label>";
     html += "<input type='text' name='ssid' list='ssidList' value='" + settings.getWifiSSID() + "' placeholder='Select or type SSID'>";
     html += "<datalist id='ssidList'>" + ssidOptions + "</datalist>";
     
-    html += "<label>Password</label><input type='password' name='pass' value='" + settings.getWifiPass() + "'>";
+    html += "<label>" + t_pass + "</label><input type='password' name='pass' value='" + settings.getWifiPass() + "'>";
     html += "</div>";
     
-    html += "<div class='card'><h3>Time Settings</h3>";
-    html += "<label>Timezone (Europe)</label>";
+    html += "<div class='card'><h3>" + t_time + "</h3>";
+    html += "<label>" + t_tz + "</label>";
     html += "<select name='tz'>";
     int tz = settings.getTimezoneOffset();
     const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London, Dublin, Lisbon)", "UTC +1 (Zurich, Paris, Rome)", "UTC +2 (Athens, Helsinki, Kyiv)", "UTC +3 (Moscow, Istanbul)" };
@@ -265,41 +300,41 @@ String WebManager::getHtml() {
     html += "</select>";
     html += "</div>";
 
-    html += "<div class='card'><h3>Audio Settings</h3>";
-    html += "<label>Handset Volume (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
+    html += "<div class='card'><h3>" + t_audio + "</h3>";
+    html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
     html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     
-    html += "<label>Ringer Volume (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
+    html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
     html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     html += "</div>";
 
-    html += "<div class='card'><h3>LED Settings</h3>";
+    html += "<div class='card'><h3>" + t_led + "</h3>";
     
     int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
-    html += "<label>Day Brightness (0-42) <output>" + String(dayVal) + "</output></label>";
+    html += "<label>" + t_day + " (0-42) <output>" + String(dayVal) + "</output></label>";
     html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     
     int nightVal = map(settings.getLedNightBright(), 0, 255, 0, 42);
-    html += "<label>Night Brightness (0-42) <output>" + String(nightVal) + "</output></label>";
+    html += "<label>" + t_night + " (0-42) <output>" + String(nightVal) + "</output></label>";
     html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     
-    html += "<label>Night Start Hour (0-23)</label>";
+    html += "<label>" + t_n_start + " (0-23)</label>";
     html += "<input type='number' name='night_start' min='0' max='23' value='" + String(settings.getNightStartHour()) + "'>";
     
-    html += "<label>Night End Hour (0-23)</label>";
+    html += "<label>" + t_n_end + " (0-23)</label>";
     html += "<input type='number' name='night_end' min='0' max='23' value='" + String(settings.getNightEndHour()) + "'>";
     html += "</div>";
 
-    html += "<div class='card'><h3>AI Settings</h3>";
-    html += "<label>Gemini API Key (Optional)</label><input type='password' name='gemini' value='" + settings.getGeminiKey() + "'>";
+    html += "<div class='card'><h3>" + t_ai + "</h3>";
+    html += "<label>" + t_key + "</label><input type='password' name='gemini' value='" + settings.getGeminiKey() + "'>";
     html += "<small>Leave empty to use SD card audio only.</small>";
     html += "</div>";
     
-    html += "<button type='submit'>Save Settings</button>";
+    html += "<button type='submit'>" + t_save + "</button>";
     html += "</form>";
     html += "<p style='text-align:center'>";
-    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>Phonebook</a>";
-    html += "<a href='/help' style='color:#ffc107'>Usage Help</a>";
+    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
+    html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
     html += "</p>";
     html += "</body></html>";
     return html;

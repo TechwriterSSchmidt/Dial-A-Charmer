@@ -23,11 +23,8 @@ void PhonebookManager::begin() {
         addEntry("8", "System Status", "FUNCTION", "SYSTEM_STATUS");
         
         // Admin Menu: Voice Menu
-        String menuText = "Willkommen im System-Menü. ";
-        menuText += "Wähle Neun-Null, um alle Alarme umzuschalten. ";
-        menuText += "Wähle Neun-Eins, um den nächsten Alarm zu überspringen. ";
-        menuText += "Wähle Acht, für den Systemstatus.";
-        addEntry("9", "Admin Menu", "TTS", menuText);
+        // Changed to FUNCTION to support multi-language audio files
+        addEntry("9", "Admin Menu", "FUNCTION", "VOICE_MENU");
         
         // --- Control Commands ---
         addEntry("90", "Toggle Alarms", "FUNCTION", "TOGGLE_ALARMS");

@@ -107,6 +107,15 @@ void Settings::setNightEndHour(int hour) {
     _prefs.putInt("night_end", hour);
 }
 
+String Settings::getLanguage() {
+    return _prefs.getString("lang", "de");
+}
+
+void Settings::setLanguage(String lang) {
+    if (lang != "de" && lang != "en") lang = "de";
+    _prefs.putString("lang", lang);
+}
+
 void Settings::clear() {
     _prefs.clear();
 }
