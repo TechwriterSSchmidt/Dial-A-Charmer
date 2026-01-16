@@ -20,12 +20,12 @@ private:
     unsigned long _apEndTime = 0; // Auto-off timer
 
     void handleRoot();
+    void handleAdvanced(); // New
     void handleSave();
     void handleHelp();
     void handlePhonebook();
     void handlePhonebookApi();
-    void handleSettingsApi(); // New for specialized settings
-    void handlePreviewApi();  // New for audio preview
+    void handlePreviewApi();  
     void handleNotFound();
     
     // Helpers
@@ -34,6 +34,7 @@ private:
     void stopAp();
     
     String getHtml();
+    String getAdvancedHtml(); // New
     String getPhonebookHtml();
     String getHelpHtml();
 };

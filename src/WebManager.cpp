@@ -145,6 +145,7 @@ void WebManager::begin() {
     }
 
     _server.on("/", [this](){ handleRoot(); });
+    _server.on("/advanced", [this](){ handleAdvanced(); }); // New
     _server.on("/phonebook", [this](){ handlePhonebook(); });
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); }); // New
@@ -202,6 +203,11 @@ void WebManager::handleRoot() {
     _server.send(200, "text/html", getHtml());
 }
 
+void WebManager::handleAdvanced() {
+    resetApTimer();
+    _server.send(200, "text/html", getAdvancedHtml());
+}
+
 extern void playPreviewSound(String type, int index); // Defined in main.cpp
 
 void WebManager::handlePreviewApi() {
@@ -248,8 +254,11 @@ void WebManager::handleSave() {
     if (_server.hasArg("dt")) settings.setDialTone(_server.arg("dt").toInt());
     
     // Checkbox handling (Browser sends nothing if unchecked)
-    bool hd = _server.hasArg("hd"); 
-    settings.setHalfDuplex(hd);
+    // Only update if we are in the form that has this checkbox
+    if (_server.arg("form_id") == "advanced") {
+        bool hd = _server.hasArg("hd"); 
+        settings.setHalfDuplex(hd);
+    }
 
     // LED Settings
     if (_server.hasArg("led_day")) {
@@ -272,8 +281,11 @@ void WebManager::handleSave() {
         delay(1000);
         ESP.restart();
     } else {
-        // Redirect back to main page
-        _server.sendHeader("Location", "/", true);
+        // Redirect back
+        String loc = "/";
+        if (_server.hasArg("redirect")) loc = _server.arg("redirect");
+        
+        _server.sendHeader("Location", loc, true);
         _server.send(302, "text/plain", "");
     }
 }
@@ -297,36 +309,22 @@ String WebManager::getHtml() {
     bool isDe = (lang == "de");
 
     // Translations
-    String t_title = isDe ? "Dial-A-Charmer Einstellungen" : "Dial-A-Charmer Setup";
-    String t_wifi = isDe ? "WLAN Einstellungen" : "WiFi Settings";
-    String t_ssid = "SSID";
-    String t_pass = isDe ? "Passwort" : "Password";
-    String t_time = isDe ? "Zeit Einstellungen" : "Time Settings";
-    String t_tz = isDe ? "Zeitzone (Europa)" : "Timezone (Europe)";
+    String t_title = isDe ? "Dial-A-Charmer" : "Dial-A-Charmer";
     String t_audio = isDe ? "Audio Einstellungen" : "Audio Settings";
     String t_h_vol = isDe ? "Hörer Lautstärke" : "Handset Volume";
     String t_r_vol = isDe ? "Klingelton Lautstärke (Basis)" : "Ringer Volume (Base)";
     String t_ring = isDe ? "Klingelton" : "Ringtone";
     String t_dt = isDe ? "Wählton" : "Dial Tone";
-    String t_hd = isDe ? "Half-Duplex (Echo-Unterdrückung)" : "Half-Duplex (AEC)";
     String t_led = isDe ? "LED Einstellungen" : "LED Settings";
     String t_day = isDe ? "Helligkeit (Tag)" : "Day Brightness";
     String t_night = isDe ? "Helligkeit (Nacht)" : "Night Brightness";
     String t_n_start = isDe ? "Nachtmodus Start (Std)" : "Night Start Hour";
     String t_n_end = isDe ? "Nachtmodus Ende (Std)" : "Night End Hour";
-    String t_ai = isDe ? "KI Einstellungen" : "AI Settings";
-    String t_key = isDe ? "Gemini API Schlüssel (Optional)" : "Gemini API Key (Optional)";
     String t_save = isDe ? "Speichern" : "Save Settings";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
     String t_help = isDe ? "Hilfe" : "Usage Help";
     String t_lang = isDe ? "Sprache" : "Language";
-
-    // Scan for networks
-    int n = WiFi.scanNetworks();
-    String ssidOptions = "";
-    for (int i = 0; i < n; ++i) {
-        ssidOptions += "<option value='" + WiFi.SSID(i) + "'>";
-    }
+    String t_adv = isDe ? "Erweiterte Einstellungen" : "Advanced Settings";
 
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
@@ -334,6 +332,7 @@ String WebManager::getHtml() {
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
     html += "<form action='/save' method='POST'>";
+    html += "<input type='hidden' name='form_id' value='basic'>";
 
     // Language Selector
     html += "<div class='card'><h3>" + t_lang + "</h3>";
@@ -344,28 +343,6 @@ String WebManager::getHtml() {
     html += "</select>";
     html += "</div>";
     
-    html += "<div class='card'><h3>" + t_wifi + "</h3>";
-    html += "<label>" + t_ssid + "</label>";
-    html += "<input type='text' name='ssid' list='ssidList' value='" + settings.getWifiSSID() + "' placeholder='Select or type SSID'>";
-    html += "<datalist id='ssidList'>" + ssidOptions + "</datalist>";
-    
-    html += "<label>" + t_pass + "</label><input type='password' name='pass' value='" + settings.getWifiPass() + "'>";
-    html += "</div>";
-    
-    html += "<div class='card'><h3>" + t_time + "</h3>";
-    html += "<label>" + t_tz + "</label>";
-    html += "<select name='tz'>";
-    int tz = settings.getTimezoneOffset();
-    const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London, Dublin, Lisbon)", "UTC +1 (Zurich, Paris, Rome)", "UTC +2 (Athens, Helsinki, Kyiv)", "UTC +3 (Moscow, Istanbul)" };
-    int offsets[] = { -1, 0, 1, 2, 3 };
-    for(int i=0; i<5; i++) {
-        html += "<option value='" + String(offsets[i]) + "'";
-        if(tz == offsets[i]) html += " selected";
-        html += ">" + String(labels[i]) + "</option>";
-    }
-    html += "</select>";
-    html += "</div>";
-
     html += "<div class='card'><h3>" + t_audio + "</h3>";
     
     html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
@@ -389,9 +366,6 @@ String WebManager::getHtml() {
         html += "<option value='" + String(i) + "'" + (dt==i?" selected":"") + ">Dial Tone " + String(i) + " (" + (i==1?"DE": (i==2?"US":"UK")) + ")</option>";
     }
     html += "</select>";
-    
-    // Half Duplex
-    html += "<label style='display:flex;align-items:center;margin-top:20px;'><input type='checkbox' name='hd' value='1' style='width:30px;height:30px;margin-right:10px;'" + String(settings.getHalfDuplex() ? " checked" : "") + "> " + t_hd + "</label>";
     html += "</div>";
 
     html += "<div class='card'><h3>" + t_led + "</h3>";
@@ -411,6 +385,76 @@ String WebManager::getHtml() {
     html += "<input type='number' name='night_end' min='0' max='23' value='" + String(settings.getNightEndHour()) + "'>";
     html += "</div>";
 
+    html += "<button type='submit'>" + t_save + "</button>";
+    html += "</form>";
+    html += "<p style='text-align:center'>";
+    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
+    html += "<a href='/advanced' style='color:#ffc107; margin-right: 20px;'>" + t_adv + "</a>";
+    html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
+    html += "</p>";
+    html += "</body></html>";
+    return html;
+}
+
+String WebManager::getAdvancedHtml() {
+    String lang = settings.getLanguage();
+    bool isDe = (lang == "de");
+
+    String t_title = isDe ? "Erweiterte Einstellungen" : "Advanced Settings";
+    String t_wifi = isDe ? "WLAN Einstellungen" : "WiFi Settings";
+    String t_ssid = "SSID";
+    String t_pass = isDe ? "Passwort" : "Password";
+    String t_time = isDe ? "Zeit Einstellungen" : "Time Settings";
+    String t_tz = isDe ? "Zeitzone" : "Timezone";
+    String t_hd = isDe ? "Half-Duplex (Echo-Unterdrückung)" : "Half-Duplex (AEC)";
+    String t_audio_adv = isDe ? "Audio Erweitert" : "Audio Advanced";
+    String t_ai = isDe ? "KI Einstellungen" : "AI Settings";
+    String t_key = isDe ? "Gemini API Schlüssel (Optional)" : "Gemini API Key (Optional)";
+    String t_save = isDe ? "Speichern" : "Save Settings";
+    String t_back = isDe ? "Zurück" : "Back";
+
+    // Scan for networks
+    int n = WiFi.scanNetworks();
+    String ssidOptions = "";
+    for (int i = 0; i < n; ++i) {
+        ssidOptions += "<option value='" + WiFi.SSID(i) + "'>";
+    }
+
+    String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
+    html += htmlStyle;
+    html += "</head><body>";
+    html += "<h2>" + t_title + "</h2>";
+    html += "<form action='/save' method='POST'>";
+    html += "<input type='hidden' name='redirect' value='/advanced'>";
+    html += "<input type='hidden' name='form_id' value='advanced'>";
+    
+    html += "<div class='card'><h3>" + t_wifi + "</h3>";
+    html += "<label>" + t_ssid + "</label>";
+    html += "<input type='text' name='ssid' list='ssidList' value='" + settings.getWifiSSID() + "' placeholder='Select or type SSID'>";
+    html += "<datalist id='ssidList'>" + ssidOptions + "</datalist>";
+    
+    html += "<label>" + t_pass + "</label><input type='password' name='pass' value='" + settings.getWifiPass() + "'>";
+    html += "</div>";
+    
+    html += "<div class='card'><h3>" + t_time + "</h3>";
+    html += "<label>" + t_tz + "</label>";
+    html += "<select name='tz'>";
+    int tz = settings.getTimezoneOffset();
+    const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London, Dublin, Lisbon)", "UTC +1 (Zurich, Paris, Rome)", "UTC +2 (Athens, Helsinki, Kyiv)", "UTC +3 (Moscow, Istanbul)" };
+    int offsets[] = { -1, 0, 1, 2, 3 };
+    for(int i=0; i<5; i++) {
+        html += "<option value='" + String(offsets[i]) + "'";
+        if(tz == offsets[i]) html += " selected";
+        html += ">" + String(labels[i]) + "</option>";
+    }
+    html += "</select>";
+    html += "</div>";
+
+    html += "<div class='card'><h3>" + t_audio_adv + "</h3>";
+    // Half Duplex
+    html += "<label style='display:flex;align-items:center;margin-top:20px;'><input type='checkbox' name='hd' value='1' style='width:30px;height:30px;margin-right:10px;'" + String(settings.getHalfDuplex() ? " checked" : "") + "> " + t_hd + "</label>";
+    html += "</div>";
+
     html += "<div class='card'><h3>" + t_ai + "</h3>";
     html += "<label>" + t_key + "</label><input type='password' name='gemini' value='" + settings.getGeminiKey() + "'>";
     html += "<small>Leave empty to use SD card audio only.</small>";
@@ -419,8 +463,7 @@ String WebManager::getHtml() {
     html += "<button type='submit'>" + t_save + "</button>";
     html += "</form>";
     html += "<p style='text-align:center'>";
-    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
-    html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
+    html += "<a href='/' style='color:#ffc107'>" + t_back + "</a>";
     html += "</p>";
     html += "</body></html>";
     return html;
