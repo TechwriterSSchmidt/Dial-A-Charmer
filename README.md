@@ -87,9 +87,14 @@ The device communicates distinct states via the integrated WS2812 LED using orga
 
 | Component | Pin Function | GPIO | Notes |
 | :--- | :--- | :--- | :--- |
-| **I2S Audio** | BCLK | `GPIO 26` | ES8311 / NS4150B |
-| | LRC | `GPIO 25` | |
-| | DOUT | `GPIO 27` | Modified to avoid I2C conflict |
+| **I2S Primary** | BCLK | `GPIO 26` | **Handset** (ES8311 Codec) |
+| | LRC (WS) | `GPIO 25` | |
+| | DOUT | `GPIO 27` | Handset Speaker |
+| | DIN | `GPIO 39` | Handset Microphone (Board VN) |
+| | MCLK | `GPIO 0` | Master Clock (Required for ES8311) |
+| **I2S Secondary** | BCLK | `GPIO 14` | **Base Speaker** (MAX98357A) |
+| | LRC (WS) | `GPIO 12` | |
+| | DOUT | `GPIO 15` | Ringing/Open Listening |
 | **I2C Bus** | SDA | `GPIO 21` | Codec Configuration |
 | | SCL | `GPIO 22` | |
 | **Input** | Dial Pulse | `GPIO 5` | Input with Internal Pull-Up |
@@ -97,7 +102,7 @@ The device communicates distinct states via the integrated WS2812 LED using orga
 | | Hook Switch | `GPIO 32` | |
 | | Extra Button | `GPIO 33` | |
 | **GNSS (GPS)** | RX | `GPIO 34` | M10 Module (Input Only) |
-| | TX | `GPIO 0` | Moved to boot-safe pin |
+| | TX | *Disabled* | Disabled to free GPIO 0 for Audio MCLK |
 | **Output** | Vibration | `GPIO 2` | Haptic Feedback |
 | | LED Data | `GPIO 13` | WS2812B |
 | **Storage** | SD CS | `GPIO 4` | On-board SD Slot |

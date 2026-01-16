@@ -2,18 +2,19 @@
 #define CONFIG_H
 
 // --- Hardware Pins ---
-// Audio (I2S - ES8311 Codec + NS4150B Amp)
+// Audio (I2S - ES8311 Codec + Headset)
 #define CONF_I2S_BCLK       26
-#define CONF_I2S_LRC        25
-// Pin 22 ist SCL beim D32 Pro, daher DOUT auf 27 verlegt (IO27/TFT_DC)
-#define CONF_I2S_DOUT       27 
+#define CONF_I2S_LRC        25  // WS
+#define CONF_I2S_DOUT       27  // ESP DOUT -> Codec DI (Sound to Headset)
+#define CONF_I2S_DIN        39  // ESP DIN <- Codec DO (Mic from Headset) - Pin 39 is Input Only (VN)
+#define CONF_I2S_MCLK       0   // MCK - GPIO0 (Requires boot strapping care, but standard for Audio Kit)
 
 // ES8311 requires I2C for configuration
 // Bestätigt durch D32 Pro Schematic: SDA=21, SCL=22
 #define CONF_I2C_SDA        21
 #define CONF_I2C_SCL        22 
 
-// Audio Speaker (MAX98357)
+// Audio Speaker (MAX98357A - Base)
 #define CONF_I2S_SPK_BCLK   14
 #define CONF_I2S_SPK_LRC    12
 #define CONF_I2S_SPK_DOUT   15
@@ -26,7 +27,7 @@
 // GPIO 35 ist intern Batterie-Spannungsteiler (HÄLFTE der Batteriespannung)
 // Wir nutzen GPIO 34 (Input Only) für GPS RX, um Konflikte zu vermeiden.
 #define CONF_GPS_RX         34  // Input Only - Safe
-#define CONF_GPS_TX         0   // Moved to 0 to free Pin 5 (GPIO 0 is Boot-Safe if Idle High)
+#define CONF_GPS_TX         -1  // Disabled to free GPIO 0 for MCLK
 #define CONF_GPS_BAUD       9600
 
 // Battery Monitoring (Lolin D32 Pro)

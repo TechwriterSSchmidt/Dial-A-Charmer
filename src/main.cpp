@@ -42,6 +42,12 @@ unsigned long lastDialTime = 0;
 // --- Playlist Management ---
 struct Playlist {
     std::vector<String> tracks;
+    
+    // Virtual Playlist Support (Reference to other playlists)
+    struct TrackRef { uint8_t cat; uint16_t idx; };
+    std::vector<TrackRef> virtualTracks; 
+    bool isVirtual = false;
+
     int index = 0;
 };
 
@@ -163,7 +169,8 @@ void buildPlaylist() {
             Serial.printf("Building Cat %d (scanning)...\n", i);
             categories[i].tracks.clear();
             categories[i].index = 0;
-            scanDirectoryToPlaylist("/compliments/" + subfolder, i);
+            // Removed /compliments prefix to match SD card structure where groups are at root
+            scanDirectoryToPlaylist("/" + subfolder, i);
             
             // Shuffle
             auto rng = std::default_random_engine(esp_random());
@@ -176,25 +183,27 @@ void buildPlaylist() {
         }
     }
     
-    // Main Playlist (0)
-    bool loadedMain = loadPlaylistFromSD(0, mainPlaylist);
-    if (!loadedMain || mainPlaylist.tracks.empty()) {
-        Serial.println("Building Main Playlist...");
-        mainPlaylist.tracks.clear();
-        mainPlaylist.index = 0;
-        
-        // Aggregate
-        for (int i = 1; i <= 4; i++) {
-            for (const auto &t : categories[i].tracks) mainPlaylist.tracks.push_back(t);
+    // Main Playlist (0) - Virtual to save RAM
+    mainPlaylist.isVirtual = true;
+    mainPlaylist.tracks.clear(); 
+    mainPlaylist.virtualTracks.clear();
+    mainPlaylist.index = 0;
+    
+    Serial.println("Building Main Playlist (Virtual)...");
+    
+    // Aggregate References
+    for (int i = 1; i <= 4; i++) {
+        for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
+            mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
         }
-        
-        auto rng = std::default_random_engine(esp_random());
-        std::shuffle(mainPlaylist.tracks.begin(), mainPlaylist.tracks.end(), rng);
-        
-        savePlaylistToSD(0, mainPlaylist);
-        saveProgressToSD(0, 0);
+    }
+    
+    if (mainPlaylist.virtualTracks.empty()) {
+        Serial.println("Warning: No tracks found in any category!");
     } else {
-        Serial.printf("Loaded Main Playlist from SD (Tracks: %d, Idx: %d)\n", mainPlaylist.tracks.size(), mainPlaylist.index);
+        auto rng = std::default_random_engine(esp_random());
+        std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
+        Serial.printf("Built Main Playlist (Virtual Items: %d)\n", mainPlaylist.virtualTracks.size());
     }
 }
 
@@ -209,9 +218,9 @@ String getNextTrack(int category) {
         }
     }
     
-    if (target == nullptr || target->tracks.empty()) {
+    if (target == nullptr || (target->isVirtual ? target->virtualTracks.empty() : target->tracks.empty())) {
         // Fallback to Main if specific empty
-        if (category != 0 && !mainPlaylist.tracks.empty()) {
+        if (category != 0 && !mainPlaylist.virtualTracks.empty()) { // Main is always virtual now
              target = &mainPlaylist; 
              category = 0; 
         } else {
@@ -219,17 +228,39 @@ String getNextTrack(int category) {
         }
     }
     
-    // Check index
-    if ((size_t)target->index >= target->tracks.size()) {
-        Serial.printf("Playlist %d finished! Reshuffling...\n", category);
-        std::shuffle(target->tracks.begin(), target->tracks.end(), std::default_random_engine(esp_random()));
-        target->index = 0;
+    String track = "";
+
+    if (target->isVirtual) {
+        // --- Virtual Playlist Logic ---
+        if ((size_t)target->index >= target->virtualTracks.size()) {
+            Serial.printf("Playlist %d (Virtual) finished! Reshuffling...\n", category);
+            // Shuffle virtual tracks
+            auto rng = std::default_random_engine(esp_random());
+            std::shuffle(target->virtualTracks.begin(), target->virtualTracks.end(), rng);
+            target->index = 0;
+            // No SD save for virtual playlist shuffle state currently supported/needed
+        }
         
-        savePlaylistToSD(category, *target);
-        // Progress saved below after increment
+        Playlist::TrackRef ref = target->virtualTracks[target->index];
+        // Validate Ref
+        if (categories.find(ref.cat) != categories.end() && ref.idx < categories[ref.cat].tracks.size()) {
+            track = categories[ref.cat].tracks[ref.idx];
+        } else {
+            Serial.println("Invalid Virtual Track Reference!");
+            track = "/system/error_tone.wav"; // Fallback
+        }
+    } else {
+        // --- Standard Playlist Logic ---
+        if ((size_t)target->index >= target->tracks.size()) {
+            Serial.printf("Playlist %d finished! Reshuffling...\n", category);
+            auto rng = std::default_random_engine(esp_random());
+            std::shuffle(target->tracks.begin(), target->tracks.end(), rng);
+            target->index = 0;
+            
+            savePlaylistToSD(category, *target);
+        }
+        track = target->tracks[target->index];
     }
-    
-    String track = target->tracks[target->index];
     
     // Increment and Save Progress
     target->index++; 
@@ -251,12 +282,14 @@ void setAudioOutput(AudioOutput target) {
     if(audio.isRunning()) audio.stopSong();
     
     if (target == OUT_HANDSET) {
-        audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+        // Handset: Includes Mic (DIN) and MCLK
+        audio.setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT, CONF_I2S_DIN, CONF_I2S_MCLK);
         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.println("Output: Handset");
     } else {
-        audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT);
+        // Speaker: Output only (DIN=-1, MCLK=-1)
+        audio.setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, -1);
         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
         audio.setVolume(vol);
         Serial.println("Output: Speaker");
