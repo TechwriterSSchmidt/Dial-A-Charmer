@@ -332,7 +332,8 @@ void speakTime() {
 
     setAudioOutput(OUT_HANDSET);
     timeState = TIME_INTRO;
-    playSound("/time/intro.mp3", false);
+    String lang = settings.getLanguage();
+    playSound("/time/" + lang + "/intro.mp3", false);
 }
 
 void processTimeQueue() {
@@ -340,16 +341,18 @@ void processTimeQueue() {
 
     // This function is called from audio_eof_mp3 to trigger next file
     String nextFile = "";
+    String lang = settings.getLanguage();
+    String basePath = "/time/" + lang + "/";
 
     switch (timeState) {
         case TIME_INTRO: // Intro finished, play Hour
             timeState = TIME_HOUR;
-            nextFile = "/time/h_" + String(currentHour) + ".mp3";
+            nextFile = basePath + "h_" + String(currentHour) + ".mp3";
             break;
             
         case TIME_HOUR: // Hour finished, play "Uhr"
             timeState = TIME_UHR;
-            nextFile = "/time/uhr.mp3";
+            nextFile = basePath + "uhr.mp3";
             break;
             
         case TIME_UHR: // "Uhr" finished, play Minute (if not 0)
@@ -360,9 +363,9 @@ void processTimeQueue() {
                 timeState = TIME_MINUTE;
                 if (currentMinute < 10) {
                      // Play "null five" format? 
-                     nextFile = "/time/m_0" + String(currentMinute) + ".mp3";
+                     nextFile = basePath + "m_0" + String(currentMinute) + ".mp3";
                 } else {
-                     nextFile = "/time/m_" + String(currentMinute) + ".mp3";
+                     nextFile = basePath + "m_" + String(currentMinute) + ".mp3";
                 }
             }
             break;
