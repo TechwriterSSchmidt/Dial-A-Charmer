@@ -24,6 +24,8 @@ public:
     void setAlarmHour(int day, int h);
     int getAlarmMinute(int day);
     void setAlarmMinute(int day, int m);
+    int getAlarmTone(int day); // New: Per-alarm ringtone
+    void setAlarmTone(int day, int toneIndex);
     bool isAlarmEnabled(int day);
     void setAlarmEnabled(int day, bool enabled);
     
@@ -70,6 +72,7 @@ private:
     struct AlarmCache { 
         int8_t h; 
         int8_t m; 
+        int8_t tone; // Added tone index
         bool en; 
     };
     AlarmCache _alarms[7];

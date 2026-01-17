@@ -36,14 +36,16 @@ void Settings::loadCache() {
     // 1. Alarme Cachen (wie gehabt)
     if (!_cacheLoaded) {
         for(int i=0; i<7; i++) {
-            char kH[10], KM[10], kE[10];
+            char kH[10], KM[10], kE[10], kT[10];
             sprintf(kH, "alm_h_%d", i);
             sprintf(KM, "alm_m_%d", i);
             sprintf(kE, "alm_en_%d", i);
+            sprintf(kT, "alm_t_%d", i);
             
             _alarms[i].h = (int8_t)_prefs.getInt(kH, 7);
             _alarms[i].m = (int8_t)_prefs.getInt(KM, 0);
             _alarms[i].en = _prefs.getBool(kE, false);
+            _alarms[i].tone = (int8_t)_prefs.getInt(kT, 1); // Default to tone index 1
         }
         _cacheLoaded = true;
     }
@@ -130,6 +132,21 @@ void Settings::setAlarmMinute(int day, int m) {
 
     char key[10]; sprintf(key, "alm_m_%d", day);
     _prefs.putInt(key, m);
+}
+
+int Settings::getAlarmTone(int day) {
+    if(day < 0 || day > 6) return 1;
+    if(!_cacheLoaded) loadCache();
+    return _alarms[day].tone;
+}
+
+void Settings::setAlarmTone(int day, int toneIndex) {
+    if(day < 0 || day > 6) return;
+    if(!_cacheLoaded) loadCache();
+    _alarms[day].tone = (int8_t)toneIndex;
+
+    char key[10]; sprintf(key, "alm_t_%d", day);
+    _prefs.putInt(key, toneIndex);
 }
 
 bool Settings::isAlarmEnabled(int day) {

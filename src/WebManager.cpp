@@ -334,6 +334,7 @@ void WebManager::handleSave() {
              String s = String(i);
              if(_server.hasArg("alm_h_"+s)) settings.setAlarmHour(i, _server.arg("alm_h_"+s).toInt());
              if(_server.hasArg("alm_m_"+s)) settings.setAlarmMinute(i, _server.arg("alm_m_"+s).toInt());
+             if(_server.hasArg("alm_t_"+s)) settings.setAlarmTone(i, _server.arg("alm_t_"+s).toInt());
              settings.setAlarmEnabled(i, _server.hasArg("alm_en_"+s));
         }
     }
@@ -417,42 +418,55 @@ String WebManager::getSettingsHtml() {
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
 
-    // Language Selector (Auto-Save)
-    html += "<div class='card'><h3>" + t_lang + "</h3>";
-    html += "<select onchange='sl(this.value)'>";
-    html += "<option value='de'" + String(isDe ? " selected" : "") + ">Deutsch</option>";
-    html += "<option value='en'" + String(!isDe ? " selected" : "") + ">English</option>";
-    html += "</select>";
-    html += "</div>";
+    // Language Selector Removed
 
     html += "<form action='/save' method='POST'>";
     html += "<input type='hidden' name='form_id' value='basic'>";
     html += "<input type='hidden' name='redirect' value='/settings'>"; // Redirect back to settings
 
-    // Audio & LED removed from here
-    
     // Repeating Alarm
     html += "<div class='card'><h3>" + String(isDe ? "T&auml;gliche Wecker" : "Daily Alarms") + "</h3>";
-    html += "<div style='display:flex; justify-content:space-between; margin-bottom:10px; color:#888; font-size:0.8rem;'><span>Day</span><span>Active</span><span>Time</span></div>";
-    String dNames[] = { "Mo", "Di/Tu", "Mi/We", "Do/Th", "Fr", "Sa", "So/Su" };
+    
+    // Header
+    html += "<table style='width:100%; border-collapse: collapse;'>";
+    html += "<tr style='border-bottom: 1px solid #333;'>";
+    html += "<th style='text-align:left; padding:10px; color:#888'>" + String(isDe ? "Tag" : "Day") + "</th>";
+    html += "<th style='text-align:center; padding:10px; color:#888'>" + String(isDe ? "Aktiv" : "Active") + "</th>";
+    html += "<th style='text-align:center; padding:10px; color:#888'>" + String(isDe ? "Zeit" : "Time") + "</th>";
+    html += "<th style='text-align:center; padding:10px; color:#888'>" + String(isDe ? "Ton" : "Tone") + "</th>";
+    html += "</tr>";
+
+    String dNamesDe[] = { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" };
+    String dNamesEn[] = { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" };
     
     for(int i=0; i<7; i++) {
-         html += "<div style='display:flex; align-items:center; margin-bottom:10px; border-bottom:1px dotted #333; padding-bottom:10px;'>";
-         // Label
-         html += "<div style='width:50px; font-weight:bold; color:#d4af37'>" + dNames[i] + "</div>";
+         html += "<tr>";
          
-         // Enabled (Checkbox)
+         // Day
+         html += "<td style='padding:15px 10px; color:#d4af37; font-weight:bold;'>" + (isDe ? dNamesDe[i] : dNamesEn[i]) + "</td>";
+         
+         // Active
          bool en = settings.isAlarmEnabled(i);
-         html += "<input type='checkbox' name='alm_en_" + String(i) + "' value='1'" + (en?" checked":"") + " style='width:30px; height:30px; margin:0 15px 0 0;'>";
+         html += "<td style='text-align:center; padding:10px;'><input type='checkbox' name='alm_en_" + String(i) + "' value='1'" + (en?" checked":"") + " style='width:30px; height:30px; margin:0;'></td>";
          
-         // Time Inputs
-         html += "<input type='number' name='alm_h_" + String(i) + "' min='0' max='23' value='" + String(settings.getAlarmHour(i)) + "' style='width:70px; margin-right:5px;'>";
-         html += "<span style='font-size:1.5rem; margin-top:-5px;'>:</span>";
-         html += "<input type='number' name='alm_m_" + String(i) + "' min='0' max='59' value='" + String(settings.getAlarmMinute(i)) + "' style='width:70px; margin-left:5px;'>";
+         // Time
+         html += "<td style='text-align:center; padding:10px;'>";
+         html += "<div style='display:flex; align-items:center; justify-content:center;'>";
+         html += "<input type='number' name='alm_h_" + String(i) + "' min='0' max='23' value='" + String(settings.getAlarmHour(i)) + "' style='width:60px; text-align:center;'>";
+         html += "<span style='font-size:1.5rem; margin:0 5px;'>:</span>";
+         html += "<input type='number' name='alm_m_" + String(i) + "' min='0' max='59' value='" + String(settings.getAlarmMinute(i)) + "' style='width:60px; text-align:center;'>";
+         html += "</div></td>";
          
-         html += "</div>";
+         // Tone
+         html += "<td style='text-align:center; padding:10px;'>";
+         html += "<select name='alm_t_" + String(i) + "' style='width:100%; min-width:120px;'>";
+         html += getSdFileOptions("/ringtones", settings.getAlarmTone(i));
+         html += "</select>";
+         html += "</td>";
+         
+         html += "</tr>";
     }
-    html += "</div>";
+    html += "</table></div>";
 
     // LED Moved to Advanced
 
@@ -679,85 +693,40 @@ void WebManager::handlePhonebookApi() {
 }
 
 String WebManager::getPhonebookHtml() {
+    String lang = settings.getLanguage();
+    bool isDe = (lang == "de");
+    String t_audio_btn = isDe ? "Wecker" : "Alarms";
+    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+    String t_conf = isDe ? "Konfiguration" : "Configuration";
+    String t_help = isDe ? "Hilfe" : "Help";
+    String t_title = isDe ? "Telefonbuch" : "Phonebook";
+    String t_save_title = isDe ? "Speichern" : "Save Entries";
+
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     
-    html += R"rawliteral(
-<style>
-body { 
-    margin: 0; padding: 0;
-    font-family: 'Times New Roman', serif;
-    background-color: #080808;
-    color: #f0e6d2;
-    padding: 10px; 
-}
-h2 {
-    color: #d4af37;
-    text-align: center;
-    text-transform: uppercase;
-    border-bottom: 2px solid #d4af37;
-    margin-bottom: 20px;
-    padding-bottom: 10px;
-}
-.pb-table {
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
-    border-collapse: collapse;
-}
-.pb-table th {
-    text-align: left;
-    color: #888;
-    border-bottom: 1px solid #333;
-    padding: 10px;
-    font-size: 0.9rem;
-    text-transform: uppercase;
-}
-.pb-table td {
-    padding: 15px 10px;
-    border-bottom: 1px solid #222;
-}
-input {
-    width: 100%;
-    background: #222;
-    border: 1px solid #444;
-    color: #d4af37;
-    padding: 10px;
-    font-size: 1.2rem;
-    text-align: center;
-    box-sizing: border-box;
-    font-family: monospace;
-}
-input:focus {
-    border-color: #d4af37;
-    outline: none;
-}
-.name-cell {
-    font-size: 1.2rem;
-    color: #fff;
-    padding-left: 15px;
-}
-.desc-cell {
-    display: block;
-    font-size: 0.8rem;
-    color: #666;
-    margin-top: 5px;
-}
-.fab {
-    position: fixed; bottom: 30px; right: 30px;
-    width: 60px; height: 60px; background: #d4af37; border-radius: 50%;
-    color: #fff; font-size: 30px; cursor: pointer; z-index: 100; border:none;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-}
-.footer {
-    text-align: center; margin-top: 40px; border-top: 1px solid #333; padding-top: 20px;
-}
-.footer a {
-    color: #d4af37; margin: 0 10px; text-decoration: none; font-size: 0.9rem;
-}
-</style>
+    // CSS for Lined Paper Design
+    html += "<style>";
+    html += "body { margin:0; padding:0; background-color: #fdfbf7; background-image: linear-gradient(#e1e1e1 1px, transparent 1px); background-size: 100% 40px; font-family: 'Courier New', monospace; color: #333; }";
+    html += "h2 { text-align:center; font-family: 'Courier New', monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 40px; margin-bottom: 20px; font-weight: bold; font-size: 2rem; border-bottom: none; }";
+    html += ".pb-table { width: 100%; max-width: 600px; margin: 0 auto; border-collapse: collapse; }";
+    html += ".pb-table td { height: 40px; vertical-align: bottom; padding: 0 10px 2px 10px; border: none; }";
+    html += "body::before { content: ''; position: fixed; top: 0; bottom: 0; left: 40px; width: 2px; background-color: #ff9999; z-index: -1; }";
+    
+    html += "input { width: 100%; background: transparent; border: none; color: #000; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: center; outline: none; }";
+    html += "input:focus { background: rgba(0,0,0,0.05); }";
+    
+    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', 'Segoe Script', cursive; font-size: 1.8rem; color: #000080; padding-left: 20px; line-height: 1; }";
+    html += ".desc-cell { display: block; font-family: 'Courier New', monospace; font-size: 0.7rem; color: #666; margin-top: 0px; letter-spacing: 1px; text-transform: uppercase; }";
+    
+    html += ".fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #333; border-radius: 50%; color: #fff; font-size: 30px; cursor: pointer; z-index: 100; border:none; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }";
+    
+    html += ".nav { text-align: center; margin-top: 60px; padding: 20px; background: #fdfbf7; border-top: 2px solid #333; position: relative; z-index: 10; }";
+    html += ".nav a { color: #333; margin: 0 10px; text-decoration: none; font-size: 1.0rem; font-weight: bold; text-transform: uppercase; font-family: 'Courier New', monospace; }"; 
+    html += ".nav a:hover { text-decoration: underline; }";
+    html += "</style>";
 
+    html += R"rawliteral(
 <script>
-// Known Signatures
 const systemItems = [
     { id:'p1', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'1', defName:'Persona 1', defNum:'1' },
     { id:'p2', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'2', defName:'Persona 2', defNum:'2' },
@@ -767,27 +736,14 @@ const systemItems = [
     { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'', defName:'Toggle Alarms', defNum:'90' },
     { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' }
 ];
-
 let fullData = {};
-
-async function load() { 
-    try { 
-        const res = await fetch('/api/phonebook'); 
-        fullData = await res.json(); 
-        render(); 
-    } catch(e) { console.error(e); } 
-}
-
+async function load() { try { const res = await fetch('/api/phonebook'); fullData = await res.json(); render(); } catch(e) { console.error(e); } }
 function render() {
     const tbody = document.getElementById('tbody');
     tbody.innerHTML = '';
-    
-    // For each known item, find it in data
     systemItems.forEach(item => {
-        // Find key by signature
         let currentKey = "";
         let currentName = item.defName;
-        
         for (const [key, entry] of Object.entries(fullData)) {
             if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
                 currentKey = key;
@@ -795,8 +751,6 @@ function render() {
                 break;
             }
         }
-        
-        // Render Row
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="width: 80px;">
@@ -804,56 +758,31 @@ function render() {
             </td>
             <td class="name-cell">
                 ${currentName}
-                <span class="desc-cell">${item.defName} (System)</span>
-            </td>
-        `;
+                <span class="desc-cell">${item.defName}</span>
+            </td>`;
         tbody.appendChild(tr);
     });
 }
-
 async function save() {
-    // 1. Create Clean Clone of fullData minus the system items we manage
     let newData = {};
-    
-    // Copy entries that are NOT system items
     for (const [key, entry] of Object.entries(fullData)) {
         let isSystem = false;
         for (const item of systemItems) {
-            if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
-                isSystem = true; 
-                break; 
-            }
+            if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) { isSystem = true; break; }
         }
         if (!isSystem) newData[key] = entry; 
     }
-    
-    // 2. Add back items from UI
     systemItems.forEach(item => {
         const input = document.getElementById('input_' + item.id);
         const newKey = input.value.trim();
-        
         if (newKey && newKey.length > 0) {
-            // Check for Name (preserve existing if possible, or use default)
-            // We need to look up if we had a name for this item before
             let name = item.defName;
-            
-            // Find old entry to preserve name (e.g. from txt file update)
             for (const [k, e] of Object.entries(fullData)) {
-                 if (e.type === item.type && e.value === item.val && e.parameter === item.param) {
-                     name = e.name;
-                     break;
-                 }
+                 if (e.type === item.type && e.value === item.val && e.parameter === item.param) { name = e.name; break; }
             }
-            
-            newData[newKey] = {
-                name: name,
-                type: item.type,
-                value: item.val,
-                parameter: item.param
-            };
+            newData[newKey] = { name: name, type: item.type, value: item.val, parameter: item.param };
         }
     });
-
     await fetch('/api/phonebook', { method:'POST', body:JSON.stringify(newData) });
     alert('Saved!');
     location.reload();
@@ -861,23 +790,22 @@ async function save() {
 </script>
 </head>
 <body onload="load()">
-    <h2>Phonebook</h2>
-    
-    <table class="pb-table">
-        <thead><tr><th># Number</th><th>Name</th></tr></thead>
-        <tbody id="tbody"></tbody>
-    </table>
-    
-    <button class="fab" onclick="save()" title="Save Entries">💾</button>
-
-    <div class="footer">
-        <a href="/">Home</a>
-        <a href="/settings">Audio</a>
-        <a href="/advanced">Config</a>
-        <a href="/help">Help</a>
-    </div>
-</body></html>
 )rawliteral";
+
+    html += "<h2>" + t_title + "</h2>";
+    html += "<table class='pb-table'><tbody id='tbody'></tbody></table>";
+    html += "<button class='fab' onclick='save()' title='" + t_save_title + "'>💾</button>";
+    
+    html += "<div class='nav'>";
+    html += "<a href='/'>" + String(isDe ? "Home" : "Home") + "</a>"; 
+    html += "<a href='/settings'>" + t_audio_btn + "</a>";
+    html += "<a href='/phonebook'>" + t_pb + "</a>"; 
+    html += "<a href='/advanced'>" + t_conf + "</a>";
+    html += "<a href='/help'>" + t_help + "</a>";
+    html += "</div>";
+    
+    html += "</body></html>";
+
     return html;
 }
 
