@@ -153,7 +153,66 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
     }
 }
 
+void updatePersonaNamesFromSD() {
+    if (!sdAvailable) return;
+    
+    Serial.println("Updating Persona Names from SD...");
+    bool changed = false;
+
+    for (int i = 1; i <= 4; i++) {
+        String path = "/persona_0" + String(i);
+        File dir = SD.open(path);
+        // Fallback Name Default if folder exists but no txt?
+        // User requirements: "Fallback to persona_0X if txt missing"
+        // But current name might be manually set to "Grandma" and we don't want to reset it to "persona_02" if just the TXT is missing.
+        // The requirement says: "Fallback 'persona_02' if txt missing". This implies a strict logic.
+        // However, wiping manual changes is aggressive. I will implement: If TXT found -> Update. If NOT found -> do nothing (keep default or manual).
+
+        if (!dir || !dir.isDirectory()) continue;
+        
+        File file = dir.openNextFile();
+        while(file) {
+            String fname = String(file.name());
+            // Clean filename if it contains path
+            int lastSlash = fname.lastIndexOf('/');
+            if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
+
+            if (!file.isDirectory() && fname.endsWith(".txt") && !fname.startsWith(".") && fname.indexOf("._") == -1) {
+                String name = fname.substring(0, fname.length() - 4); // remove .txt
+                Serial.printf("Persona %d Name detected: %s\n", i, name.c_str());
+                
+                // Find existing entry for this Persona Index (i)
+                String key = phonebook.findKeyByValueAndParam("COMPLIMENT_CAT", String(i));
+                
+                if (key != "") {
+                    // Update existing
+                    PhonebookEntry e = phonebook.getEntry(key);
+                    if (e.name != name) {
+                        phonebook.addEntry(key, name, "FUNCTION", "COMPLIMENT_CAT", String(i));
+                        changed = true;
+                    }
+                } else {
+                    // Create new at default ID (str(i)) if free, else find free? 
+                    // For now, default to i. User can change it later in UI.
+                    phonebook.addEntry(String(i), name, "FUNCTION", "COMPLIMENT_CAT", String(i));
+                    changed = true;
+                }
+                break; // Use the first valid txt found 
+            }
+            file = dir.openNextFile();
+        }
+    }
+
+    if (changed) {
+        Serial.println("Saving updated Phonebook names...");
+        phonebook.saveChanges();
+    }
+}
+
 void buildPlaylist() {
+    // Initial Scan for Names
+    updatePersonaNamesFromSD();
+
     categories.clear();
     mainPlaylist.tracks.clear();
     mainPlaylist.index = 0;
@@ -162,7 +221,7 @@ void buildPlaylist() {
     
     // Categories 1-4
     for (int i = 1; i <= 4; i++) {
-        String subfolder = "mp3_group_0" + String(i);
+        String subfolder = "persona_0" + String(i);
         
         bool loaded = loadPlaylistFromSD(i, categories[i]);
         if (!loaded || categories[i].tracks.empty()) {

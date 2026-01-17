@@ -82,6 +82,19 @@ void PhonebookManager::saveAll(JsonObject json) {
     save();
 }
 
+void PhonebookManager::saveChanges() {
+    save();
+}
+
+String PhonebookManager::findKeyByValueAndParam(String value, String parameter) {
+    for (auto const& [number, entry] : _entries) {
+        if (entry.value == value && entry.parameter == parameter) {
+            return number;
+        }
+    }
+    return "";
+}
+
 void PhonebookManager::save() {
     JsonDocument doc;
     JsonObject root = doc.to<JsonObject>();

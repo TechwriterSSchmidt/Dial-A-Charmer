@@ -25,10 +25,10 @@ REQUIRED_DIRS = [
     "time",
     "ringtones",
     "playlists",
-    "mp3_group_01",
-    "mp3_group_02",
-    "mp3_group_03",
-    "mp3_group_04"
+    "persona_01",
+    "persona_02",
+    "persona_03",
+    "persona_04"
 ]
 
 # --- TTS CONFIGURATION (TEXTS) ---

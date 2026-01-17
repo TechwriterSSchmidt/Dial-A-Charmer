@@ -400,7 +400,14 @@ String WebManager::getSettingsHtml() {
     String t_n_end = isDe ? "Nachtmodus Ende (Std)" : "Night End Hour";
     String t_save = isDe ? "Speichern" : "Save Settings";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
-    String t_help = isDe ? "Hilfe" : "Usage Help";
+    String t_audio_btn = isDe ? "Wecker" : "Alarms"; // "Wecker" requested for Dashboard/Footer
+    String t_conf = isDe ? "Konfiguration" : "Configuration";
+    String t_help = isDe ? "Hilfe" : "Help";
+    
+    // Additional Footer strings if needed to match requested "Wecker, Telefonbuch, Konfiguration, Hilfe"
+    // The previous code had "Alarms & Audio" on the dashboard button, but footer was "Audio".
+    // User wants consistency. "Wecker" (Alarms) seems to be the preferred term for the "Audio/Alarm" page now.
+
     String t_lang = isDe ? "Sprache" : "Language";
     String t_adv = isDe ? "Erweiterte Einstellungen" : "Advanced Settings";
 
@@ -453,8 +460,9 @@ String WebManager::getSettingsHtml() {
     html += "</form>";
     html += "<p style='text-align:center'>";
     html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
+    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio_btn + "</a>";
     html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
-    html += "<a href='/advanced' style='color:#ffc107; margin-right: 20px;'>" + t_adv + "</a>";
+    html += "<a href='/advanced' style='color:#ffc107; margin-right: 20px;'>" + t_conf + "</a>";
     html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
     html += "</p>";
     html += "</body></html>";
@@ -465,6 +473,10 @@ String WebManager::getSettingsHtml() {
 String WebManager::getHtml() {
     String lang = settings.getLanguage();
     bool isDe = (lang == "de");
+    String t_audio_btn = isDe ? "Wecker" : "Alarms";
+    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+    String t_conf = isDe ? "Konfiguration" : "Configuration";
+    String t_help = isDe ? "Hilfe" : "Help";
     
     // Simple Dashboard
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
@@ -482,10 +494,10 @@ String WebManager::getHtml() {
     html += "<p style='color:" + statusColor + "; font-family:sans-serif; font-size:1.2rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;'>STATUS: " + statusText + "</p>";
     html += "</div>";
 
-    html += "<a href='/settings' class='dash-btn'>" + String(isDe ? "Wecker & Audio" : "Alarms & Audio") + "</a>";
-    html += "<a href='/phonebook' class='dash-btn'>" + String(isDe ? "Telefonbuch" : "Phonebook") + "</a>";
-    html += "<a href='/advanced' class='dash-btn'>" + String(isDe ? "Konfiguration" : "Configuration") + "</a>";
-    html += "<a href='/help' class='dash-btn'>" + String(isDe ? "Hilfe" : "Help") + "</a>";
+    html += "<a href='/settings' class='dash-btn'>" + t_audio_btn + "</a>";
+    html += "<a href='/phonebook' class='dash-btn'>" + t_pb + "</a>";
+    html += "<a href='/advanced' class='dash-btn'>" + t_conf + "</a>";
+    html += "<a href='/help' class='dash-btn'>" + t_help + "</a>";
 
     html += "<div style='text-align:center; margin-top:40px; opacity: 0.7;'>";
     html += "<select onchange='sl(this.value)' style='width:auto; display:inline-block; background:#111; color:#888; border:1px solid #444;'>";
@@ -527,7 +539,9 @@ String WebManager::getAdvancedHtml() {
     String t_save = isDe ? "Speichern" : "Save Settings";
     String t_back = isDe ? "Zur&uuml;ck" : "Back";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
-    String t_help = isDe ? "Hilfe" : "Usage Help";
+    String t_help = isDe ? "Hilfe" : "Help"; // "Usage Help" -> "Help"
+    String t_audio_btn = isDe ? "Wecker" : "Alarms"; // New
+    String t_conf = isDe ? "Konfiguration" : "Configuration"; // New
 
     // Scan for networks
     int n = WiFi.scanNetworks();
@@ -619,7 +633,7 @@ String WebManager::getAdvancedHtml() {
     
     html += "<p style='text-align:center'>";
     html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio + "</a>";
+    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio_btn + "</a>";
     html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
     html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
     html += "</p>";
@@ -671,124 +685,197 @@ String WebManager::getPhonebookHtml() {
 <style>
 body { 
     margin: 0; padding: 0;
-    font-family: 'Courier New', Courier, monospace;
-    background-color: #e8e8e0;
-    background-image: radial-gradient(#d0d0c0 1px, transparent 1px);
-    background-size: 20px 20px;
-    height: 100vh;
-    padding: 20px; 
-}
-.notepad {
-    background: #fdfbf7;
-    max-width: 900px;
-    margin: 0 auto;
-    min-height: 80vh;
-    padding: 0;
-    position: relative;
-    box-shadow: 0 0 5px rgba(0,0,0,0.2);
-    background-image: linear-gradient(#99ccff 1px, transparent 1px);
-    background-size: 100% 3.0rem;
-}
-.notepad::before {
-    content: ''; position: absolute; top:0; bottom:0; left: 4rem;
-    border-left: 2px solid #ff9999; z-index: 10;
-}
-.header {
-    background: transparent; padding: 2rem 0 1rem 5rem;
-    border-bottom: 3px double #b00; margin-bottom: 0;
+    font-family: 'Times New Roman', serif;
+    background-color: #080808;
+    color: #f0e6d2;
+    padding: 10px; 
 }
 h2 {
-    margin: 0; color: #b00; font-size: 2.5rem;
-    font-family: 'Brush Script MT', cursive; transform: rotate(-2deg);
+    color: #d4af37;
+    text-align: center;
+    text-transform: uppercase;
+    border-bottom: 2px solid #d4af37;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
 }
-table { width: 100%; border-collapse: collapse; position: relative; z-index: 20; }
-tr { height: 3.0rem; }
-th {
-    text-align: left; color: #b00; font-family: sans-serif; font-size: 0.8rem;
-    padding-left: 10px; vertical-align: bottom; padding-bottom: 5px;
+.pb-table {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    border-collapse: collapse;
 }
-th.num-col { padding-left: 5rem; width: 3rem; }
-td { vertical-align: bottom; padding: 0 10px; border: none; }
-input, select {
-    width: 100%; background: transparent; border: none;
-    font-family: 'Courier New', Courier, monospace; font-weight: bold; font-size: 1.3rem;
-    color: #000080; height: 2.5rem; outline: none;
+.pb-table th {
+    text-align: left;
+    color: #888;
+    border-bottom: 1px solid #333;
+    padding: 10px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+.pb-table td {
+    padding: 15px 10px;
+    border-bottom: 1px solid #222;
+}
+input {
+    width: 100%;
+    background: #222;
+    border: 1px solid #444;
+    color: #d4af37;
+    padding: 10px;
+    font-size: 1.2rem;
+    text-align: center;
+    box-sizing: border-box;
+    font-family: monospace;
+}
+input:focus {
+    border-color: #d4af37;
+    outline: none;
+}
+.name-cell {
+    font-size: 1.2rem;
+    color: #fff;
+    padding-left: 15px;
+}
+.desc-cell {
+    display: block;
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 5px;
 }
 .fab {
     position: fixed; bottom: 30px; right: 30px;
     width: 60px; height: 60px; background: #d4af37; border-radius: 50%;
     color: #fff; font-size: 30px; cursor: pointer; z-index: 100; border:none;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.5);
 }
-.btn-del {
-    color: #a00; background: transparent; border: 1px solid #a00; border-radius: 50%;
-    width: 25px; height: 25px; cursor: pointer;
+.footer {
+    text-align: center; margin-top: 40px; border-top: 1px solid #333; padding-top: 20px;
 }
-.nav-back {
-    position: absolute; top: 1rem; right: 2rem;
-    text-decoration: none; font-weight: bold; color: #b00;
-    font-family: sans-serif; border: 2px solid #b00; padding: 5px 10px;
+.footer a {
+    color: #d4af37; margin: 0 10px; text-decoration: none; font-size: 0.9rem;
 }
 </style>
 
 <script>
-async function load() { try { const res = await fetch('/api/phonebook'); render(await res.json()); } catch(e){} }
-let currentData = {};
-function render(data) {
-    currentData = data;
+// Known Signatures
+const systemItems = [
+    { id:'p1', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'1', defName:'Persona 1', defNum:'1' },
+    { id:'p2', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'2', defName:'Persona 2', defNum:'2' },
+    { id:'p3', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'3', defName:'Persona 3', defNum:'3' },
+    { id:'p4', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'4', defName:'Persona 4', defNum:'4' },
+    { id:'menu', type:'FUNCTION', val:'VOICE_MENU', param:'', defName:'Operator Menu', defNum:'9' },
+    { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'', defName:'Toggle Alarms', defNum:'90' },
+    { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' }
+];
+
+let fullData = {};
+
+async function load() { 
+    try { 
+        const res = await fetch('/api/phonebook'); 
+        fullData = await res.json(); 
+        render(); 
+    } catch(e) { console.error(e); } 
+}
+
+function render() {
     const tbody = document.getElementById('tbody');
     tbody.innerHTML = '';
-    const entries = Object.entries(data).sort((a,b) => {
-        let nA = parseInt(a[0]); let nB = parseInt(b[0]);
-        if(!isNaN(nA) && !isNaN(nB)) return nA - nB;
-        return a[0].localeCompare(b[0]);
-    });
-    entries.forEach(([num, entry]) => {
+    
+    // For each known item, find it in data
+    systemItems.forEach(item => {
+        // Find key by signature
+        let currentKey = "";
+        let currentName = item.defName;
+        
+        for (const [key, entry] of Object.entries(fullData)) {
+            if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
+                currentKey = key;
+                if (entry.name && entry.name !== "Unknown") currentName = entry.name;
+                break;
+            }
+        }
+        
+        // Render Row
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="padding-left: 4.5rem; text-align:right;"><input value="${num}" readonly style="text-align:right; font-family:sans-serif; color:#555;"></td>
-            <td><input value="${entry.name}" onchange="update('${num}', 'name', this.value)"></td>
-            <td style="width:120px;">
-                <select onchange="update('${num}', 'type', this.value)">
-                    <option value="FUNCTION" ${entry.type=='FUNCTION'?'selected':''}>Function</option>
-                    <option value="AUDIO" ${entry.type=='AUDIO'?'selected':''}>Audio</option>
-                    <option value="TTS" ${entry.type=='TTS'?'selected':''}>AI/TTS</option>
-                </select>
+            <td style="width: 80px;">
+                <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}">
             </td>
-            <td><input value="${entry.value}" onchange="update('${num}', 'value', this.value)"></td>
-            <td style="width:40px;"><button class="btn-del" onclick="del('${num}')">x</button></td>
+            <td class="name-cell">
+                ${currentName}
+                <span class="desc-cell">${item.defName} (System)</span>
+            </td>
         `;
         tbody.appendChild(tr);
     });
 }
-function update(n,f,v){ if(currentData[n]) currentData[n][f]=v; }
-function del(n){ if(confirm('Del?')){ delete currentData[n]; render(currentData); } }
-function addRow(){
-    const n = prompt("Number:"); if(!n || currentData[n]) return;
-    currentData[n] = { name: "New", type: "TTS", value: "Hello", parameter: "" };
-    render(currentData);
+
+async function save() {
+    // 1. Create Clean Clone of fullData minus the system items we manage
+    let newData = {};
+    
+    // Copy entries that are NOT system items
+    for (const [key, entry] of Object.entries(fullData)) {
+        let isSystem = false;
+        for (const item of systemItems) {
+            if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
+                isSystem = true; 
+                break; 
+            }
+        }
+        if (!isSystem) newData[key] = entry; 
+    }
+    
+    // 2. Add back items from UI
+    systemItems.forEach(item => {
+        const input = document.getElementById('input_' + item.id);
+        const newKey = input.value.trim();
+        
+        if (newKey && newKey.length > 0) {
+            // Check for Name (preserve existing if possible, or use default)
+            // We need to look up if we had a name for this item before
+            let name = item.defName;
+            
+            // Find old entry to preserve name (e.g. from txt file update)
+            for (const [k, e] of Object.entries(fullData)) {
+                 if (e.type === item.type && e.value === item.val && e.parameter === item.param) {
+                     name = e.name;
+                     break;
+                 }
+            }
+            
+            newData[newKey] = {
+                name: name,
+                type: item.type,
+                value: item.val,
+                parameter: item.param
+            };
+        }
+    });
+
+    await fetch('/api/phonebook', { method:'POST', body:JSON.stringify(newData) });
+    alert('Saved!');
+    location.reload();
 }
-async function save(){ await fetch('/api/phonebook', { method:'POST', body:JSON.stringify(currentData) }); alert('Saved!'); }
 </script>
 </head>
 <body onload="load()">
-    <div class="notepad">
-        <!-- <a href="/settings" class="nav-back">Settings</a> REMOVED -->
-        <div class="header"><h2>Phone Directory</h2></div>
-        <table>
-            <thead><tr><th class="num-col">#</th><th>Name</th><th>Type</th><th>Details</th><th></th></tr></thead>
-            <tbody id="tbody"></tbody>
-        </table>
-        
-        <!-- Footer -->
-        <p style="text-align:center; position:absolute; bottom:10px; left:0; right:0; font-family: 'Times New Roman';">
-            <a href="/" style="color:#b00; margin-right: 20px; text-decoration:none;">Home</a>
-            <a href="/settings" style="color:#b00; margin-right: 20px; text-decoration:none;">Audio</a>
-            <a href="/advanced" style="color:#b00; margin-right: 20px; text-decoration:none;">Config</a>
-            <a href="/help" style="color:#b00; text-decoration:none;">Help</a>
-        </p>
+    <h2>Phonebook</h2>
+    
+    <table class="pb-table">
+        <thead><tr><th># Number</th><th>Name</th></tr></thead>
+        <tbody id="tbody"></tbody>
+    </table>
+    
+    <button class="fab" onclick="save()" title="Save Entries">💾</button>
+
+    <div class="footer">
+        <a href="/">Home</a>
+        <a href="/settings">Audio</a>
+        <a href="/advanced">Config</a>
+        <a href="/help">Help</a>
     </div>
-    <button class="fab" onclick="save()" title="Save">💾</button>
-    <button class="fab" style="bottom: 110px; background: #4caf50;" onclick="addRow()" title="Add">+</button>
 </body></html>
 )rawliteral";
     return html;
@@ -797,6 +884,15 @@ async function save(){ await fetch('/api/phonebook', { method:'POST', body:JSON.
 String WebManager::getHelpHtml() {
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += htmlStyle;
+    
+    // Add translation logic for Help Footer
+    String lang = settings.getLanguage();
+    bool isDe = (lang == "de");
+    String t_audio_btn = isDe ? "Wecker" : "Alarms";
+    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+    String t_conf = isDe ? "Konfiguration" : "Configuration";
+    // Help is current page
+    
     html += "</head><body>";
     html += "<h2>User Manual</h2>";
     
@@ -820,9 +916,9 @@ String WebManager::getHelpHtml() {
     
     html += "<p style='text-align:center'>";
     html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>Audio</a>";
-    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>Phonebook</a>";
-    html += "<a href='/advanced' style='color:#ffc107'>Config</a>";
+    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio_btn + "</a>";
+    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
+    html += "<a href='/advanced' style='color:#ffc107'>" + t_conf + "</a>";
     html += "</p>";
     
     html += "</body></html>";

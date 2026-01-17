@@ -48,10 +48,10 @@ Ensure your SD card is formatted (FAT32) and structured as follows:
 ├── time_intro.mp3          (Preface for clock)
 ├── ringtones/              
 │   ├── 1.mp3 ... 5.mp3     (Ringtone options)
-├── mp3_group_01/           (Persona 1 - Dial 1)
-├── mp3_group_02/           (Persona 2 - Dial 2)
-├── mp3_group_03/           (Persona 3 - Dial 3)
-├── mp3_group_04/           (Persona 4 - Dial 4)
+├── persona_01/             (Persona 1 - Dial 1)
+├── persona_02/             (Persona 2 - Dial 2)
+├── persona_03/             (Persona 3 - Dial 3)
+├── persona_04/             (Persona 4 - Dial 4)
 ```
 *Note: Use `python utils/split_audio.py` to chop long files into individual clips.*
 

@@ -29,13 +29,17 @@ public:
     String getJson(); 
     void saveFromJson(String jsonString);
     void saveAll(JsonObject json); // New method
+    void saveChanges(); // Expose save() functionality publicly
+    
+    // Search
+    String findKeyByValueAndParam(String value, String parameter);
 
 private:
     const char* _filename = "/phonebook.json";
     std::map<String, PhonebookEntry> _entries;
     
     void load();
-    void save();
+    void save(); // Internal implementation
 };
 
 extern PhonebookManager phonebook;

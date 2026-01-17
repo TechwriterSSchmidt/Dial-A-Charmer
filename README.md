@@ -134,10 +134,10 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 ```text
 /
 ├── startup.mp3                (Played on boot)
-├── mp3_group_01/              (Persona 1 Compliments - Dial 1)
-├── mp3_group_02/              (Persona 2 Compliments - Dial 2)
-├── mp3_group_03/              (Persona 3 Compliments - Dial 3)
-├── mp3_group_04/              (Persona 4 Compliments - Dial 4)
+├── persona_01/                (Persona 1 Compliments - Dial 1)
+├── persona_02/                (Persona 2 Compliments - Dial 2)
+├── persona_03/                (Persona 3 Compliments - Dial 3)
+├── persona_04/                (Persona 4 Compliments - Dial 4)
 ├── playlists/                 (System generated automatically)
 ├── ringtones/                 (Ringtones for Alarm/Ring)
 │   ├── 1.wav
@@ -155,7 +155,7 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 This tool splits large, long audio files (e.g. combined recordings) into individual MP3 files based on silence.
 
 *   **Usage:** `python utils/split_audio.py -o my_output_folder (input_files)`
-*   **Function:** Detects silence gaps >1000ms and chops the file. Resulting files (`001.mp3`, `002.mp3`...) are ready for `mp3_group_XX` folders.
+*   **Function:** Detects silence gaps >1000ms and chops the file. Resulting files (`001.mp3`, `002.mp3`...) are ready for `persona_XX` folders.
 
 ## Status Indication
 
@@ -188,7 +188,7 @@ The system uses specific WAV files in `/system/` for feedback:
 2.  **Prepare SD Card:**
     *   Format MicroSD card to **FAT32**.
     *   Copy the contents of `sd_card_template` to the root of the card.
-    *   Fill `mp3_group_XX` folders with your desired MP3 files.
+    *   Fill `persona_XX` folders with your desired MP3 files.
 3.  **Flash Firmware:**
     *   Open project in VS Code with PlatformIO.
     *   Connect Wemos D32 Pro via USB.
