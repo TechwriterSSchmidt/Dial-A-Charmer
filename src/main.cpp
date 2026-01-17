@@ -170,6 +170,9 @@ void startPersonaScan() {
 }
 
 void handlePersonaScan() {
+    // TEMPORARY DEBUG ENABLED AGAIN
+    // return; 
+
     if (!bgScanActive || !sdAvailable) return;
 
     // Process a chunk of work
@@ -410,6 +413,8 @@ void playSound(String filename, bool useSpeaker = false) {
 
 // Check Battery Voltage (Lolin D32 Pro: Divider 100k/100k on IO35)
 bool checkBattery() {
+    return true; // DISABLED due to I2S ADC Conflict
+    /*
     // ADC: CONFLICT Fix
     // Instead of analogRead(35) which uses the NEW driver (simultaneously with WiFi Legacy driver),
     // we use the Legacy driver directly.
@@ -425,6 +430,14 @@ bool checkBattery() {
     // Correction logic inspired by renatobo/bonogps for Lolin D32 Pro
     // They associate raw 4096 with ~7.445V at the battery (post divider x2 logic implicit in factor)
     // Formula: (raw / 4096.0) * 7.445
+    float voltage = (raw / 4096.0) * 7.445;
+    
+    // Serial.printf("Bat: %d (%.2f V)\n", raw, voltage);
+
+    if (voltage < 3.2) return false; // Low Battery Warning
+    return true;
+    */
+}
     float voltage = (float)raw / 4096.0 * 7.445; 
     
     Serial.printf("Battery: %.2f V (Raw: %d)\n", voltage, raw);
@@ -978,6 +991,9 @@ void onButton() {
 RTC_DATA_ATTR int bootCount = 0; // Store in RTC memory
 
 bool isUsbPowerConnected() {
+    // DISABLED for now due to I2S ADC Conflict (Both use ADC1)
+    return true; // Assume USB Power -> No Deep Sleep
+    /*
     // Heuristic for Lolin D32 Pro via Battery Divider (35)
     // Legacy ADC driver is used in checkBattery()
     // 4.2V = ~2310 raw. 
@@ -985,6 +1001,10 @@ bool isUsbPowerConnected() {
     // > 4.3V (Raw > 2400) -> Overcharged/USB Direct?
     
     int raw = adc1_get_raw(ADC1_CHANNEL_7);
+    if(raw < 50 || raw > 2500) return true; 
+    return false; 
+    */
+}
     if (raw < 50 || raw > 2400) return true; 
     return false;
 }
@@ -1017,9 +1037,10 @@ unsigned long lastActivityTime = 0;
  */
 void setupI2S_ADC() {
     // 16-bit sampling, only need mono
+    // Note: Built-in ADC mode requires higher sample rates to satisfy clock dividers (approx > 22kHz)
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-        .sample_rate = 16000,
+        .sample_rate = 44100, 
         .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
         .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT, 
         .communication_format = I2S_COMM_FORMAT_I2S_MSB,
@@ -1123,6 +1144,12 @@ void setup() {
 }
 
 void loop() {
+    static unsigned long lastLoopDebug = 0;
+    if(millis() - lastLoopDebug > 2000) {
+        lastLoopDebug = millis();
+        Serial.printf("[LOOP] running... AudioRun: %d, WebClient: ?, FreeHeap: %u\n", (audio?audio->isRunning():0), ESP.getFreeHeap());
+    }
+
     if(audio) audio->loop();
     webManager.loop();
     dial.loop();
