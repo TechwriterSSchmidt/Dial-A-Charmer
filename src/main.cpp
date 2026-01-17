@@ -61,12 +61,13 @@ std::map<int, Playlist> categories; // 1=Trump, 2=Badran, 3=Yoda, 4=Neutral
 Playlist mainPlaylist; // For Dial 0
 
 // --- Persistence Helpers ---
+// CHANGED: Use v3 filenames to force cache invalidation (fixes mp3_group vs persona path mismatch)
 String getStoredPlaylistPath(int category) {
-    return "/playlists/cat_" + String(category) + ".m3u";
+    return "/playlists/cat_" + String(category) + "_v3.m3u";
 }
 
 String getStoredIndexPath(int category) {
-    return "/playlists/cat_" + String(category) + ".idx";
+    return "/playlists/cat_" + String(category) + "_v3.idx";
 }
 
 void ensurePlaylistDir() {
@@ -140,6 +141,8 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
          return;
     }
     
+    Serial.printf("Scanning dir: %s for Cat %d\n", path.c_str(), categoryId);
+
     File file = dir.openNextFile();
     while(file) {
         if(!file.isDirectory()) {
@@ -151,6 +154,8 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
                 if(fname.startsWith("/")) fname = fname.substring(1); 
                 fullPath += fname;
                 
+                // Serial.printf("  Found: %s\n", fullPath.c_str()); // Debug verbose
+
                 // Add to specific category ONLY
                 categories[categoryId].tracks.push_back(fullPath);
             }
@@ -414,38 +419,6 @@ void playSound(String filename, bool useSpeaker = false) {
 // Check Battery Voltage (Lolin D32 Pro: Divider 100k/100k on IO35)
 bool checkBattery() {
     return true; // DISABLED due to I2S ADC Conflict
-    /*
-    // ADC: CONFLICT Fix
-    // Instead of analogRead(35) which uses the NEW driver (simultaneously with WiFi Legacy driver),
-    // we use the Legacy driver directly.
-    // GPIO 35 is ADC1_CHANNEL_7.
-    
-    // Ensure width is configured (once, or every time?)
-    // Note: It's safe to call multiple times.
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_7, ADC_ATTEN_DB_12); // 11dB for 3.3V range
-
-    int raw = adc1_get_raw(ADC1_CHANNEL_7);
-    
-    // Correction logic inspired by renatobo/bonogps for Lolin D32 Pro
-    // They associate raw 4096 with ~7.445V at the battery (post divider x2 logic implicit in factor)
-    // Formula: (raw / 4096.0) * 7.445
-    float voltage = (raw / 4096.0) * 7.445;
-    
-    // Serial.printf("Bat: %d (%.2f V)\n", raw, voltage);
-
-    if (voltage < 3.2) return false; // Low Battery Warning
-    return true;
-    */
-}
-    float voltage = (float)raw / 4096.0 * 7.445; 
-    
-    Serial.printf("Battery: %.2f V (Raw: %d)\n", voltage, raw);
-    
-    if (voltage < 3.3 && voltage > 2.0) { // Ignore 0.0 (USB powered/no bat)
-        return false; // Low Battery
-    }
-    return true; // OK
 }
 
 // --- Time Speaking Logic ---
@@ -993,20 +966,6 @@ RTC_DATA_ATTR int bootCount = 0; // Store in RTC memory
 bool isUsbPowerConnected() {
     // DISABLED for now due to I2S ADC Conflict (Both use ADC1)
     return true; // Assume USB Power -> No Deep Sleep
-    /*
-    // Heuristic for Lolin D32 Pro via Battery Divider (35)
-    // Legacy ADC driver is used in checkBattery()
-    // 4.2V = ~2310 raw. 
-    // < 0.1V (Raw < 50) -> No Battery -> USB Power
-    // > 4.3V (Raw > 2400) -> Overcharged/USB Direct?
-    
-    int raw = adc1_get_raw(ADC1_CHANNEL_7);
-    if(raw < 50 || raw > 2500) return true; 
-    return false; 
-    */
-}
-    if (raw < 50 || raw > 2400) return true; 
-    return false;
 }
 
 void setGpsStandby() {

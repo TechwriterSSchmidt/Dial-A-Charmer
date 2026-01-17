@@ -773,17 +773,20 @@ String WebManager::getPhonebookHtml() {
     html += "body { background-color: #080808; color: #f0e6d2; margin: 0; padding: 20px; }";
 
     // Notepad Container
-    html += ".notepad { width: 100%; max-width: 550px; margin: 20px auto; min-height: 600px; padding: 40px 20px 40px 80px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }";
-    html += ".notepad { background-color: #fdfbf7; background-image: linear-gradient(90deg, transparent 59px, #abc 59px, #abc 61px, transparent 61px), linear-gradient(#9ab 1px, transparent 1px); background-size: 100% 100%, 100% 40px; background-attachment: local; }";
-
-    // Red Handwritten Header (On Paper)
-    html += "h2.paper-title { color: #cc0000; border: none; font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 3.5rem; text-transform: none; letter-spacing: normal; margin: -10px 0 20px 0; text-align:center; text-shadow: none; }";
+    // Background: Off-white (#fffef0).
+    // Gradient 1: Vertical Blue Line at 60px.
+    // Gradient 2: Horizontal Red Lines every 40px.
+    html += ".notepad { width: 100%; max-width: 550px; margin: 20px auto; min-height: 600px; padding: 40px 20px 40px 0px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }";
+    html += ".notepad { background-color: #fffef0; background-image: linear-gradient(90deg, transparent 59px, #aaccff 59px, #aaccff 61px, transparent 61px), linear-gradient(#ffaaaa 1px, transparent 1px); background-size: 100% 100%, 100% 40px; background-attachment: local; }";
 
     // Table Styling - Align with lines
-    html += ".pb-table { width: 100%; border-collapse: collapse; }";
+    html += ".pb-table { width: 100%; border-collapse: collapse; margin-top: 0px; }";
     html += ".pb-table tr { height: 40px; background: transparent; border: none; }";
-    html += ".pb-table td { padding: 0 10px; border: none; border-bottom: 1px solid transparent; vertical-align: bottom; height: 40px; line-height: 40px; }";
+    html += ".pb-table td { padding: 0 10px; border: none; border-bottom: 1px solid transparent; vertical-align: bottom; height: 40px; line-height: 38px; }";
     
+    // Header Row on Paper
+    html += ".pb-head th { height: 40px; vertical-align: bottom; color: #cc0000; font-family: sans-serif; font-size: 1.2rem; border:none; line-height:40px; }";
+
     // Input styling - Handwritten on the line
     html += "input { width: 100%; background: transparent; border: none; color: #000; padding: 0; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: center; outline: none; box-shadow: none; height: 100%; border-radius:0; }";
     html += "input::placeholder { color: #aaa; opacity: 0.5; }";
@@ -791,20 +794,19 @@ String WebManager::getPhonebookHtml() {
     
     // Name Cell - Handwritten
     html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 2.0rem; color: #222; text-shadow: none; padding-left: 15px; }";
-    html += ".desc-cell { display: block; font-family: sans-serif; font-size: 0.7rem; color: #666; margin-top: -10px; letter-spacing: 0px; text-transform: uppercase; line-height: 1.0; }";
     
     html += "</style>";
 
     html += R"rawliteral(
 <script>
 const systemItems = [
-    { id:'p1', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'1', defName:'Persona 1', defNum:'1' },
-    { id:'p2', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'2', defName:'Persona 2', defNum:'2' },
-    { id:'p3', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'3', defName:'Persona 3', defNum:'3' },
-    { id:'p4', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'4', defName:'Persona 4', defNum:'4' },
+    { id:'p1', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'1', defName:'Persona 1 (Trump)', defNum:'1' },
+    { id:'p2', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'2', defName:'Persona 2 (Badran)', defNum:'2' },
+    { id:'p3', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'3', defName:'Persona 3 (Yoda)', defNum:'3' },
+    { id:'p4', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'4', defName:'Persona 4 (Neutral)', defNum:'4' },
     { id:'menu', type:'FUNCTION', val:'VOICE_MENU', param:'', defName:'Operator Menu', defNum:'9' },
-    { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'DISPLAY', defName:'Toggle Alarms', defNum:'90' },
-    { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'DISPLAY', defName:'Skip Next Alarm', defNum:'91' }
+    { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'', defName:'Toggle Alarms', defNum:'90' },
+    { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' }
 ];
 let fullData = {};
 async function load() { try { const res = await fetch('/api/phonebook'); fullData = await res.json(); render(); } catch(e) { console.error(e); } }
@@ -814,29 +816,7 @@ function render() {
     systemItems.forEach(item => {
         let currentKey = "";
         let currentName = item.defName;
-        for (const [key, entry] of Object.entries(fullData)) {
-            // Match Logic: Check type/val. Param is looser for toggles if needed, but current logic enforces it.
-            // Using loose param check for TOGGLE/SKIP if needed? No, keep strict for now.
-            // Note: The param for TOGGLE_ALARMS/SKIP is implicitly empty or don't care in backend?
-            // PhonebookManager uses empty string?
-            // Update: In previous code param was ''. In my JS here it is 'DISPLAY'?
-            // Wait, previous JS had param:'' for tog/skip. I changed it to 'DISPLAY' in this tool call?
-            // Revert strict param to '' to match backend logic if that's what it expects.
-            // Let's check the previous file's JS.
-            // Previous JS: { id:'tog', val:'TOGGLE_ALARMS', param:'', ... }
-            // I should stick to that unless I know better.
-             if (entry.type === item.type && entry.value === item.val) {
-                // For TOGGLE/SKIP, param might be empty in JSON but we defined it. 
-                // Let's assume strict match for Personas, loose for Singletons?
-                if(item.param === '' || entry.parameter === item.param) {
-                    currentKey = key;
-                    if (entry.name && entry.name !== "Unknown") currentName = entry.name;
-                    // break; // Don't break if duplicates? First match wins.
-                }
-            }
-        }
-        
-        // Actually, simple match loop:
+        // Search for existing entry
         for (const [key, entry] of Object.entries(fullData)) {
              if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
                  currentKey = key;
@@ -844,7 +824,11 @@ function render() {
                  break;
              }
         }
-
+        
+        // Use simplified name for default Personas if key matches default
+        // Actually, request says: "Persona 1" OR "Filename", not both.
+        // currentName already holds the override if present, or defName if not.
+        
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="width: 80px;">
@@ -852,7 +836,6 @@ function render() {
             </td>
             <td class="name-cell">
                 ${currentName}
-                <span class="desc-cell">${item.defName}</span>
             </td>`;
         tbody.appendChild(tr);
     });
@@ -871,6 +854,11 @@ async function save() {
         const newKey = input.value.trim();
         if (newKey && newKey.length > 0) {
             let name = item.defName;
+            // check if we have a renamed entry in fullData for this system item?
+            // current render logic pulls name from fullData.
+            // If we save, we want to preserve that name?
+            // Currently UI does not allow renaming the Name, only the Key.
+            // So we must preserve existing Name if found.
             for (const [k, e] of Object.entries(fullData)) {
                  if (e.type === item.type && e.value === item.val && e.parameter === item.param) { name = e.name; break; }
             }
@@ -878,7 +866,7 @@ async function save() {
         }
     });
     await fetch('/api/phonebook', { method:'POST', body:JSON.stringify(newData) });
-    alert('Saved!');
+    alert(document.documentElement.lang === 'de' ? 'Gespeichert!' : 'Saved!');
     location.reload();
 }
 </script>
@@ -886,9 +874,20 @@ async function save() {
 <body onload="load()">
 )rawliteral";
 
+    // Title ABOVE Paper
+    html += "<h2 style='text-align:center; color:#d4af37; text-transform:uppercase; letter-spacing:4px; margin-bottom:10px;'>" + t_title + "</h2>";
+
     html += "<div class='notepad'>";
-    html += "<h2 class='paper-title'>" + t_title + "</h2>";
-    html += "<table class='pb-table'><tbody id='tbody'></tbody></table>";
+    
+    // Table with Headers
+    html += "<table class='pb-table'>";
+    html += "<thead><tr class='pb-head'>";
+    // Icons/Labels
+    html += "<th style='width:80px; text-align:center; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
+    html += "<th style='text-align:left; padding-left:15px;'>Name</th>";
+    html += "</tr></thead>";
+    
+    html += "<tbody id='tbody'></tbody></table>";
     html += "</div>"; // End Notepad
 
     // Standard Footer (Button + Links)
