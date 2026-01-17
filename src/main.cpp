@@ -8,26 +8,25 @@
 #include <algorithm>
 #include <random>
 #include <map>
+#include <driver/i2s.h> // For ADC Mic
 
 #include "config.h"
 #include "Settings.h"
 #include "WebManager.h"
-#include "TimeManager.h" // Added
+#include "TimeManager.h" 
 #include "RotaryDial.h"
 #include "LedManager.h"
-#include "Es8311Driver.h" 
 #include "AiManager.h"   
 #include "PhonebookManager.h"
 
 // --- Objects ---
-// TinyGPSPlus gps; // Removed
-Audio *audio = nullptr;
+Audio *audio = nullptr; // Pointer managed object
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN, CONF_PIN_DIAL_MODE);
 LedManager ledManager(CONF_PIN_LED);
 
 // Global flag for hardware availability
 bool sdAvailable = false;
-bool audioCodecAvailable = false;
+// Note: PCM5100A is a "dumb" DAC and doesn't report I2C status. We assume it's working.
 
 // --- Ringing State (UI) ---
 bool isAlarmRinging = false;
@@ -276,36 +275,29 @@ enum AudioOutput { OUT_NONE, OUT_HANDSET, OUT_SPEAKER };
 AudioOutput currentOutput = OUT_NONE; 
 
 void setAudioOutput(AudioOutput target) {
-    if (currentOutput == target && audio != nullptr) return; 
+    if (audio == nullptr) return;
+    if (currentOutput == target) return; 
 
-    // Destruct existing audio object to thoroughly reset I2S driver state
-    if (audio != nullptr) {
-        delete audio;
-        audio = nullptr;
-        // Small delay to allow ESP-IDF driver to cleanup
-        delay(50);
-    }
+    // PCM5100A Shared Bus Logic (Stereo DAC)
+    // Left Channel = Handset
+    // Right Channel = Base Speaker
     
-    // Recreate Audio Object (Installs I2S Driver fresh)
-    // Audio(internalDAC, channelEnabled, i2sPort)
-    audio = new Audio(false, 3, 0);
+    // Force Mono Mix so the audio content plays on the selected speaker
+    audio->forceMono(true);
 
     if (target == OUT_HANDSET) {
-        // Handset: Includes Mic (DIN) and MCLK
-        audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT, CONF_I2S_DIN, CONF_I2S_MCLK);
-        int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
+        audio->setBalance(-16); // Left Only
+        int vol = ::map(settings.getVolume(), 0, 42, 0, 21); // Fixed ambiguous map
         audio->setVolume(vol);
         Serial.printf("Output Switched: HANDSET (Vol: %d)\n", vol);
     } else {
-        // Speaker: Output only
-        // Resetting to strict Speaker config
-        audio->setPinout(CONF_I2S_SPK_BCLK, CONF_I2S_SPK_LRC, CONF_I2S_SPK_DOUT, -1, -1);
-        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
+        audio->setBalance(16); // Right Only
+        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21); // Fixed ambiguous map
         audio->setVolume(vol);
         Serial.printf("Output Switched: SPEAKER (Vol: %d)\n", vol);
     }
     currentOutput = target;
-    delay(50); // Settlement
+    delay(20); 
 }
 
 void playSound(String filename, bool useSpeaker = false) {
@@ -929,6 +921,43 @@ void wakeGps() {
 
 unsigned long lastActivityTime = 0;
 
+/*
+ * SETUP I2S ADC (Input from MAX9814)
+ * Using I2S_NUM_1 in ADC Built-In Mode
+ * GPIO 36 is ADC1_CHANNEL_0
+ */
+void setupI2S_ADC() {
+    // 16-bit sampling, only need mono
+    i2s_config_t i2s_config = {
+        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
+        .sample_rate = 16000,
+        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT, 
+        .communication_format = I2S_COMM_FORMAT_I2S_MSB,
+        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
+        .dma_buf_count = 4,
+        .dma_buf_len = 128,
+        .use_apll = false
+    };
+
+    // Install Driver
+    esp_err_t err = i2s_driver_install(I2S_NUM_1, &i2s_config, 0, NULL);
+    if (err != ESP_OK) {
+        Serial.printf("Failed installing I2S ADC driver: %d\n", err);
+        return;
+    }
+
+    // Configure ADC mode
+    // GPIO 36 is ADC1_CHANNEL_0
+    err = i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_0);
+    if (err != ESP_OK) {
+        Serial.printf("Failed setting ADC mode: %d\n", err);
+    } else {
+        i2s_adc_enable(I2S_NUM_1);
+        Serial.println("I2S ADC (Mic) Initialized on I2S_NUM_1");
+    }
+}
+
 void setup() {
     Serial.begin(CONF_SERIAL_BAUD);
     
@@ -952,18 +981,9 @@ void setup() {
     phonebook.begin(); // Load Phonebook from SPIFFS
     timeManager.begin(); // Added TimeManager
     
-    // Init Audio Codec (ES8311)
-    if (!audioCodec.begin()) {
-        Serial.println("ES8311 Init Failed! (No I2C device?)");
-        ledManager.setMode(LedManager::SOS);
-        audioCodecAvailable = false;
-    } else {
-        Serial.println("ES8311 Initialized");
-        audioCodecAvailable = true;
-        audioCodec.setVolume(50); // Set Hardware Volume to 50%
-    }
+    // --- Hardware Init ---
     
-    // Init SD 
+    // 1. Init SD 
     if(!SD.begin(CONF_PIN_SD_CS)){
         Serial.println("SD Card Mount Failed (No Card?)");
         ledManager.setMode(LedManager::SOS);
@@ -974,8 +994,18 @@ void setup() {
         buildPlaylist();
     }
     
-    // Init Audio Lib
+    // 2. Init Audio (PCM5100A)
+    // Audio(internalDAC, channelEnabled, i2sPort)
+    // We use I2S_NUM_0 for DAC
+    audio = new Audio(false, 3, I2S_NUM_0);
+    audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+    audio->forceMono(true); // Critical for separation via Balance
+    
+    // Start with Handset
     setAudioOutput(OUT_HANDSET);
+
+    // 3. Init Mic (ADC)
+    setupI2S_ADC();
     
     dial.onDialComplete(onDial);
     dial.onHookChange(onHook);
@@ -989,13 +1019,15 @@ void setup() {
         wakeGps();
     }
     
-    Serial.println("Dial-A-Charmer Started");
+    Serial.println("Dial-A-Charmer Started (PCM5100A + MAX9814)");
     
     // Init Motor
     pinMode(CONF_PIN_VIB_MOTOR, OUTPUT);
     digitalWrite(CONF_PIN_VIB_MOTOR, LOW);
     
-    playSound("/system/beep.wav", true); // Speaker
+    // Initial Beep
+    setAudioOutput(OUT_HANDSET);
+    playSound("/system/beep.wav", false); // Speaker
 }
 
 void loop() {
@@ -1054,7 +1086,7 @@ void loop() {
     else if (timeManager.isSnoozeActive()) {
         ledManager.setMode(LedManager::SNOOZE_MODE); // Warm White Solid
     }
-    else if (!sdAvailable || !audioCodecAvailable) {
+    else if (!sdAvailable) { // Removed audioCodecAvailable check
          ledManager.setMode(LedManager::SOS);
     }
     else if (WiFi.status() == WL_CONNECTED) {

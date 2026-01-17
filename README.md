@@ -85,19 +85,22 @@ The device communicates distinct states via the integrated WS2812 LED using orga
 
 **Target Board:** Wemos Lolin D32 Pro (ESP32)
 
+**Audio Architecture (v2):**
+*   **DAC:** PCM5100A (I2S) - Shared Stereo Output.
+    *   **Left Channel:** Handset Earpiece (Low Power).
+    *   **Right Channel:** Base Speaker (Amplified/Loud).
+*   **ADC:** MAX9814 (Analog) - Electret Microphone with Auto Gain Control.
+
 | Component | Pin Function | GPIO | Notes |
 | :--- | :--- | :--- | :--- |
-| **I2S Primary** | BCLK | `GPIO 26` | **Handset** (ES8311 Codec) |
-| | LRC (WS) | `GPIO 25` | |
-| | DOUT | `GPIO 27` | Handset Speaker |
-| | DIN | `GPIO 39` | Handset Microphone (Board VN) |
-| | MCLK | `GPIO 0` | Master Clock (Required for ES8311) |
-| **I2S Secondary** | BCLK | `GPIO 14` | **Base Speaker** (MAX98357A) |
-| | LRC (WS) | `GPIO 12` | |
-| | DOUT | `GPIO 15` | Ringing/Open Listening |
-| **I2C Bus** | SDA | `GPIO 21` | Codec Configuration |
-| | SCL | `GPIO 22` | |
-| **Input** | Dial Pulse | `GPIO 5` | Input with Internal Pull-Up |
+| **I2S Audio Out** | BCLK | `GPIO 26` | PCM5100A I2S Bit Clock |
+| (PCM5100A)   | LRC (WS) | `GPIO 25` | PCM5100A Word Select |
+|              | DOUT | `GPIO 27` | ESP32 DOUT -> PCM5100A DIN |
+|              | MCLK | N/A | Generated internally by PCM5100A |
+| **Audio Input**  | ADC | `GPIO 36` | MAX9814 Out -> ESP32 VP/ADC1_CH0 |
+| **I2C Bus**  | SDA | `GPIO 21` | Sensors / Port Expanders (Optional) |
+|              | SCL | `GPIO 22` | |
+| **Controls** | Dial Pulse | `GPIO 5` | Rotary Dial Pulse (Active Low) |
 | | Dial Mode | `GPIO 36` | Detects when dial assumes active position |
 | | Hook Switch | `GPIO 32` | |
 | | Extra Button | `GPIO 33` | |
