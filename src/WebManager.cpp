@@ -180,10 +180,9 @@ void WebManager::begin() {
         Serial.println(WiFi.softAPIP());
     }
 
-    _server.on("/", [this](){ handlePhonebook(); /* Was Root */ }); 
-    _server.on("/settings", [this](){ handleRoot(); /* Old Root is now Settings */ }); // New
-    _server.on("/advanced", [this](){ handleAdvanced(); }); 
-    _server.on("/phonebook", [this](){ handlePhonebook(); }); // Keep alias
+    _server.on("/", [this](){ handleRoot(); }); 
+    _server.on("/phonebook", [this](){ handlePhonebook(); });
+    _server.on("/settings", [this](){ handleRoot(); }); // Alias
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); });
     
