@@ -28,6 +28,12 @@ LedManager ledManager(CONF_PIN_LED);
 bool sdAvailable = false;
 // Note: PCM5100A is a "dumb" DAC and doesn't report I2C status. We assume it's working.
 
+// --- Background Scan Globals ---
+int bgScanPersonaIndex = 1;
+File bgScanDir;
+bool bgScanActive = false;
+bool bgScanPhonebookChanged = false;
+
 // --- Ringing State (UI) ---
 bool isAlarmRinging = false;
 bool isTimerRinging = false; 
@@ -153,65 +159,89 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
     }
 }
 
-void updatePersonaNamesFromSD() {
+void startPersonaScan() {
     if (!sdAvailable) return;
-    
-    Serial.println("Updating Persona Names from SD...");
-    bool changed = false;
+    Serial.println("[BG] Starting Background Persona Scan...");
+    bgScanPersonaIndex = 1;
+    bgScanActive = true;
+    bgScanPhonebookChanged = false;
+    // ensure bgScanDir is closed if it was left open
+    if(bgScanDir) bgScanDir.close();
+}
 
-    for (int i = 1; i <= 4; i++) {
-        String path = "/persona_0" + String(i);
-        File dir = SD.open(path);
-        // Fallback Name Default if folder exists but no txt?
-        // User requirements: "Fallback to persona_0X if txt missing"
-        // But current name might be manually set to "Grandma" and we don't want to reset it to "persona_02" if just the TXT is missing.
-        // The requirement says: "Fallback 'persona_02' if txt missing". This implies a strict logic.
-        // However, wiping manual changes is aggressive. I will implement: If TXT found -> Update. If NOT found -> do nothing (keep default or manual).
+void handlePersonaScan() {
+    if (!bgScanActive || !sdAvailable) return;
 
-        if (!dir || !dir.isDirectory()) continue;
-        
-        File file = dir.openNextFile();
-        while(file) {
-            String fname = String(file.name());
-            // Clean filename if it contains path
-            int lastSlash = fname.lastIndexOf('/');
-            if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
-
-            if (!file.isDirectory() && fname.endsWith(".txt") && !fname.startsWith(".") && fname.indexOf("._") == -1) {
-                String name = fname.substring(0, fname.length() - 4); // remove .txt
-                Serial.printf("Persona %d Name detected: %s\n", i, name.c_str());
-                
-                // Find existing entry for this Persona Index (i)
-                String key = phonebook.findKeyByValueAndParam("COMPLIMENT_CAT", String(i));
-                
-                if (key != "") {
-                    // Update existing
-                    PhonebookEntry e = phonebook.getEntry(key);
-                    if (e.name != name) {
-                        phonebook.addEntry(key, name, "FUNCTION", "COMPLIMENT_CAT", String(i));
-                        changed = true;
-                    }
+    // Process a chunk of work
+    // State 0: Open Dir if needed
+    if (!bgScanDir) {
+            if (bgScanPersonaIndex > 4) {
+                // FINISHED
+                bgScanActive = false;
+                if (bgScanPhonebookChanged) {
+                    Serial.println("[BG] Saving updated Phonebook names...");
+                    phonebook.saveChanges();
                 } else {
-                    // Create new at default ID (str(i)) if free, else find free? 
-                    // For now, default to i. User can change it later in UI.
-                    phonebook.addEntry(String(i), name, "FUNCTION", "COMPLIMENT_CAT", String(i));
-                    changed = true;
+                    Serial.println("[BG] Scan finished. No changes.");
                 }
-                break; // Use the first valid txt found 
+                return;
             }
-            file = dir.openNextFile();
-        }
+            
+            String path = "/persona_0" + String(bgScanPersonaIndex);
+            bgScanDir = SD.open(path);
+            if (!bgScanDir || !bgScanDir.isDirectory()) {
+                // Serial.printf("[BG] Skipping missing/file %s\n", path.c_str());
+                if(bgScanDir) bgScanDir.close();
+                bgScanPersonaIndex++;
+                return; // Next loop will handle next index
+            }
+            Serial.printf("[BG] Scanning %s...\n", path.c_str());
     }
 
-    if (changed) {
-        Serial.println("Saving updated Phonebook names...");
-        phonebook.saveChanges();
+    // State 1: Read ONE file
+    File file = bgScanDir.openNextFile();
+    if (file) {
+        String fname = String(file.name());
+        
+        // Clean filename (some FS return full path)
+        int lastSlash = fname.lastIndexOf('/');
+        if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
+
+        if (!file.isDirectory() && fname.endsWith(".txt") && !fname.startsWith(".") && fname.indexOf("._") == -1) {
+            // Found TXT! Update and Move on
+            String name = fname.substring(0, fname.length() - 4);
+            Serial.printf("[BG] Found Name: %s\n", name.c_str());
+            
+            // Note: findKeyByValueAndParam might be slow if phonebook is huge but it's usually small
+            String key = phonebook.findKeyByValueAndParam("COMPLIMENT_CAT", String(bgScanPersonaIndex));
+            
+            if (key != "") {
+                PhonebookEntry e = phonebook.getEntry(key);
+                if (e.name != name) {
+                    phonebook.addEntry(key, name, "FUNCTION", "COMPLIMENT_CAT", String(bgScanPersonaIndex));
+                    bgScanPhonebookChanged = true;
+                }
+            } else {
+                phonebook.addEntry(String(bgScanPersonaIndex), name, "FUNCTION", "COMPLIMENT_CAT", String(bgScanPersonaIndex));
+                bgScanPhonebookChanged = true;
+            }
+            
+            // Optimization: Found the name, stop scanning this folder
+            bgScanDir.close(); 
+            bgScanPersonaIndex++;
+        }
+        // file object is destroyed here, handle is closed? 
+        // SD lib usually closes when object is destroyed.
+    } else {
+        // End of Directory
+        bgScanDir.close();
+        bgScanPersonaIndex++;
     }
 }
 
 void buildPlaylist() {
-    // Initial Scan for Names
-    updatePersonaNamesFromSD();
+    // Initial Scan for Names - REMOVED (Moved to Background Task)
+    // updatePersonaNamesFromSD();
 
     categories.clear();
     mainPlaylist.tracks.clear();
@@ -1087,6 +1117,9 @@ void setup() {
     // Initial Beep
     setAudioOutput(OUT_HANDSET);
     playSound("/system/beep.wav", false); // Speaker
+
+    // Start Background Scan for updated Persona Names
+    startPersonaScan();
 }
 
 void loop() {
@@ -1094,6 +1127,7 @@ void loop() {
     webManager.loop();
     dial.loop();
     timeManager.loop();
+    handlePersonaScan(); // Run BG Task
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {

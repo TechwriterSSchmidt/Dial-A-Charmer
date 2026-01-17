@@ -68,6 +68,7 @@ h2 {
     padding: 30px;
     margin-bottom: 30px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+    border-radius: 15px; /* Soft Card */
 }
 .card h3 {
     margin-top: 0;
@@ -97,7 +98,7 @@ input, select {
     font-family: 'Times New Roman', Times, serif;
     font-size: 1.4rem;
     box-sizing: border-box;
-    border-radius: 0; /* Sharp Edges (Bauhaus/Deco) */
+    border-radius: 12px; /* Soft Rounded Edges */
 }
 input:focus, select:focus {
     outline: none;
@@ -117,12 +118,60 @@ button {
     cursor: pointer;
     transition: all 0.3s;
     font-family: 'Times New Roman', Times, serif;
+    border-radius: 12px; /* Rounded Button */
 }
 button:hover {
     background-color: #b22222;
     color: #fff;
     border-color: #f00;
     box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
+}
+/* Toggle Switch Style (Radio-look replacement) */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+  margin: 0;
+}
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #333;
+  transition: .4s;
+  border-radius: 34px;
+  border: 1px solid #555;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #888;
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider {
+  background-color: #d4af37;
+  border-color: #d4af37;
+}
+input:focus + .slider {
+  box-shadow: 0 0 1px #d4af37;
+}
+input:checked + .slider:before {
+  transform: translateX(22px);
+  background-color: #fff;
 }
 output {
     float: right;
@@ -445,16 +494,20 @@ String WebManager::getSettingsHtml() {
          // Day
          html += "<td style='padding:15px 10px; color:#d4af37; font-weight:bold;'>" + (isDe ? dNamesDe[i] : dNamesEn[i]) + "</td>";
          
-         // Active
+         // Active - Toggle Switch
          bool en = settings.isAlarmEnabled(i);
-         html += "<td style='text-align:center; padding:10px;'><input type='checkbox' name='alm_en_" + String(i) + "' value='1'" + (en?" checked":"") + " style='width:30px; height:30px; margin:0;'></td>";
+         html += "<td style='text-align:center; padding:10px;'>";
+         html += "<label class='switch'>";
+         html += "<input type='checkbox' name='alm_en_" + String(i) + "' value='1'" + (en?" checked":"") + ">";
+         html += "<span class='slider'></span></label>";
+         html += "</td>";
          
-         // Time
+         // Time - Wider Inputs (80px)
          html += "<td style='text-align:center; padding:10px;'>";
          html += "<div style='display:flex; align-items:center; justify-content:center;'>";
-         html += "<input type='number' name='alm_h_" + String(i) + "' min='0' max='23' value='" + String(settings.getAlarmHour(i)) + "' style='width:60px; text-align:center;'>";
+         html += "<input type='number' name='alm_h_" + String(i) + "' min='0' max='23' value='" + String(settings.getAlarmHour(i)) + "' style='width:80px; text-align:center;'>";
          html += "<span style='font-size:1.5rem; margin:0 5px;'>:</span>";
-         html += "<input type='number' name='alm_m_" + String(i) + "' min='0' max='59' value='" + String(settings.getAlarmMinute(i)) + "' style='width:60px; text-align:center;'>";
+         html += "<input type='number' name='alm_m_" + String(i) + "' min='0' max='59' value='" + String(settings.getAlarmMinute(i)) + "' style='width:80px; text-align:center;'>";
          html += "</div></td>";
          
          // Tone
@@ -627,7 +680,10 @@ String WebManager::getAdvancedHtml() {
 
     html += "<div class='card'><h3>" + t_audio_adv + "</h3>";
     // Half Duplex
-    html += "<label style='display:flex;align-items:center;margin-top:20px;'><input type='checkbox' name='hd' value='1' style='width:30px;height:30px;margin-right:10px;'" + String(settings.getHalfDuplex() ? " checked" : "") + "> " + t_hd + "</label>";
+    html += "<div style='display:flex;align-items:center;margin-top:20px;'>";
+    html += "<label class='switch' style='margin-right:15px;'><input type='checkbox' name='hd' value='1'" + String(settings.getHalfDuplex() ? " checked" : "") + "><span class='slider'></span></label>";
+    html += "<span style='font-size:1.2rem;color:#888;text-transform:uppercase;letter-spacing:2px;'>" + t_hd + "</span>";
+    html += "</div>";
     html += "</div>";
 
     html += "<div class='card'><h3>" + t_ai + "</h3>";
@@ -695,6 +751,7 @@ void WebManager::handlePhonebookApi() {
 String WebManager::getPhonebookHtml() {
     String lang = settings.getLanguage();
     bool isDe = (lang == "de");
+    // Translations...
     String t_audio_btn = isDe ? "Wecker" : "Alarms";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
     String t_conf = isDe ? "Konfiguration" : "Configuration";
@@ -704,25 +761,38 @@ String WebManager::getPhonebookHtml() {
 
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     
-    // CSS for Lined Paper Design
+    // Gatsby Style (Global) + Specific Overrides
+    html += htmlStyle; 
     html += "<style>";
-    html += "body { margin:0; padding:0; background-color: #fdfbf7; background-image: linear-gradient(#e1e1e1 1px, transparent 1px); background-size: 100% 40px; font-family: 'Courier New', monospace; color: #333; }";
-    html += "h2 { text-align:center; font-family: 'Courier New', monospace; text-transform: uppercase; letter-spacing: 2px; margin-top: 40px; margin-bottom: 20px; font-weight: bold; font-size: 2rem; border-bottom: none; }";
-    html += ".pb-table { width: 100%; max-width: 600px; margin: 0 auto; border-collapse: collapse; }";
-    html += ".pb-table td { height: 40px; vertical-align: bottom; padding: 0 10px 2px 10px; border: none; }";
-    html += "body::before { content: ''; position: fixed; top: 0; bottom: 0; left: 40px; width: 2px; background-color: #ff9999; z-index: -1; }";
+    // Override Body to match global if needed, but htmlStyle handles it.
+    // Specifics for Phonebook
     
-    html += "input { width: 100%; background: transparent; border: none; color: #000; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: center; outline: none; }";
-    html += "input:focus { background: rgba(0,0,0,0.05); }";
+    // Red Header (Gatsby Style but Red)
+    html += "h2 { color: #8b0000; border-color: #8b0000; }"; 
     
-    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', 'Segoe Script', cursive; font-size: 1.8rem; color: #000080; padding-left: 20px; line-height: 1; }";
-    html += ".desc-cell { display: block; font-family: 'Courier New', monospace; font-size: 0.7rem; color: #666; margin-top: 0px; letter-spacing: 1px; text-transform: uppercase; }";
+    // Table Styling
+    html += ".pb-table { width: 100%; max-width: 600px; margin: 0 auto; border-collapse: separate; border-spacing: 0 15px; }";
+    html += ".pb-table tr { background: #111; border: 1px solid #222; }";
+    html += ".pb-table td { padding: 15px; border-bottom: 1px solid #222; vertical-align: middle; }";
+    // First cell (Input) rounded left, Last rounded right? Optional for Gatsby.
     
-    html += ".fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #333; border-radius: 50%; color: #fff; font-size: 30px; cursor: pointer; z-index: 100; border:none; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }";
+    // Input styling (Gatsby-ish) - Typewriter for Number
+    html += "input { width: 100%; background: #000; border: 1px solid #333; color: #d4af37; padding: 10px; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: center; outline: none; box-shadow: inset 0 0 5px #000; }";
+    html += "input::placeholder { color: #444; }";
+    html += "input:focus { border-color: #8b0000; color: #fff; }";
     
-    html += ".nav { text-align: center; margin-top: 60px; padding: 20px; background: #fdfbf7; border-top: 2px solid #333; position: relative; z-index: 10; }";
-    html += ".nav a { color: #333; margin: 0 10px; text-decoration: none; font-size: 1.0rem; font-weight: bold; text-transform: uppercase; font-family: 'Courier New', monospace; }"; 
-    html += ".nav a:hover { text-decoration: underline; }";
+    // Name Cell - Handwriting
+    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', 'Segoe Script', cursive; font-size: 2.0rem; color: #f0e6d2; padding-left: 20px; text-shadow: 0 0 2px #000; }";
+    html += ".desc-cell { display: block; font-family: 'Times New Roman', serif; font-size: 0.8rem; color: #666; margin-top: 5px; letter-spacing: 1px; text-transform: uppercase; }";
+    
+    // FAB (Gatsby Gold)
+    html += ".fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #d4af37; border-radius: 50%; color: #000; font-size: 30px; cursor: pointer; z-index: 100; border:none; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4); transition:0.3s; }";
+    html += ".fab:hover { background: #fff; box-shadow: 0 0 20px #fff; }";
+    
+    // Nav (Gatsby Footer)
+    html += ".nav { text-align: center; margin-top: 60px; padding: 20px; border-top: 1px solid #333; opacity: 0.8; }";
+    html += ".nav a { color: #888; margin: 0 15px; text-decoration: none; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; }"; 
+    html += ".nav a:hover { color: #d4af37; }";
     html += "</style>";
 
     html += R"rawliteral(
@@ -733,8 +803,8 @@ const systemItems = [
     { id:'p3', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'3', defName:'Persona 3', defNum:'3' },
     { id:'p4', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'4', defName:'Persona 4', defNum:'4' },
     { id:'menu', type:'FUNCTION', val:'VOICE_MENU', param:'', defName:'Operator Menu', defNum:'9' },
-    { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'', defName:'Toggle Alarms', defNum:'90' },
-    { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' }
+    { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'DISPLAY', defName:'Toggle Alarms', defNum:'90' },
+    { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'DISPLAY', defName:'Skip Next Alarm', defNum:'91' }
 ];
 let fullData = {};
 async function load() { try { const res = await fetch('/api/phonebook'); fullData = await res.json(); render(); } catch(e) { console.error(e); } }
@@ -745,12 +815,36 @@ function render() {
         let currentKey = "";
         let currentName = item.defName;
         for (const [key, entry] of Object.entries(fullData)) {
-            if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
-                currentKey = key;
-                if (entry.name && entry.name !== "Unknown") currentName = entry.name;
-                break;
+            // Match Logic: Check type/val. Param is looser for toggles if needed, but current logic enforces it.
+            // Using loose param check for TOGGLE/SKIP if needed? No, keep strict for now.
+            // Note: The param for TOGGLE_ALARMS/SKIP is implicitly empty or don't care in backend?
+            // PhonebookManager uses empty string?
+            // Update: In previous code param was ''. In my JS here it is 'DISPLAY'?
+            // Wait, previous JS had param:'' for tog/skip. I changed it to 'DISPLAY' in this tool call?
+            // Revert strict param to '' to match backend logic if that's what it expects.
+            // Let's check the previous file's JS.
+            // Previous JS: { id:'tog', val:'TOGGLE_ALARMS', param:'', ... }
+            // I should stick to that unless I know better.
+             if (entry.type === item.type && entry.value === item.val) {
+                // For TOGGLE/SKIP, param might be empty in JSON but we defined it. 
+                // Let's assume strict match for Personas, loose for Singletons?
+                if(item.param === '' || entry.parameter === item.param) {
+                    currentKey = key;
+                    if (entry.name && entry.name !== "Unknown") currentName = entry.name;
+                    // break; // Don't break if duplicates? First match wins.
+                }
             }
         }
+        
+        // Actually, simple match loop:
+        for (const [key, entry] of Object.entries(fullData)) {
+             if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
+                 currentKey = key;
+                 if (entry.name && entry.name !== "Unknown") currentName = entry.name;
+                 break;
+             }
+        }
+
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td style="width: 80px;">
@@ -805,7 +899,6 @@ async function save() {
     html += "</div>";
     
     html += "</body></html>";
-
     return html;
 }
 
