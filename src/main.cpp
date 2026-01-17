@@ -1012,7 +1012,7 @@ unsigned long lastActivityTime = 0;
 
 /*
  * SETUP I2S ADC (Input from MAX9814)
- * Using I2S_NUM_1 in ADC Built-In Mode
+ * Using I2S_NUM_0 in ADC Built-In Mode (REQUIRED for ADC)
  * GPIO 36 is ADC1_CHANNEL_0
  */
 void setupI2S_ADC() {
@@ -1029,8 +1029,8 @@ void setupI2S_ADC() {
         .use_apll = false
     };
 
-    // Install Driver
-    esp_err_t err = i2s_driver_install(I2S_NUM_1, &i2s_config, 0, NULL);
+    // Install Driver on I2S_NUM_0
+    esp_err_t err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     if (err != ESP_OK) {
         Serial.printf("Failed installing I2S ADC driver: %d\n", err);
         return;
@@ -1042,8 +1042,8 @@ void setupI2S_ADC() {
     if (err != ESP_OK) {
         Serial.printf("Failed setting ADC mode: %d\n", err);
     } else {
-        i2s_adc_enable(I2S_NUM_1);
-        Serial.println("I2S ADC (Mic) Initialized on I2S_NUM_1");
+        i2s_adc_enable(I2S_NUM_0);
+        Serial.println("I2S ADC (Mic) Initialized on I2S_NUM_0");
     }
 }
 
@@ -1085,8 +1085,8 @@ void setup() {
     
     // 2. Init Audio (PCM5100A)
     // Audio(internalDAC, channelEnabled, i2sPort)
-    // We use I2S_NUM_0 for DAC
-    audio = new Audio(false, 3, I2S_NUM_0);
+    // We use I2S_NUM_1 for DAC to leave I2S_NUM_0 for the internal ADC (Mic)
+    audio = new Audio(false, 3, I2S_NUM_1);
     audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
     audio->forceMono(true); // Critical for separation via Balance
     

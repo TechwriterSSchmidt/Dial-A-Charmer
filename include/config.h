@@ -4,14 +4,14 @@
 // --- Hardware Pins (New Architecture: PCM5100A + MAX9814) ---
 
 // 1. Audio Output (Via PCM5100A DAC)
-// Uses I2S_NUM_0
+// Uses I2S_NUM_1 (Swapped to avoid conflict with Internal ADC)
 #define CONF_I2S_BCLK       26
 #define CONF_I2S_LRC        25  // WS
 #define CONF_I2S_DOUT       27  // ESP DOUT -> Codec DIN
 // Note: MCLK is NOT used (Generated internally by PCM5100A)
 
 // 2. Audio Input (Via MAX9814 Analog Preamp)
-// Uses I2S_NUM_1 (ADC Built-In Mode)
+// Uses I2S_NUM_0 (Required for ADC Built-In Mode)
 #define CONF_PIN_MIC_ANALOG 36  // VP / ADC1_CH0
 
 // 3. I2C (Only if needed for Port Extenders/Sensors, NOT for Audio anymore)

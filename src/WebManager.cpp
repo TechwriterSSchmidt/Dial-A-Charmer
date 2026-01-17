@@ -523,15 +523,17 @@ String WebManager::getSettingsHtml() {
 
     // LED Moved to Advanced
 
-    html += "<button type='submit'>" + t_save + "</button>";
+    html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
-    html += "<p style='text-align:center'>";
-    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio_btn + "</a>";
-    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
-    html += "<a href='/advanced' style='color:#ffc107; margin-right: 20px;'>" + t_conf + "</a>";
-    html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
-    html += "</p>";
+    
+    html += "<div style='text-align:center; padding-bottom: 20px;'>";
+    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
+    // Wecker removed
+    html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Telefonbuch</a>";
+    html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Konfiguration</a>";
+    html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
+    html += "</div>";
+    
     html += "</body></html>";
     return html;
 }
@@ -691,7 +693,7 @@ String WebManager::getAdvancedHtml() {
     html += "<small>Leave empty to use SD card audio only.</small>";
     html += "</div>";
     
-    html += "<button type='submit'>" + t_save + "</button>";
+    html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
 
     // OTA Update Form
@@ -701,12 +703,14 @@ String WebManager::getAdvancedHtml() {
     html += "<button type='submit' style='background-color:#444; margin-top:10px;'>Start Update</button>";
     html += "</form></div>";
     
-    html += "<p style='text-align:center'>";
-    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio_btn + "</a>";
-    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
-    html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
-    html += "</p>";
+    html += "<div style='text-align:center; padding-bottom: 20px;'>";
+    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
+    html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Wecker</a>";
+    html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Telefonbuch</a>";
+    // Konfiguration removed
+    html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
+    html += "</div>";
+    
     html += "</body></html>";
     return html;
 }
@@ -761,38 +765,34 @@ String WebManager::getPhonebookHtml() {
 
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     
-    // Gatsby Style (Global) + Specific Overrides
+    // Gatsby Style (Global) included, but we override for "Lined Paper" mode
     html += htmlStyle; 
     html += "<style>";
-    // Override Body to match global if needed, but htmlStyle handles it.
-    // Specifics for Phonebook
     
-    // Red Header (Gatsby Style but Red)
-    html += "h2 { color: #8b0000; border-color: #8b0000; }"; 
+    // Global Body (reset to dark/gold) is default from htmlStyle
+    html += "body { background-color: #080808; color: #f0e6d2; margin: 0; padding: 20px; }";
+
+    // Notepad Container
+    html += ".notepad { width: 100%; max-width: 550px; margin: 20px auto; min-height: 600px; padding: 40px 20px 40px 80px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }";
+    html += ".notepad { background-color: #fdfbf7; background-image: linear-gradient(90deg, transparent 59px, #abc 59px, #abc 61px, transparent 61px), linear-gradient(#9ab 1px, transparent 1px); background-size: 100% 100%, 100% 40px; background-attachment: local; }";
+
+    // Red Handwritten Header (On Paper)
+    html += "h2.paper-title { color: #cc0000; border: none; font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 3.5rem; text-transform: none; letter-spacing: normal; margin: -10px 0 20px 0; text-align:center; text-shadow: none; }";
+
+    // Table Styling - Align with lines
+    html += ".pb-table { width: 100%; border-collapse: collapse; }";
+    html += ".pb-table tr { height: 40px; background: transparent; border: none; }";
+    html += ".pb-table td { padding: 0 10px; border: none; border-bottom: 1px solid transparent; vertical-align: bottom; height: 40px; line-height: 40px; }";
     
-    // Table Styling
-    html += ".pb-table { width: 100%; max-width: 600px; margin: 0 auto; border-collapse: separate; border-spacing: 0 15px; }";
-    html += ".pb-table tr { background: #111; border: 1px solid #222; }";
-    html += ".pb-table td { padding: 15px; border-bottom: 1px solid #222; vertical-align: middle; }";
-    // First cell (Input) rounded left, Last rounded right? Optional for Gatsby.
+    // Input styling - Handwritten on the line
+    html += "input { width: 100%; background: transparent; border: none; color: #000; padding: 0; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: center; outline: none; box-shadow: none; height: 100%; border-radius:0; }";
+    html += "input::placeholder { color: #aaa; opacity: 0.5; }";
+    html += "input:focus { background: rgba(255,255,0,0.1); }";
     
-    // Input styling (Gatsby-ish) - Typewriter for Number
-    html += "input { width: 100%; background: #000; border: 1px solid #333; color: #d4af37; padding: 10px; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: center; outline: none; box-shadow: inset 0 0 5px #000; }";
-    html += "input::placeholder { color: #444; }";
-    html += "input:focus { border-color: #8b0000; color: #fff; }";
+    // Name Cell - Handwritten
+    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 2.0rem; color: #222; text-shadow: none; padding-left: 15px; }";
+    html += ".desc-cell { display: block; font-family: sans-serif; font-size: 0.7rem; color: #666; margin-top: -10px; letter-spacing: 0px; text-transform: uppercase; line-height: 1.0; }";
     
-    // Name Cell - Handwriting
-    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', 'Segoe Script', cursive; font-size: 2.0rem; color: #f0e6d2; padding-left: 20px; text-shadow: 0 0 2px #000; }";
-    html += ".desc-cell { display: block; font-family: 'Times New Roman', serif; font-size: 0.8rem; color: #666; margin-top: 5px; letter-spacing: 1px; text-transform: uppercase; }";
-    
-    // FAB (Gatsby Gold)
-    html += ".fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #d4af37; border-radius: 50%; color: #000; font-size: 30px; cursor: pointer; z-index: 100; border:none; box-shadow: 0 4px 15px rgba(212, 175, 55, 0.4); transition:0.3s; }";
-    html += ".fab:hover { background: #fff; box-shadow: 0 0 20px #fff; }";
-    
-    // Nav (Gatsby Footer)
-    html += ".nav { text-align: center; margin-top: 60px; padding: 20px; border-top: 1px solid #333; opacity: 0.8; }";
-    html += ".nav a { color: #888; margin: 0 15px; text-decoration: none; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; }"; 
-    html += ".nav a:hover { color: #d4af37; }";
     html += "</style>";
 
     html += R"rawliteral(
@@ -886,17 +886,21 @@ async function save() {
 <body onload="load()">
 )rawliteral";
 
-    html += "<h2>" + t_title + "</h2>";
+    html += "<div class='notepad'>";
+    html += "<h2 class='paper-title'>" + t_title + "</h2>";
     html += "<table class='pb-table'><tbody id='tbody'></tbody></table>";
-    html += "<button class='fab' onclick='save()' title='" + t_save_title + "'>💾</button>";
-    
-    html += "<div class='nav'>";
-    html += "<a href='/'>" + String(isDe ? "Home" : "Home") + "</a>"; 
-    html += "<a href='/settings'>" + t_audio_btn + "</a>";
-    html += "<a href='/phonebook'>" + t_pb + "</a>"; 
-    html += "<a href='/advanced'>" + t_conf + "</a>";
-    html += "<a href='/help'>" + t_help + "</a>";
-    html += "</div>";
+    html += "</div>"; // End Notepad
+
+    // Standard Footer (Button + Links)
+    html += "<div style='max-width:550px; margin:0 auto;'>";
+    html += "<button onclick='save()' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
+    html += "<div style='text-align:center; padding-bottom: 20px;'>";
+    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
+    html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Wecker</a>";
+    // Telefonbuch removed
+    html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Konfiguration</a>";
+    html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
+    html += "</div></div>";
     
     html += "</body></html>";
     return html;
@@ -933,14 +937,13 @@ String WebManager::getHelpHtml() {
     html += "<ul><li><b>Change Ringtone:</b> Hold the 'Extra Button' and dial 1-5.</li>";
     html += "<li><b>Web Config:</b> Connect to 'DialACharmer' WiFi.</li></ul></div>";
     
-    // html += "<div class='card'><a href='/settings' class='btn' style='background:#444;color:#fff;text-align:center;text-decoration:none;display:block'>Back to Settings</a></div>";
-    
-    html += "<p style='text-align:center'>";
-    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio_btn + "</a>";
-    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
-    html += "<a href='/advanced' style='color:#ffc107'>" + t_conf + "</a>";
-    html += "</p>";
+    // Updated Footer (consistent style, no self-link to Help)
+    html += "<div style='text-align:center; padding-bottom: 20px; margin-top:20px;'>";
+    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
+    html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>" + t_audio_btn + "</a>";
+    html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>" + t_pb + "</a>";
+    html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>" + t_conf + "</a>";
+    html += "</div>";
     
     html += "</body></html>";
     return html;
