@@ -200,9 +200,7 @@ The system uses specific WAV files in `/system/` for feedback:
 
 ## Future Options
 
-*   **Clock:** Add option to set individual alarms for for each day of the week via Webinterface.
-*   **Voice Menu:** Implement a classic `dial a number` interactive voice menu to guide users through settings (e.g., "Press 1 to change Ringtone").
-*   **Media:** AGC for mic and, if possible, AEC for Gemini AI usage.
+
 
 ## Maintenance
 
