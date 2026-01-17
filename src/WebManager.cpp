@@ -788,7 +788,7 @@ String WebManager::getPhonebookHtml() {
     html += ".pb-head th { height: 40px; vertical-align: bottom; color: #cc0000; font-family: sans-serif; font-size: 1.2rem; border:none; line-height:40px; }";
 
     // Input styling - Handwritten on the line
-    html += "input { width: 100%; background: transparent; border: none; color: #000; padding: 0; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: center; outline: none; box-shadow: none; height: 100%; border-radius:0; }";
+    html += "input { width: 100%; background: transparent; border: none; color: #000; padding: 0; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: left; outline: none; box-shadow: none; height: 100%; border-radius:0; }";
     html += "input::placeholder { color: #aaa; opacity: 0.5; }";
     html += "input:focus { background: rgba(255,255,0,0.1); }";
     
@@ -831,7 +831,7 @@ function render() {
         
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="width: 80px;">
+            <td style="width: 140px; padding-left: 70px;">
                 <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}">
             </td>
             <td class="name-cell">
@@ -883,7 +883,7 @@ async function save() {
     html += "<table class='pb-table'>";
     html += "<thead><tr class='pb-head'>";
     // Icons/Labels
-    html += "<th style='width:80px; text-align:center; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
+    html += "<th style='width:140px; padding-left:70px; text-align:left; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
     html += "<th style='text-align:left; padding-left:15px;'>Name</th>";
     html += "</tr></thead>";
     
