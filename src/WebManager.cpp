@@ -182,7 +182,8 @@ void WebManager::begin() {
 
     _server.on("/", [this](){ handleRoot(); }); 
     _server.on("/phonebook", [this](){ handlePhonebook(); });
-    _server.on("/settings", [this](){ handleRoot(); }); // Alias
+    _server.on("/settings", [this](){ handleSettings(); }); 
+    _server.on("/advanced", [this](){ handleAdvanced(); });
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); });
     
@@ -262,6 +263,11 @@ void WebManager::resetApTimer() {
 void WebManager::handleRoot() {
     resetApTimer();
     _server.send(200, "text/html", getHtml());
+}
+
+void WebManager::handleSettings() {
+    resetApTimer();
+    _server.send(200, "text/html", getSettingsHtml());
 }
 
 void WebManager::handleAdvanced() {
@@ -376,7 +382,7 @@ void WebManager::handleNotFound() {
     }
 }
 
-String WebManager::getHtml() {
+String WebManager::getSettingsHtml() {
     String lang = settings.getLanguage();
     bool isDe = (lang == "de");
 
@@ -446,10 +452,48 @@ String WebManager::getHtml() {
     html += "<button type='submit'>" + t_save + "</button>";
     html += "</form>";
     html += "<p style='text-align:center'>";
-    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
+    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
+    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
     html += "<a href='/advanced' style='color:#ffc107; margin-right: 20px;'>" + t_adv + "</a>";
     html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
     html += "</p>";
+    html += "</body></html>";
+    return html;
+}
+
+// New Dashboard
+String WebManager::getHtml() {
+    String lang = settings.getLanguage();
+    bool isDe = (lang == "de");
+    
+    // Simple Dashboard
+    String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
+    html += htmlStyle;
+    html += "<style>.dash-btn { display:block; padding:20px; margin:15px 0; background:#222; border:1px solid #d4af37; color:#d4af37; text-align:center; text-transform:uppercase; font-size:1.2rem; transition:0.3s; } .dash-btn:hover { background:#d4af37; color:#111; }</style>";
+    html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>";
+    html += "</head><body>";
+    
+    html += "<h2>Dial-A-Charmer</h2>";
+    html += "<div class='card' style='text-align:center; padding: 40px 20px;'>";
+    html += "<h3 style='margin:0; font-size:2.5rem; color:#fff; letter-spacing: 2px;'>" + String(isDe ? "Willkommen." : "Welcome.") + "</h3>";
+    
+    String statusColor = (WiFi.status() == WL_CONNECTED) ? "#4caf50" : "#f44336";
+    String statusText = (WiFi.status() == WL_CONNECTED) ? "ONLINE" : "OFFLINE";
+    html += "<p style='color:" + statusColor + "; font-family:sans-serif; font-size:1.2rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;'>STATUS: " + statusText + "</p>";
+    html += "</div>";
+
+    html += "<a href='/settings' class='dash-btn'>" + String(isDe ? "Wecker & Audio" : "Alarms & Audio") + "</a>";
+    html += "<a href='/phonebook' class='dash-btn'>" + String(isDe ? "Telefonbuch" : "Phonebook") + "</a>";
+    html += "<a href='/advanced' class='dash-btn'>" + String(isDe ? "Konfiguration" : "Configuration") + "</a>";
+    html += "<a href='/help' class='dash-btn'>" + String(isDe ? "Hilfe" : "Help") + "</a>";
+
+    html += "<div style='text-align:center; margin-top:40px; opacity: 0.7;'>";
+    html += "<select onchange='sl(this.value)' style='width:auto; display:inline-block; background:#111; color:#888; border:1px solid #444;'>";
+    html += "<option value='de'" + String(isDe ? " selected" : "") + ">Deutsch</option>";
+    html += "<option value='en'" + String(!isDe ? " selected" : "") + ">English</option>";
+    html += "</select>";
+    html += "</div>";
+
     html += "</body></html>";
     return html;
 }
@@ -482,6 +526,8 @@ String WebManager::getAdvancedHtml() {
     String t_key = isDe ? "Gemini API Schl&uuml;ssel (Optional)" : "Gemini API Key (Optional)";
     String t_save = isDe ? "Speichern" : "Save Settings";
     String t_back = isDe ? "Zur&uuml;ck" : "Back";
+    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+    String t_help = isDe ? "Hilfe" : "Usage Help";
 
     // Scan for networks
     int n = WiFi.scanNetworks();
@@ -572,7 +618,10 @@ String WebManager::getAdvancedHtml() {
     html += "</form></div>";
     
     html += "<p style='text-align:center'>";
-    html += "<a href='/settings' style='color:#ffc107'>" + t_back + "</a>";
+    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
+    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>" + t_audio + "</a>";
+    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>" + t_pb + "</a>";
+    html += "<a href='/help' style='color:#ffc107'>" + t_help + "</a>";
     html += "</p>";
     html += "</body></html>";
     return html;
@@ -723,12 +772,20 @@ async function save(){ await fetch('/api/phonebook', { method:'POST', body:JSON.
 </head>
 <body onload="load()">
     <div class="notepad">
-        <a href="/settings" class="nav-back">Settings</a>
+        <!-- <a href="/settings" class="nav-back">Settings</a> REMOVED -->
         <div class="header"><h2>Phone Directory</h2></div>
         <table>
             <thead><tr><th class="num-col">#</th><th>Name</th><th>Type</th><th>Details</th><th></th></tr></thead>
             <tbody id="tbody"></tbody>
         </table>
+        
+        <!-- Footer -->
+        <p style="text-align:center; position:absolute; bottom:10px; left:0; right:0; font-family: 'Times New Roman';">
+            <a href="/" style="color:#b00; margin-right: 20px; text-decoration:none;">Home</a>
+            <a href="/settings" style="color:#b00; margin-right: 20px; text-decoration:none;">Audio</a>
+            <a href="/advanced" style="color:#b00; margin-right: 20px; text-decoration:none;">Config</a>
+            <a href="/help" style="color:#b00; text-decoration:none;">Help</a>
+        </p>
     </div>
     <button class="fab" onclick="save()" title="Save">💾</button>
     <button class="fab" style="bottom: 110px; background: #4caf50;" onclick="addRow()" title="Add">+</button>
@@ -759,7 +816,14 @@ String WebManager::getHelpHtml() {
     html += "<ul><li><b>Change Ringtone:</b> Hold the 'Extra Button' and dial 1-5.</li>";
     html += "<li><b>Web Config:</b> Connect to 'DialACharmer' WiFi.</li></ul></div>";
     
-    html += "<div class='card'><a href='/settings' class='btn' style='background:#444;color:#fff;text-align:center;text-decoration:none;display:block'>Back to Settings</a></div>";
+    // html += "<div class='card'><a href='/settings' class='btn' style='background:#444;color:#fff;text-align:center;text-decoration:none;display:block'>Back to Settings</a></div>";
+    
+    html += "<p style='text-align:center'>";
+    html += "<a href='/' style='color:#ffc107; margin-right: 20px;'>Home</a>";
+    html += "<a href='/settings' style='color:#ffc107; margin-right: 20px;'>Audio</a>";
+    html += "<a href='/phonebook' style='color:#ffc107; margin-right: 20px;'>Phonebook</a>";
+    html += "<a href='/advanced' style='color:#ffc107'>Config</a>";
+    html += "</p>";
     
     html += "</body></html>";
     return html;

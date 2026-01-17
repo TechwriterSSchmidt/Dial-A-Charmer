@@ -22,6 +22,7 @@ private:
     unsigned long _apEndTime = 0; // Auto-off timer
 
     void handleRoot();
+    void handleSettings(); // New: Dedicated Settings/Alarm Page
     void handleAdvanced(); // New
     void handleSave();
     void handleHelp();
@@ -34,6 +35,7 @@ private:
     void resetApTimer();
     
     String getHtml();
+    String getSettingsHtml(); // New
     String getAdvancedHtml(); // New
     String getPhonebookHtml();
     String getHelpHtml();
