@@ -269,6 +269,27 @@ def make_ui_sounds():
         samples.append(AMPLITUDE * 0.5 * (v1+v2))
     save_wav("error_tone.wav", samples)
 
+    # 5. Mechanical Click (Rotary Feedback)
+    # Short burst of high frequency + noise to simulate mechanical switch
+    click_audio = []
+    click_dur_ms = 40 
+    click_s = int(SAMPLE_RATE * click_dur_ms / 1000.0)
+
+    # Simple model: Decaying sine wave at 2.5kHz mixed with noise
+    for i in range(click_s):
+        t = float(i) / SAMPLE_RATE
+        progress = i / click_s
+        envelope = math.exp(-15 * progress)  # Sharp decay
+        
+        sine_comp = math.sin(2 * math.pi * 2500 * t)
+        noise_comp = random.uniform(-1, 1)
+        
+        # Mix mostly noise for the "clack" sound
+        val = (0.3 * sine_comp + 0.8 * noise_comp) * envelope * AMPLITUDE
+        click_audio.append(val)
+        
+    save_wav("click.wav", click_audio)
+
 def make_telephony_tones():
     print("Generating Telephony Tones...")
     # Dial Tone DE (425Hz)
