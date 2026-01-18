@@ -359,16 +359,22 @@ void WebManager::resetApTimer() {
 
 void WebManager::handleRoot() {
     resetApTimer();
-    _server.send(200, "text/html", getHtml());
+    if (_apMode) {
+        _server.send(200, "text/html", getApSetupHtml());
+    } else {
+        _server.send(200, "text/html", getHtml());
+    }
 }
 
 void WebManager::handleSettings() {
     resetApTimer();
+    if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
     _server.send(200, "text/html", getSettingsHtml());
 }
 
 void WebManager::handleAdvanced() {
     resetApTimer();
+    if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
     _server.send(200, "text/html", getAdvancedHtml());
 }
 
