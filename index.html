@@ -5,117 +5,101 @@
     <title>The Dial-A-Charmer Installer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+    <!-- Import Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Pompiere&family=Zen+Tokyo+Zoo&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Times New Roman', Times, serif;
+            font-family: 'Pompiere', cursive, sans-serif;
+            font-size: 1.5rem;
             background-color: #080808; /* Deep Black */
             color: #f0e6d2; /* Cream/Champagne */
             margin: 0;
             padding: 20px;
-            line-height: 1.5;
+            line-height: 1.4;
             text-align: center;
         }
         .container {
             max-width: 600px;
-            margin: 0 auto;
+            margin: 40px auto;
             background: #111;
             border: 1px solid #222;
             border-top: 4px solid #d4af37; /* Gold Accent */
+            border-radius: 12px;
             padding: 30px;
-            margin-bottom: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.8);
         }
         h1 { 
-            text-transform: uppercase;
-            letter-spacing: 6px; /* Art Deco Spacing */
-            color: #d4af37; /* Metallic Gold */
-            border-bottom: 2px solid #d4af37;
-            margin-bottom: 40px;
-            padding-bottom: 15px;
-            font-weight: normal;
-        }
-        p { margin-bottom: 1.5rem; line-height: 1.5; color: #f0e6d2; font-size: 1.1rem; }
-        
-        /* Style for the button slot to match Webinterface buttons */
-        button[slot="activate"] {
-            width: 100%;
-            padding: 18px;
-            margin-top: 10px;
-            background-color: #8b0000; /* Deep Red */
-            color: #f0e6d2;
-            border: 1px solid #a00000;
+            font-family: 'Zen Tokyo Zoo', cursive;
             text-transform: uppercase;
             letter-spacing: 4px;
-            font-size: 1.5rem;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-family: 'Times New Roman', Times, serif;
-            border-radius: 0; /* Sharp Edges */
+            color: #d4af37;
+            margin-bottom: 25px;
+            font-weight: normal;
+            font-size: 3rem;
+            border-bottom: 1px solid #333;
+            padding-bottom: 15px;
         }
-        button[slot="activate"]:hover {
-            background-color: #b22222;
-            color: #fff;
-            border-color: #f00;
-            box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
+        p { 
+            margin-bottom: 1.5rem; 
+            color: #f0e6d2;
+            font-size: 1.4rem;
         }
-
-        .unsupported { color: #8b0000; font-weight: bold; border: 1px solid #8b0000; padding: 10px; margin-top:10px; }
+        strong {
+            color: #d4af37;
+            font-weight: normal; 
+            /* Pompiere doesn't really have bold, but color highlights work well */
+        }
         
-        #error-info {
-            margin-top: 1rem;
-            padding: 1rem;
-            background-color: #300;
-            color: #f00;
-            border: 1px solid #800;
-            display: none;
-            font-size: 0.9rem;
-            text-align: left;
-        }
-
-        .footer {
-            margin-top: 2rem;
-            font-size: 0.8rem;
-            color: #666;
+        button[slot="activate"] {
+            font-family: 'Zen Tokyo Zoo', cursive;
+            width: 100%;
+            padding: 15px;
+            margin-top: 20px;
+            background-color: #1a1a1a;
+            color: #d4af37;
+            border: 1px solid #444;
+            border-radius: 8px;
+            font-size: 1.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
             text-transform: uppercase;
             letter-spacing: 2px;
         }
-        a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; transition: 0.3s; }
-        a:hover { color: #fff; border-bottom: 1px solid #fff; }
+        button[slot="activate"]:hover {
+            background-color: #222;
+            border-color: #d4af37;
+            box-shadow: 0 0 10px rgba(212, 175, 55, 0.2);
+        }
+        
+        .footer {
+            margin-top: 40px;
+            font-size: 1.2rem;
+            color: #666;
+        }
+        a { color: #d4af37; text-decoration: none; }
+        a:hover { color: #fff; text-decoration: underline; }
+
+        .unsupported { color: #d4af37; background: #332b00; border: 1px solid #d4af37; padding: 10px; border-radius: 8px; margin-top:10px; font-family: sans-serif; font-size: 1rem; }
     </style>
-    <script>
-        window.addEventListener('load', () => {
-             // Check for file protocol
-             if (window.location.protocol === 'file:') {
-                const err = document.getElementById('error-info');
-                err.style.display = 'block';
-                err.innerHTML = '⚠️ <b>Warning:</b> You are opening this file directly from your computer.<br>' +
-                                'The Web Installer requires a web server (HTTPS or localhost) to work.<br>' +
-                                'Please upload this folder to GitHub Pages or run a local server (e.g. <code>python -m http.server</code>).';
-            }
-        });
-    </script>
 </head>
 <body>
     <div class="container">
-        <h1>The Atomic Charmer</h1>
+        <h1>Dial-A-Charmer</h1>
         <p>
-            Welcome, Time Traveller.<br>
-            Connect your apparatus via USB to update its firmware.
+            Give your vintage rotary phone a new life as a smart timekeeper, alarm clock, and AI assistant.<br>
+            Connect your Wemos D32 Pro via USB to install.
         </p>
-        <p style="color: #d4af37; font-style: italic;">
-            v1.4.0 - Smart Alarm, Volume Control & New Content<br>
-            <span style="font-size: 0.8em; opacity: 0.7;">(Build: 2026-01-16)</span>
-        </p>
+
         
         <esp-web-install-button manifest="manifest.json">
-            <button slot="activate">INITIATE UPDATE</button>
+            <button slot="activate">Connect & Install</button>
             <div slot="unsupported" class="unsupported">
-                Browser not supported. Please use Chrome, Edge, or Opera.
+                Your browser does not support Web Serial. Please use Chrome, Edge, or Opera on Desktop.
             </div>
         </esp-web-install-button>
 
-        <p style="margin-top: 2rem; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 1rem;">
-            Instructions: Connect device, click the red button above, select the port, and confirm installation.
+        <p style="margin-top: 30px; font-size: 0.85em; color: #555; border-top: 1px solid #333; padding-top: 20px;">
+            Note: This installer requires a secure context (HTTPS or localhost) and a fast internet connection to download the firmware parts.
         </p>
     </div>
     
