@@ -178,6 +178,7 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
 
     File file = dir.openNextFile();
     while(file) {
+        esp_task_wdt_reset(); // Prevent WDT Reset during long directory scans
         if(!file.isDirectory()) {
             String fname = String(file.name());
             if(fname.endsWith(".mp3") && fname.indexOf("._") == -1) {
