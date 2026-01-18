@@ -428,10 +428,29 @@ bool checkBattery() {
 }
 
 // --- Time Speaking Logic ---
-enum TimeSpeakState { TIME_IDLE, TIME_INTRO, TIME_HOUR, TIME_UHR, TIME_MINUTE, TIME_DONE };
+enum TimeSpeakState { 
+    TIME_IDLE, 
+    TIME_INTRO, 
+    TIME_HOUR, 
+    TIME_UHR, 
+    TIME_MINUTE, 
+    TIME_DATE_INTRO,
+    TIME_WEEKDAY,
+    TIME_DAY,
+    TIME_MONTH,
+    TIME_YEAR,
+    TIME_DST,
+    TIME_DONE 
+};
 TimeSpeakState timeState = TIME_IDLE;
 int currentHour = 0;
 int currentMinute = 0;
+// Date Globals
+int currentDay = 0;
+int currentMonth = 0; 
+int currentYear = 0;
+int currentWeekday = 0;
+bool currentIsDst = false;
 
 void speakTime() {
     Serial.println("Speaking Time...");
@@ -441,10 +460,22 @@ void speakTime() {
     if (dt.valid) {
         currentHour = dt.hour;
         currentMinute = dt.minute;
+        
+        // Use rawTime to get full calendar details via standard library
+        struct tm * tInfo;
+        tInfo = localtime(&dt.rawTime);
+        currentDay = tInfo->tm_mday;     // 1-31
+        currentMonth = tInfo->tm_mon;    // 0-11
+        currentYear = tInfo->tm_year + 1900;
+        currentWeekday = tInfo->tm_wday; // 0-6 (Sun-Sat)
+        currentIsDst = (tInfo->tm_isdst > 0);
+        
     } else {
-        Serial.println("Time Invalid (No Sync), using 12:00");
+        Serial.println("Time Invalid (No Sync), using 12:00 default");
         currentHour = 12;
         currentMinute = 0;
+        // Defaults if needed (1970)
+        currentDay = 1; currentMonth = 0; currentYear = 1970; currentWeekday = 4;
     }
 
     setAudioOutput(OUT_HANDSET);
@@ -474,12 +505,12 @@ void processTimeQueue() {
             
         case TIME_UHR: // "Uhr" finished, play Minute (if not 0)
             if (currentMinute == 0) {
-                timeState = TIME_DONE;
-                Serial.println("Time Speak Done (Exact Hour)");
+                // If minute is 0, skip to Date
+                timeState = TIME_DATE_INTRO;
+                nextFile = basePath + "date_intro.mp3";
             } else {
                 timeState = TIME_MINUTE;
                 if (currentMinute < 10) {
-                     // Play "null five" format? 
                      nextFile = basePath + "m_0" + String(currentMinute) + ".mp3";
                 } else {
                      nextFile = basePath + "m_" + String(currentMinute) + ".mp3";
@@ -488,8 +519,40 @@ void processTimeQueue() {
             break;
             
         case TIME_MINUTE: // Minute finished
+            timeState = TIME_DATE_INTRO;
+            nextFile = basePath + "date_intro.mp3";
+            break;
+
+        // --- NEW DATE LOGIC ---
+        case TIME_DATE_INTRO:
+            timeState = TIME_WEEKDAY;
+            nextFile = basePath + "wday_" + String(currentWeekday) + ".mp3";
+            break;
+
+        case TIME_WEEKDAY:
+            timeState = TIME_DAY;
+            nextFile = basePath + "day_" + String(currentDay) + ".mp3";
+            break;
+
+        case TIME_DAY:
+            timeState = TIME_MONTH;
+            nextFile = basePath + "month_" + String(currentMonth) + ".mp3";
+            break;
+
+        case TIME_MONTH:
+            timeState = TIME_YEAR;
+            nextFile = basePath + "year_" + String(currentYear) + ".mp3";
+            break;
+
+        case TIME_YEAR:
+            timeState = TIME_DST;
+            if (currentIsDst) nextFile = basePath + "dst_summer.mp3";
+            else nextFile = basePath + "dst_winter.mp3";
+            break;
+
+        case TIME_DST:
             timeState = TIME_DONE;
-            Serial.println("Time Speak Done");
+            Serial.println("Time & Date Speak Done");
             break;
             
         default: break;

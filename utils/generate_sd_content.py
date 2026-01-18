@@ -73,6 +73,21 @@ TIME_CONFIG = {
     }
 }
 
+CALENDAR_CONFIG = {
+    "de": {
+        "weekdays": ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
+        "months": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
+        "date_intro": "Heute ist",
+        "dst": ["Es ist Winterzeit", "Es ist Sommerzeit"]
+    },
+    "en": {
+        "weekdays": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+        "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+        "date_intro": "Today is",
+        "dst": ["It is Winter time", "It is Summer time"]
+    }
+}
+
 # --- HELPER FUNCTIONS ---
 
 def ensure_folder_structure():
@@ -351,6 +366,49 @@ def make_all_tts():
 
     # Generate Silence for English gap
     save_wav("silence.wav", generate_silence(200), "time") # Shared silence
+
+    # Calendar TTS (Weekdays, Days, Months, Years, DST)
+    for lang in ["de", "en"]:
+        print(f"Generating Calendar TTS ({lang.upper()})...")
+        c_cfg = CALENDAR_CONFIG[lang]
+        subdir = os.path.join("time", lang)
+        
+        # Intro
+        generate_tts_mp3(c_cfg["date_intro"], "date_intro.mp3", lang, subdir)
+        
+        # DST
+        generate_tts_mp3(c_cfg["dst"][0], "dst_winter.mp3", lang, subdir)
+        generate_tts_mp3(c_cfg["dst"][1], "dst_summer.mp3", lang, subdir)
+        
+        # Weekdays
+        for i, wd in enumerate(c_cfg["weekdays"]):
+            generate_tts_mp3(wd, f"wday_{i}.mp3", lang, subdir)
+            
+        # Months
+        for i, mon in enumerate(c_cfg["months"]):
+            generate_tts_mp3(mon, f"month_{i}.mp3", lang, subdir)
+            
+        # Years (2024-2035)
+        for y in range(2024, 2036):
+            generate_tts_mp3(str(y), f"year_{y}.mp3", lang, subdir)
+            
+        # Days (1-31)
+        for d in range(1, 32):
+            txt = str(d)
+            if lang == "de":
+                txt = f"Der {d}." # "Der Erste"
+            else:
+                # English Ordinals
+                if 10 < d < 20: suffix = "th"
+                else:
+                    last = d % 10
+                    if last == 1: suffix = "st"
+                    elif last == 2: suffix = "nd"
+                    elif last == 3: suffix = "rd"
+                    else: suffix = "th"
+                txt = f"The {d}{suffix}"
+            
+            generate_tts_mp3(txt, f"day_{d}.mp3", lang, subdir)
 
 def make_startup_music():
     print("Generating Startup Sound (Ambient Swell)...")
