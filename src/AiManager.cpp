@@ -58,7 +58,7 @@ String AiManager::callGemini(String prompt) {
         JsonDocument respDoc;
         DeserializationError error = deserializeJson(respDoc, response);
         
-        if (!error && respDoc.containsKey("candidates")) {
+        if (!error && !respDoc["candidates"].isNull()) {
              const char* text = respDoc["candidates"][0]["content"]["parts"][0]["text"];
              if (text) result = String(text);
         }
