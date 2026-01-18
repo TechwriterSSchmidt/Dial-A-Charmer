@@ -17,6 +17,7 @@ void IRAM_ATTR RotaryDial::isrPulse() {
             _instance->_pulseCount++;
             _instance->_lastPulseTime = now;
             _instance->_dialing = true;
+            _instance->_newPulse = true; // Signal new pulse
             lastIsr = now;
         }
     }

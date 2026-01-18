@@ -17,6 +17,15 @@ public:
     bool isOffHook();
     bool isButtonDown();
     bool isDialing() const { return _dialing; }
+    
+    // Check if a new pulse happened (clears flag on read)
+    bool hasNewPulse() {
+        if (_newPulse) {
+            _newPulse = false;
+            return true;
+        }
+        return false;
+    }
 
 private:
     int _pulsePin;
@@ -27,7 +36,8 @@ private:
     // Debounce & Pulse Counting
     int _pulseCount = 0;
     unsigned long _lastPulseTime = 0;
-    bool _dialing = false;
+    volatile bool _dialing = false;
+    volatile bool _newPulse = false;
     
     // Hook State
     bool _offHook = false;

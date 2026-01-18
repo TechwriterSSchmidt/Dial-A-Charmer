@@ -1171,6 +1171,34 @@ void loop() {
     webManager.loop();
     dial.loop();
     
+    // --- PULSE FEEDBACK (Mechanical Click) ---
+    if (dial.hasNewPulse()) {
+        // 1. Stop Dial Tone if active (First pulse logic)
+        if (isDialTonePlaying) {
+             stopDialTone();
+        }
+        
+        // 2. Play Click if the channel is free
+        // Note: rapid re-triggering might cause stutter if file is too large. 
+        // Use a very short <50ms file: /system/click.wav
+        // if (!audio->isRunning()) {
+        //    audio->connecttoFS(SD, "/system/click.wav");
+        // }
+        // Actually, re-triggering connecttoFS is heavy.
+        // Better: Just mute/unmute or toggle a pin if we had a buzzer.
+        // Since we only have I2S, and it's single stream, we skipping audio feedback for now if song is playing.
+        // But for DialTone (which we just stopped), we are free.
+        
+        if (!audio->isRunning()) {
+             // For now, we attempt to play. Ensure file is TINY.
+             // If loop latency is high, this will slow down dialing detection!
+             // Proceed with caution.
+             if (SD.exists("/system/click.wav")) {
+                audio->connecttoFS(SD, "/system/click.wav");
+             }
+        }
+    }
+
     // --- DIAL TONE LOGIC ---
     if (isDialTonePlaying && dial.isDialing()) {
         stopDialTone();
