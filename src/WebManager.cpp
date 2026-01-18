@@ -36,9 +36,6 @@ String getSdFileOptions(String folder, int currentSelection) {
     // Sort Alphabetically to ensure consistent Indexing
     std::sort(files.begin(), files.end());
     
-    // Add "None" or "Default" if index 0 is special? 
-    // Usually index 1 is first file.
-    
     for(size_t i=0; i<files.size(); i++) {
         // IDs start at 1 usually in this system
         int id = i + 1;
@@ -53,8 +50,6 @@ String getSdFileOptions(String folder, int currentSelection) {
     }
     return options;
 }
-
-// MOVED TO WebResources.h: const char* htmlStyle
 
 void WebManager::begin() {
     // Init FileSystem for Web Assets
@@ -114,7 +109,7 @@ void WebManager::begin() {
     _server.on("/advanced", [this](){ handleAdvanced(); });
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); });
-    _server.on("/help", [this](){ handleHelp(); }); // Moved UP
+    _server.on("/help", [this](){ handleHelp(); });
 
     // Reindex Storage
     _server.on("/api/reindex", [this](){
@@ -152,17 +147,12 @@ void WebManager::begin() {
         playSound("/system/system_ready.mp3", true); 
         
         // We do NOT reboot immediately here, as the user might want to hear the sound.
-        // But the prompt said "Reboot" in text. 
-        // Actually, the user requirement says: "display via LED reindexing" and "play system ready when finished". 
-        // Usually reindexing happens on next boot if files are missing.
-        // So we MUST reboot to trigger `buildPlaylist()`.
         // We will play sound, wait for it, then reboot.
         
         delay(4000); // Wait for sound
         ESP.restart();
     });
 
-    // OTA Update
     _server.on("/update", HTTP_POST, [this](){
             _server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
             ESP.restart();
@@ -185,8 +175,6 @@ void WebManager::begin() {
                 }
             }
         });
-
-    // Removed /help handler here as it was moved up
 
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
@@ -467,8 +455,6 @@ String WebManager::getSettingsHtml() {
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
 
-    // Language Selector Removed
-
     html += "<form action='/save' method='POST'>";
     html += "<input type='hidden' name='form_id' value='basic'>";
     html += "<input type='hidden' name='redirect' value='/settings'>"; // Redirect back to settings
@@ -517,14 +503,11 @@ String WebManager::getSettingsHtml() {
     }
     html += "</div>";
 
-    // LED Moved to Advanced
-
     html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
     
     html += "<div style='text-align:center; padding-bottom: 20px;'>";
     html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
-    // Wecker removed
     html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Telefonbuch</a>";
     html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Konfiguration</a>";
     html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
@@ -567,8 +550,6 @@ String WebManager::getApSetupHtml() {
     html += "</body></html>";
     return html;
 }
-
-// WebManager::getHtml() removed (Replaced by SPA index.html)
 
 String WebManager::getAdvancedHtml() {
     String lang = settings.getLanguage();
@@ -710,7 +691,6 @@ String WebManager::getAdvancedHtml() {
     html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
     html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Wecker</a>";
     html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Telefonbuch</a>";
-    // Konfiguration removed
     html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
     html += "</div>";
     
@@ -779,12 +759,12 @@ String WebManager::getPhonebookHtml() {
 
     // Notepad Container
     // Background: Off-white (#fffef0).
-    // Gradient 1 (Holes): Black circles (matching body bg) on the left every 120px (3 lines).
+    // Gradient 1 (Holes): Black circles (matching body bg) on the left.
     // Gradient 2 (Blue Line): Vertical at 60px.
     // Gradient 3 (Red Lines): Horizontal every 40px.
     html += ".notepad { width: 100%; max-width: 550px; margin: 20px auto; min-height: 600px; padding: 40px 20px 40px 0px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }";
     html += ".notepad { border-top-right-radius: 25px; border-bottom-right-radius: 25px; }";
-    html += ".notepad { background-color: #fffef0; background-image: radial-gradient(circle at 20px 20px, #080808 10px, transparent 11px), linear-gradient(90deg, transparent 59px, #aaccff 59px, #aaccff 61px, transparent 61px), linear-gradient(#ffaaaa 1px, transparent 1px); background-size: 100% 120px, 100% 100%, 100% 40px; background-attachment: local; background-repeat: repeat-y, no-repeat, repeat; }";
+    html += ".notepad { background-color: #fffef0; background-image: radial-gradient(circle at 20px 140px, #080808 10px, transparent 11px), linear-gradient(90deg, transparent 59px, #aaccff 59px, #aaccff 61px, transparent 61px), linear-gradient(#ffaaaa 1px, transparent 1px); background-size: 40px 100%, 100% 100%, 100% 40px; background-attachment: local; background-repeat: no-repeat, no-repeat, repeat; }";
 
     // Table Styling - Align with lines
     html += ".pb-table { width: 100%; border-collapse: collapse; margin-top: 0px; }";
@@ -794,13 +774,13 @@ String WebManager::getPhonebookHtml() {
     // Header Row on Paper
     html += ".pb-head th { height: 40px; vertical-align: bottom; color: #cc0000; font-family: sans-serif; font-size: 1.2rem; border:none; line-height:40px; }";
 
-    // Input styling - Handwritten on the line
-    html += "input { width: 100%; background: transparent; border: none; color: #000; padding: 0; font-family: 'Courier New', Courier, monospace; font-size: 1.5rem; font-weight: bold; text-align: left; outline: none; box-shadow: none; height: 100%; border-radius:0; }";
+    // Input styling - Handwritten on the line. Use same font as Name
+    html += "input { width: 100%; background: transparent; border: none; color: #000; padding: 0; font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 1.5rem; font-weight: bold; text-align: left; outline: none; box-shadow: none; height: 100%; border-radius:0; }";
     html += "input::placeholder { color: #aaa; opacity: 0.5; }";
     html += "input:focus { background: rgba(255,255,0,0.1); }";
     
     // Name Cell - Handwritten
-    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 1.3rem; color: #222; text-shadow: none; padding-left: 15px; line-height: 1.2; }";
+    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 1.3rem; color: #222; text-shadow: none; padding-left: 10px; line-height: 1.2; }";
     
     html += "</style>";
 
@@ -839,7 +819,7 @@ function render() {
         
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="width: 105px; padding-left: 65px;">
+            <td style="width: 100px; padding-left: 65px;">
                 <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}" maxlength="3" type="tel">
             </td>
             <td class="name-cell">
@@ -891,7 +871,7 @@ async function save() {
     html += "<table class='pb-table'>";
     html += "<thead><tr class='pb-head'>";
     // Icons/Labels
-    html += "<th style='width:105px; padding-left:65px; text-align:left; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
+    html += "<th style='width:100px; padding-left:65px; text-align:left; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
     html += "<th style='text-align:left; padding-left:10px;'>Name</th>";
     html += "</tr></thead>";
     
@@ -904,7 +884,6 @@ async function save() {
     html += "<div style='text-align:center; padding-bottom: 20px;'>";
     html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
     html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Wecker</a>";
-    // Telefonbuch removed
     html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Konfiguration</a>";
     html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
     html += "</div></div>";
