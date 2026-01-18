@@ -245,16 +245,41 @@ void WebManager::handleRoot() {
     if (_apMode) {
         _server.send(200, "text/html", getApSetupHtml());
     } else {
-        // Fallback to Server-Side Rendering (Classic Mode) to fix "Loading..."
-        _server.send(200, "text/html", getSettingsHtml());
+        // --- DASHBOARD (HOME) ---
+        String lang = settings.getLanguage();
+        bool isDe = (lang == "de");
         
-        /* Broken SPA Mode Logic
-        if (SPIFFS.exists("/index.html")) {
-            File file = SPIFFS.open("/index.html", "r");
-            _server.streamFile(file, "text/html");
-            file.close();
-        } else { ... }
-        */
+        String t_title = "Dial-A-Charmer";
+        String t_subtitle = isDe ? "H&ouml;rer abheben zum W&auml;hlen" : "Lift receiver to dial";
+        String t_alarms = isDe ? "Wecker (Alarms)" : "Alarms";
+        String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+        String t_config = isDe ? "Konfiguration" : "Configuration";
+        String t_help = isDe ? "Hilfe / Manual" : "Help / Manual";
+
+        String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
+        html += COMMON_CSS; 
+        html += "</head><body>";
+        
+        html += "<h2>" + t_title + "</h2>";
+        
+        html += "<div class='card' style='text-align:center;'>";
+        html += "<p style='color:#888; font-style:italic; margin-bottom:25px; font-family:serif; font-size:1.1rem;'>" + t_subtitle + "</p>";
+        
+        // Navigation Buttons
+        String btnStyle = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.2rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family:sans-serif; transition: all 0.2s;";
+        
+        html += "<button onclick=\"location.href='/settings'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_alarms + "</button>";
+        html += "<button onclick=\"location.href='/phonebook'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_pb + "</button>";
+        html += "<button onclick=\"location.href='/advanced'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_config + "</button>";
+        html += "<button onclick=\"location.href='/help'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_help + "</button>";
+        
+        html += "</div>";
+
+        // Version Footer
+        html += "<div style='text-align:center; padding-top:20px; color:#444; font-size:0.8rem;'>v0.7.1-beta</div>";
+        html += "</body></html>";
+
+        _server.send(200, "text/html", html);
     }
 }
 
