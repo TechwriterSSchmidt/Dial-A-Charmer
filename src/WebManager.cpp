@@ -409,6 +409,10 @@ void WebManager::handleSave() {
         String loc = "/";
         if (_server.hasArg("redirect")) loc = _server.arg("redirect");
         
+        // Append ?saved=1
+        if (loc.indexOf('?') == -1) loc += "?saved=1";
+        else loc += "&saved=1";
+
         _server.sendHeader("Location", loc, true);
         _server.send(302, "text/plain", "");
     }
@@ -614,55 +618,27 @@ String WebManager::getAdvancedHtml() {
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += COMMON_CSS; // Use Shared Resource
     html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>";
+    // Toast Notification Script
+    html += "<script>window.onload = function() { if(new URLSearchParams(window.location.search).has('saved')) { var t = document.createElement('div'); t.innerHTML = 'Saved!'; t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#4caf50;color:white;padding:12px 24px;border-radius:4px;box-shadow:0 2px 5px rgba(0,0,0,0.3);z-index:9999;font-size:1.2rem;animation:fadein 0.5s, fadeout 0.5s 2.5s forwards;'; document.body.appendChild(t); setTimeout(()=>{t.remove()}, 3000); }}; </script>";
+    html += "<style>@keyframes fadein{from{opacity:0;transform:translate(-50%,20px);}to{opacity:1;transform:translate(-50%,0);}} @keyframes fadeout{from{opacity:1;transform:translate(-50%,0);}to{opacity:0;transform:translate(-50%,20px);}}</style>";
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
     html += "<form action='/save' method='POST'>";
     html += "<input type='hidden' name='redirect' value='/advanced'>";
     html += "<input type='hidden' name='form_id' value='advanced'>";
     
-    // --- MOVED AUDIO SECTIONS ---
-    html += "<div class='card'><h3>" + t_audio + "</h3>";
-    html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
-    html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
-    html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
-    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
-    html += "<label>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>";
-    html += getSdFileOptions("/ringtones", settings.getRingtone());
-    html += "</select>";
-    html += "<label>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>";
-    html += getSdFileOptions("/system", settings.getDialTone()); 
-    html += "</select>";
-    html += "</div>";
-
-    // --- MOVED LED SECTIONS ---
-    html += "<div class='card'><h3>" + t_led + "</h3>";
-    int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
-    html += "<label>" + t_day + " (0-42) <output>" + String(dayVal) + "</output></label>";
-    html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    int nightVal = map(settings.getLedNightBright(), 0, 255, 0, 42);
-    html += "<label>" + t_night + " (0-42) <output>" + String(nightVal) + "</output></label>";
-    html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    html += "<label>" + t_n_start + " (0-23)</label>";
-    html += "<input type='number' name='night_start' min='0' max='23' value='" + String(settings.getNightStartHour()) + "'>";
-    html += "<label>" + t_n_end + " (0-23)</label>";
-    html += "<input type='number' name='night_end' min='0' max='23' value='" + String(settings.getNightEndHour()) + "'>";
-    html += "</div>";
-
-    html += "<div class='card'><h3>" + t_wifi + "</h3>";
+    // --- GROUP 1: SYSTEM & NETWORK ---
+    html += "<div class='card'><h3>System / Network</h3>";
+    // WiFi
     html += "<label>" + t_ssid + "</label>";
-    html += "<input type='text' name='ssid' list='ssidList' value='" + settings.getWifiSSID() + "' placeholder='Select or type SSID'>";
+    html += "<input type='text' name='ssid' list='ssidList' value='" + settings.getWifiSSID() + "' placeholder='SSID'>";
     html += "<datalist id='ssidList'>" + ssidOptions + "</datalist>";
-    
     html += "<label>" + t_pass + "</label><input type='password' name='pass' value='" + settings.getWifiPass() + "'>";
-    html += "</div>";
-    
-    html += "<div class='card'><h3>" + t_time + "</h3>";
-    html += "<label>" + t_tz + "</label>";
+    // Timezone
+    html += "<label style='margin-top:15px;'>" + t_tz + "</label>";
     html += "<select name='tz'>";
     int tz = settings.getTimezoneOffset();
-    const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London, Dublin, Lisbon)", "UTC +1 (Zurich, Paris, Rome)", "UTC +2 (Athens, Helsinki, Kyiv)", "UTC +3 (Moscow, Istanbul)" };
+    const char* labels[] = { "UTC -1 (Azores)", "UTC +0 (London)", "UTC +1 (Europe/Berlin)", "UTC +2 (Athens)", "UTC +3 (Istanbul)" };
     int offsets[] = { -1, 0, 1, 2, 3 };
     for(int i=0; i<5; i++) {
         html += "<option value='" + String(offsets[i]) + "'";
@@ -672,17 +648,46 @@ String WebManager::getAdvancedHtml() {
     html += "</select>";
     html += "</div>";
 
-    html += "<div class='card'><h3>" + t_audio_adv + "</h3>";
-    // Half Duplex
-    html += "<div style='display:flex;align-items:center;margin-top:20px;'>";
-    html += "<label class='switch' style='margin-right:15px;'><input type='checkbox' name='hd' value='1'" + String(settings.getHalfDuplex() ? " checked" : "") + "><span class='slider'></span></label>";
-    html += "<span style='font-size:1.2rem;color:#888;text-transform:uppercase;letter-spacing:2px;'>" + t_hd + "</span>";
+    // --- GROUP 2: AUDIO CONFIG ---
+    html += "<div class='card'><h3>Audio Configuration</h3>";
+    html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
+    html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
+    html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
+    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
+    
+    // Tones
+    html += "<div style='display:flex; gap:10px; margin-top:15px;'>";
+    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>" + getSdFileOptions("/ringtones", settings.getRingtone()) + "</select></div>";
+    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>" + getSdFileOptions("/system", settings.getDialTone()) + "</select></div>";
+    html += "</div>";
+    
+    // AEC Switch
+    html += "<div style='display:flex;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid #333;'>";
+    html += "<label class='switch' style='margin-right:15px;margin-top:0;'><input type='checkbox' name='hd' value='1'" + String(settings.getHalfDuplex() ? " checked" : "") + "><span class='slider'></span></label>";
+    html += "<span style='font-size:1rem;color:#aaa;'>" + t_hd + "</span>";
     html += "</div>";
     html += "</div>";
 
+    // --- GROUP 3: VISUALS (LED) ---
+    html += "<div class='card'><h3>" + t_led + "</h3>";
+    int dayVal = map(settings.getLedDayBright(), 0, 255, 0, 42); 
+    html += "<label>" + t_day + " (0-42)</label>";
+    html += "<input type='range' name='led_day' min='0' max='42' value='" + String(dayVal) + "'>";
+    int nightVal = map(settings.getLedNightBright(), 0, 255, 0, 42);
+    html += "<label>" + t_night + " (0-42)</label>";
+    html += "<input type='range' name='led_night' min='0' max='42' value='" + String(nightVal) + "'>";
+    html += "<div style='display:flex; gap:10px; margin-top:10px;'>";
+    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_n_start + "</label><input type='number' name='night_start' min='0' max='23' value='" + String(settings.getNightStartHour()) + "'></div>";
+    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_n_end + "</label><input type='number' name='night_end' min='0' max='23' value='" + String(settings.getNightEndHour()) + "'></div>";
+    html += "</div>";
+    html += "</div>";
+
+    // --- GROUP 4: INTELLIGENCE (AI) ---
     html += "<div class='card'><h3>" + t_ai + "</h3>";
     html += "<label>" + t_key + "</label><input type='password' name='gemini' value='" + settings.getGeminiKey() + "'>";
-    html += "<small>Leave empty to use SD card audio only.</small>";
+    html += "<small style='color:#666;'>Leave empty to disable AI features.</small>";
     html += "</div>";
     
     html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";

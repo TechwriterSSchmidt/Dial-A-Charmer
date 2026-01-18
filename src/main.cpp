@@ -200,9 +200,6 @@ void startPersonaScan() {
 
 
 void handlePersonaScan() {
-    // TEMPORARY DEBUG ENABLED AGAIN
-    // return; 
-
     if (!bgScanActive || !sdAvailable) return;
 
     // Process a chunk of work
@@ -1323,12 +1320,12 @@ void loop() {
     esp_task_wdt_reset();
 
     static unsigned long lastLoopDebug = 0;
-    if(millis() - lastLoopDebug > 2000) {
+    if(millis() - lastLoopDebug > 5000) {
         lastLoopDebug = millis();
-        Serial.printf("[LOOP] running... AudioRun: %d, WebClient: ?, FreeHeap: %u\n", (audio?audio->isRunning():0), ESP.getFreeHeap());
+        // Serial.printf("[LOOP] running... AudioRun: %d, FreeHeap: %u\n", (audio?audio->isRunning():0), ESP.getFreeHeap());
     }
 
-    // if(audio) audio->loop(); // REMOVED: Audio loop is handled by AudioTask on Core 0
+    // if(audio) audio->loop(); // Handled by AudioTask
     webManager.loop();
     dial.loop();
     
@@ -1434,29 +1431,7 @@ void loop() {
         handleAlarmLogic();
     }
     
-    // --- HALF-DUPLEX AEC ---
-    // DISABLED TEMPORARILY due to I2C Errors causing potential instability
-    /*
-    static bool wasAudioRunning = false;
-    bool isAudioRunning = audio->isRunning();
-    
-    if (settings.getHalfDuplex()) {
-        if (isAudioRunning && !wasAudioRunning) {
-            Serial.println("AEC: Audio Start -> Muting Mic");
-            audioCodec.muteMic(true);
-        } 
-        else if (!isAudioRunning && wasAudioRunning) {
-            Serial.println("AEC: Audio Stop -> Unmuting Mic");
-            audioCodec.muteMic(false);
-        }
-    } else if (wasAudioRunning && !isAudioRunning) {
-        // Ensure unmuted if we toggled setting off during playback
-        audioCodec.muteMic(false);
-    }
-    wasAudioRunning = isAudioRunning;
-    */
-
-    // --- AP Mode Long Press & Alarm Delete (2s) ---
+    // --- AP Mode Long Press (10s) ---
     static unsigned long btnPressStart = 0;
     static bool buttonActionTriggered = false;
 
@@ -1468,23 +1443,6 @@ void loop() {
         
         unsigned long dur = millis() - btnPressStart;
         
-        // 2s Action: Delete Manual Alarm - MOVED to onHook combo
-        /*
-        if (dur > 2000 && dur < 5000 && !buttonActionTriggered) {
-             if (timeManager.isAlarmSet()) {
-                 timeManager.deleteAlarm(0); 
-                 Serial.println("Manual Alarm Deleted (Long Press 2s)");
-                 
-                 // Feedback on Speaker (Base)
-                 setAudioOutput(OUT_SPEAKER);
-                 String lang = settings.getLanguage();
-                 playSound("/system/alarm_deleted_" + lang + ".mp3", true);
-                 
-                 buttonActionTriggered = true; 
-             }
-        }
-        */
-
         // 10s Action: AP Mode
         if (dur > 10000 && !buttonActionTriggered) {
              Serial.println("Long Press Detected: Starting AP Mode");
