@@ -1235,6 +1235,7 @@ void setup() {
     
     // --- WATCHDOG INIT ---
     // Initialize WDT with timeout and panic (reset) enabled
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
     esp_task_wdt_config_t wdt_config = {
         .timeout_ms = WDT_TIMEOUT * 1000,
         .idle_core_mask = (1 << 0) | (1 << 1), // Optional: Monitor Idle tasks
@@ -1242,6 +1243,10 @@ void setup() {
     };
     esp_task_wdt_init(&wdt_config);
     esp_task_wdt_add(NULL); // Add current thread (Loop) to WDT
+#else
+    esp_task_wdt_init(WDT_TIMEOUT, true); // 20s timeout, panic enabling
+    esp_task_wdt_add(NULL); // Add current thread (Loop) to WDT
+#endif
     
     // Check Wakeup Cause
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
