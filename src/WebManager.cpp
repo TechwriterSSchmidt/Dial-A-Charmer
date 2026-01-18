@@ -73,6 +73,8 @@ void WebManager::begin() {
         while (WiFi.status() != WL_CONNECTED && tries < 20) {
             delay(500);
             Serial.print(".");
+            // Keep WDT happy during potential 10sec block
+            esp_task_wdt_reset();
             tries++;
         }
         Serial.println();
