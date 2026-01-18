@@ -46,8 +46,11 @@ struct AudioCmd {
 // Forward Declaration needed for task
 void audioTaskCode(void * parameter);
 void playSequence(std::vector<String> files, bool useSpeaker);
+void clearSpeechQueue();
 
 // Global State
+std::vector<String> globalSpeechQueue;
+bool globalSpeechQueueUseSpeaker = false;
 bool sdAvailable = false;
 bool isDialTonePlaying = false; // New Dial Tone State
 
@@ -717,11 +720,24 @@ void stopAlarm() {
     isAlarmRinging = false;
     isTimerRinging = false;
     digitalWrite(CONF_PIN_VIB_MOTOR, LOW); 
+    
+    // Clear Queue to prevent "ghost words" after alarm stops
+    clearSpeechQueue();
+
     if (audio->isRunning()) audio->stopSong();
     
     timeManager.cancelTimer(); 
     
     setAudioOutput(OUT_HANDSET); 
+    
+    // BUG FIX: Volume Reset
+    // Reset volume to standard level immediately, otherwise next call is loud!
+    int defVol = settings.getBaseVolume(); 
+    if(audio) {
+        audio->setVolume(defVol);
+        sendAudioCmd(CMD_VOL, NULL, defVol);
+    }
+
     Serial.println("Alarm Stopped");
 }
 
@@ -1131,6 +1147,9 @@ void onHook(bool offHook) {
     } else {
         // ON HOOK (Hung Up)
         
+        // BUG FIX: Stop any pending sentences
+        clearSpeechQueue();
+        
         // Reset Busy State and Stop Loop
         isLineBusy = false;
         sendAudioCmd(CMD_LOOP, NULL, 0);
@@ -1152,8 +1171,9 @@ void onHook(bool offHook) {
 
 void onButton() {
     // Interruption Logic: Stop Speaking if Button Pressed
-    if (audio->isRunning()) {
-        Serial.println("Interruption: Button Pressed -> Stopping Audio");
+    if (audio->isRunning() || !globalSpeechQueue.empty()) {
+        Serial.println("Interruption: Button Pressed -> Stopping Audio & Queue");
+        clearSpeechQueue(); 
         audio->stopSong();
         return; 
     }
@@ -1309,7 +1329,19 @@ void setup() {
         NULL,            /* Handle */
         0                /* Core 0 */
     );
-    delay(100); // Allow Task to boot
+    
+    // BUG FIX: Wait for Audio Object Creation
+    // Prevent loop() from crashing if task starts slowly
+    Serial.print("Waiting for Audio Engine...");
+    unsigned long startWait = millis();
+    while (audio == nullptr) {
+        delay(10);
+        if (millis() - startWait > 3000) {
+            Serial.println("ERROR: Audio Task failed to start!");
+            break;
+        }
+    }
+    Serial.println("Ready.");
     
     // Start with Handset
     setAudioOutput(OUT_HANDSET);
@@ -1555,8 +1587,13 @@ void loop() {
 }
 
 // --- Audio Queue System (Non-Blocking) ---
-std::vector<String> globalSpeechQueue;
-bool globalSpeechQueueUseSpeaker = false;
+
+void clearSpeechQueue() {
+    if (!globalSpeechQueue.empty()) {
+        Serial.println("Clearing Speech Queue...");
+        globalSpeechQueue.clear();
+    }
+}
 
 void playSequence(std::vector<String> files, bool useSpeaker) {
     if (files.empty()) return;

@@ -819,7 +819,7 @@ function render() {
         
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="width: 100px; padding-left: 65px;">
+            <td style="width: 35px; padding-left: 65px;">
                 <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}" maxlength="3" type="tel">
             </td>
             <td class="name-cell">
@@ -871,7 +871,7 @@ async function save() {
     html += "<table class='pb-table'>";
     html += "<thead><tr class='pb-head'>";
     // Icons/Labels
-    html += "<th style='width:100px; padding-left:65px; text-align:left; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
+    html += "<th style='width:35px; padding-left:65px; text-align:left; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
     html += "<th style='text-align:left; padding-left:10px;'>Name</th>";
     html += "</tr></thead>";
     

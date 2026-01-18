@@ -9,6 +9,11 @@
 - **Performance**:
     - **Non-Blocking Audio**: Converted "Time Speaking" logic to a Queue system. The main loop no longer freezes while the device speaks dates or confirmations.
     - **Reduced Logging**: Stripped debug output for cleaner serial terminal behavior.
+- **Stability Fixes**:
+    - **Audio Queue Management**: Fixed "stale queue" issues where interrupted sentences would play back randomly later.
+    - **Boot Safety**: Added explicit wait-state during boot to prevent crashes if the Audio Task initializes slowly.
+    - **Volume Guard**: Ensured volume resets to defaults after alarm termination.
+    - **Config Safety**: Added automated fix for invalid Dial Tone configurations.
 - **Licensing**:
     - Applied **PolyForm Noncommercial License 1.0.0** to the repository (see [README.md](README.md)).
 
