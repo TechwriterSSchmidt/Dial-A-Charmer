@@ -236,6 +236,54 @@ void WebManager::begin() {
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); });
     
+extern void playSound(String filename, bool useSpeaker);
+
+    // Reindex Storage
+    _server.on("/api/reindex", [this](){
+        Serial.println("Reindex requested via WebUI...");
+        
+        // Signal Start: Blue Pulse (CONNECTING)
+        ledManager.setMode(LedManager::CONNECTING);
+        ledManager.update();
+        _server.send(200, "text/plain", "Reindexing started. Please wait for signal.");
+
+        // Do the work
+        File dir = SD.open("/playlists");
+        std::vector<String> files;
+        if (dir && dir.isDirectory()) {
+            File f = dir.openNextFile();
+            while(f) {
+                String n = String(f.name());
+                if (n.endsWith(".m3u") || n.endsWith(".idx")) {
+                    if(n.startsWith("/")) files.push_back(n);
+                    else files.push_back("/playlists/" + n);
+                }
+                f = dir.openNextFile();
+            }
+            dir.close();
+        }
+        for(const auto& p : files) {
+            SD.remove(p);
+            Serial.print("Removed cached playlist: "); Serial.println(p);
+        }
+
+        // Wait a bit to simulate/ensure processing
+        delay(2000); 
+
+        // Sound Feedback on Base Speaker
+        playSound("/system/system_ready.mp3", true); 
+        
+        // We do NOT reboot immediately here, as the user might want to hear the sound.
+        // But the prompt said "Reboot" in text. 
+        // Actually, the user requirement says: "display via LED reindexing" and "play system ready when finished". 
+        // Usually reindexing happens on next boot if files are missing.
+        // So we MUST reboot to trigger `buildPlaylist()`.
+        // We will play sound, wait for it, then reboot.
+        
+        delay(4000); // Wait for sound
+        ESP.restart();
+    });
+
     // OTA Update
     _server.on("/update", HTTP_POST, [this](){
             _server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
@@ -473,53 +521,49 @@ String WebManager::getSettingsHtml() {
     html += "<input type='hidden' name='form_id' value='basic'>";
     html += "<input type='hidden' name='redirect' value='/settings'>"; // Redirect back to settings
 
-    // Repeating Alarm
+    // Repeating Alarm - Mobile Friendly Layout (Stacked)
     html += "<div class='card'><h3>" + String(isDe ? "T&auml;gliche Wecker" : "Daily Alarms") + "</h3>";
     
-    // Header
-    html += "<table style='width:100%; border-collapse: collapse;'>";
-    html += "<tr style='border-bottom: 1px solid #333;'>";
-    html += "<th style='text-align:left; padding:10px; color:#888'>" + String(isDe ? "Tag" : "Day") + "</th>";
-    html += "<th style='text-align:center; padding:10px; color:#888'>" + String(isDe ? "Aktiv" : "Active") + "</th>";
-    html += "<th style='text-align:center; padding:10px; color:#888'>" + String(isDe ? "Zeit" : "Time") + "</th>";
-    html += "<th style='text-align:center; padding:10px; color:#888'>" + String(isDe ? "Ton" : "Tone") + "</th>";
-    html += "</tr>";
-
+    // Using Flex/Grid logic with Divs instead of Table
     String dNamesDe[] = { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" };
     String dNamesEn[] = { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" };
     
     for(int i=0; i<7; i++) {
-         html += "<tr>";
-         
-         // Day
-         html += "<td style='padding:15px 10px; color:#d4af37; font-weight:bold;'>" + (isDe ? dNamesDe[i] : dNamesEn[i]) + "</td>";
-         
-         // Active - Toggle Switch
-         bool en = settings.isAlarmEnabled(i);
-         html += "<td style='text-align:center; padding:10px;'>";
-         html += "<label class='switch'>";
-         html += "<input type='checkbox' name='alm_en_" + String(i) + "' value='1'" + (en?" checked":"") + ">";
-         html += "<span class='slider'></span></label>";
-         html += "</td>";
-         
-         // Time - Wider Inputs (80px)
-         html += "<td style='text-align:center; padding:10px;'>";
-         html += "<div style='display:flex; align-items:center; justify-content:center;'>";
-         html += "<input type='number' name='alm_h_" + String(i) + "' min='0' max='23' value='" + String(settings.getAlarmHour(i)) + "' style='width:80px; text-align:center;'>";
-         html += "<span style='font-size:1.5rem; margin:0 5px;'>:</span>";
-         html += "<input type='number' name='alm_m_" + String(i) + "' min='0' max='59' value='" + String(settings.getAlarmMinute(i)) + "' style='width:80px; text-align:center;'>";
-         html += "</div></td>";
-         
-         // Tone
-         html += "<td style='text-align:center; padding:10px;'>";
-         html += "<select name='alm_t_" + String(i) + "' style='width:100%; min-width:120px;'>";
-         html += getSdFileOptions("/ringtones", settings.getAlarmTone(i));
-         html += "</select>";
-         html += "</td>";
-         
-         html += "</tr>";
+        bool en = settings.isAlarmEnabled(i);
+        String dayName = isDe ? dNamesDe[i] : dNamesEn[i];
+        
+        // Container for one alarm entry
+        html += "<div style='border-bottom: 1px solid #333; padding: 15px 0;'>";
+        
+        // Row 1: Day (Left) & Active Switch (Right)
+        html += "<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;'>";
+        // Day Label
+        html += "<span style='color:#d4af37; font-weight:bold; font-size:1.4rem;'>" + dayName + "</span>";
+        // Switch
+        html += "<label class='switch'><input type='checkbox' name='alm_en_" + String(i) + "' value='1'" + (en?" checked":"") + "><span class='slider'></span></label>";
+        html += "</div>";
+        
+        // Row 2: Time & Tone
+        html += "<div style='display:flex; justify-content:space-between; align-items:center;'>";
+        
+        // Time Inputs
+        html += "<div style='display:flex; align-items:center;'>";
+        html += "<input type='number' name='alm_h_" + String(i) + "' min='0' max='23' value='" + String(settings.getAlarmHour(i)) + "' style='width:60px; text-align:center;'>";
+        html += "<span style='font-size:1.5rem; margin:0 5px; color:#888;'>:</span>";
+        html += "<input type='number' name='alm_m_" + String(i) + "' min='0' max='59' value='" + String(settings.getAlarmMinute(i)) + "' style='width:60px; text-align:center;'>";
+        html += "</div>";
+        
+        // Tone Select
+        html += "<div style='flex-grow:1; margin-left:15px;'>";
+        html += "<select name='alm_t_" + String(i) + "' style='width:100%;'>";
+        html += getSdFileOptions("/ringtones", settings.getAlarmTone(i));
+        html += "</select>";
+        html += "</div>";
+        
+        html += "</div>"; // End Row 2
+        html += "</div>"; // End Entry
     }
-    html += "</table></div>";
+    html += "</div>";
 
     // LED Moved to Advanced
 
@@ -611,6 +655,11 @@ String WebManager::getAdvancedHtml() {
     String t_help = isDe ? "Hilfe" : "Help"; // "Usage Help" -> "Help"
     String t_audio_btn = isDe ? "Wecker" : "Alarms"; // New
     String t_conf = isDe ? "Konfiguration" : "Configuration"; // New
+    
+    // New Storage Strings
+    String t_storage = isDe ? "Speicher Wartung" : "Storage Maintenance";
+    String t_reindex = isDe ? "Index neu aufbauen" : "Reindex Storage";
+    String t_reindex_desc = isDe ? "L&ouml;scht alle Playlists und scannt die SD-Karte erneut. (Neustart)" : "Clears all playlists and rescans the SD card. (Reboot)";
 
     // Scan for networks
     int n = WiFi.scanNetworks();
@@ -695,6 +744,12 @@ String WebManager::getAdvancedHtml() {
     
     html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
+
+    // --- STORAGE SECTION (Now Below Save) ---
+    html += "<div class='card'><h3>" + t_storage + "</h3>";
+    html += "<p>" + t_reindex_desc + " (1-3 Min)</p>";
+    html += "<button type='button' onclick='if(confirm(\"Reindex?\")) { fetch(\"/api/reindex\").then(res => { alert(\"System Reindexing... LED will pulse blue. Wait for Ready Sound.\"); }); }' style='background-color:#cc4400;'>" + t_reindex + "</button>";
+    html += "</div>";
 
     // OTA Update Form
     html += "<div class='card'><h3>Firmware Update (OTA)</h3>";
