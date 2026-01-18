@@ -11,6 +11,9 @@
 #include <vector>
 #include <algorithm>
 
+// Extern from main.cpp
+extern void playSound(String filename, bool useSpeaker);
+
 WebManager webManager;
 
 // Helper to list files for dropdown
