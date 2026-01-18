@@ -72,7 +72,7 @@ input, select {
     background-color: #f0e6d2;
     border: 2px solid #333;
     color: #111;
-    font-family: 'Times New Roman', Times, serif;
+    font-family: 'Pompiere', cursive, sans-serif;
     font-size: 1.4rem;
     box-sizing: border-box;
     border-radius: 12px; /* Soft Rounded Edges */
@@ -94,7 +94,7 @@ button {
     font-size: 1.5rem;
     cursor: pointer;
     transition: all 0.3s;
-    font-family: 'Times New Roman', Times, serif;
+    font-family: 'Pompiere', cursive, sans-serif;
     border-radius: 12px; /* Rounded Button */
 }
 button:hover {

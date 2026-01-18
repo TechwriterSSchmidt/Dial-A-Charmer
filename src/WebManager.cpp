@@ -287,7 +287,7 @@ void WebManager::handleRoot() {
         html += "<p style='color:#888; font-style:italic; margin-bottom:25px; font-family: \"Pompiere\", cursive; font-size:1.3rem;'>" + t_subtitle + "</p>";
         
         // Navigation Buttons
-        String btnStyle = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Zen Tokyo Zoo', cursive; transition: all 0.2s;";
+        String btnStyle = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Pompiere', cursive, sans-serif; transition: all 0.2s;";
         
         html += "<button onclick=\"location.href='/settings'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_alarms + "</button>";
         html += "<button onclick=\"location.href='/phonebook'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_pb + "</button>";
