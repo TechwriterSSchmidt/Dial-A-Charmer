@@ -1,6 +1,6 @@
 # Dial-A-Charmer
 
-Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on?
+Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces internet-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on?
 
 **Easy to Install:**
 1.  **Web Installer (Recommended):** Use the [Dial-A-Charmer Web Installer](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/) to flash directly from Chrome/Edge.
@@ -29,7 +29,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 
 | Category | Feature | Description |
 | :--- | :--- | :--- |
-| **Timekeeping** | **Atomic Clock** | Syncs time via GNSS (M10 Module) for precision + NTP fallback. |
+| **Timekeeping** | **Atomic Precision** | Syncs time exclusively via **NTP (Internet Time)** over Wi-Fi. |
 | | **Dual Alarm System** | **Single Alarm** (via Rotary Dial) for one-off use + **Repeating Alarm** (via Web) for schedules. |
 | | **Smart Skip** | Dial `91` to skip just the *next* recurring alarm (sleep in!) without canceling the schedule. |
 | | **Kitchen Timer** | Set a countdown using the rotary dial (e.g., dial '12' for a perfect 12 minutes Pizza timer). |
@@ -37,7 +37,8 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | | **AI Assistant** | Integrated **Gemini AI** allows the phone to tell jokes or answer prompts via the Phonebook. |
 | | **Multi-Language** | Supports **German** and **English** for Voice, System prompts, and Web Interface. |
 | | **Half-Duplex Audio** | Intelligent echo-cancellation ensures AI prompts aren't interrupted by their own output. |
-| **System** | **Advanced Web UI** | Configure everything from Ringtones to OTA Updates via a responsive split-view interface. |
+| **System** | **Zero-Install Web App** | Modern **Single-Page-Application (SPA)** served directly from the device (requires SPIFFS). |
+| | **System Watchdog** | Integrated Hardware Watchdog auto-resets the device if it freezes (>20s). |
 | | **OTA Updates** | Update firmware wirelessly via the Web Interface. |
 | | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple initial setup. |
 
@@ -104,8 +105,6 @@ The device communicates distinct states via the integrated WS2812 LED using orga
 | | Dial Mode | `GPIO 36` | Detects when dial assumes active position |
 | | Hook Switch | `GPIO 32` | |
 | | Extra Button | `GPIO 33` | |
-| **GNSS (GPS)** | RX | `GPIO 34` | M10 Module (Input Only) |
-| | TX | *Disabled* | Disabled to free GPIO 0 for Audio MCLK |
 | **Output** | Vibration | `GPIO 2` | Haptic Feedback |
 | | LED Data | `GPIO 13` | WS2812B |
 | **Storage** | SD CS | `GPIO 4` | On-board SD Slot |
@@ -192,8 +191,8 @@ The system uses specific WAV files in `/system/` for feedback:
 3.  **Flash Firmware:**
     *   Open project in VS Code with PlatformIO.
     *   Connect Wemos D32 Pro via USB.
-    *   Upload Filesystem (Optional, if using LittleFS, otherwise just skip this).
-    *   **Upload Firmware**.
+    *   **Upload Filesystem Image**: This is **REQUIRED** for the new Web UI. Run `PlatformIO: Upload Filesystem Image`.
+    *   **Upload Firmware**: Run `The standard PlatformIO Upload` task.
 4.  **Configure:**
     *   On first boot, connect to WiFi AP `DialACharmer`.
     *   Go to `192.168.4.1` to set your Timezone and Credentials (if needed for future OTA).
@@ -205,6 +204,6 @@ The system uses specific WAV files in `/system/` for feedback:
 ## Maintenance
 
 *   **Battery:** The system runs on a 3000mAh LiPo. Charge when the LED indicates low battery (if configured) or audio becomes distorted.
-*   **Time:** Thanks to GNSS, time is always accurate as long as the device has occasional sky visibility.
+*   **Time:** Time is maintained via NTP. Ensure the device connects to Wi-Fi at least once on boot to sync the clock.
 
 
