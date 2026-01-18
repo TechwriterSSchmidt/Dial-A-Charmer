@@ -238,11 +238,23 @@ void WebManager::handleRoot() {
 
         String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
         html += COMMON_CSS; 
+        html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>";
         html += "</head><body>";
         
         html += "<h2>" + t_title + "</h2>";
         
         html += "<div class='card' style='text-align:center;'>";
+        
+        // Language Toggle
+        String activeStyle = "color:#d4af37; font-weight:bold; text-decoration:underline; cursor:default;";
+        String inactiveStyle = "color:#666; text-decoration:none; cursor:pointer;";
+    
+        html += "<div style='margin-bottom:15px; font-size:1rem; letter-spacing:1px;'>";
+        html += "<span onclick='sl(\"de\")' style='" + String(isDe ? activeStyle : inactiveStyle) + "'>DE</span>";
+        html += " <span style='color:#444; margin:0 5px;'>|</span> ";
+        html += "<span onclick='sl(\"en\")' style='" + String(!isDe ? activeStyle : inactiveStyle) + "'>EN</span>";
+        html += "</div>";
+
         html += "<p style='color:#888; font-style:italic; margin-bottom:25px; font-family: \"Pompiere\", cursive; font-size:1.3rem;'>" + t_subtitle + "</p>";
         
         // Navigation Buttons
@@ -883,28 +895,28 @@ String WebManager::getHelpHtml() {
     // SECTION 1: BASIC USAGE
     html += "<div class='card'><h3>1. " + String(isDe ? "Bedienung" : "Basic Operation") + "</h3>";
     html += "<ul>";
-    html += "<li><b>" + String(isDe ? "Hörer abnehmen:" : "Lift Receiver:") + "</b> " + String(isDe ? "Wählton erklingt." : "You hear a Dial Tone.") + "</li>";
-    html += "<li><b>" + String(isDe ? "Wählen (0-9):" : "Dial (0-9):") + "</b> " + String(isDe ? "Wähle eine Nummer für Inhalte." : "Input numbers to start content.") + "</li>";
-    html += "<li><b>Timeout:</b> " + String(isDe ? "Nach 5 Sekunden ohne Eingabe ertönt das 'Besetzt'-Zeichen. Hörer auflegen zum Reset." : "After 5 seconds of inactivity, a 'Busy Tone' plays. Hang up to reset.") + "</li>";
+    html += "<li><b>" + String(isDe ? "H&ouml;rer abnehmen:" : "Lift Receiver:") + "</b> " + String(isDe ? "W&auml;hlton erklingt." : "You hear a Dial Tone.") + "</li>";
+    html += "<li><b>" + String(isDe ? "W&auml;hlen (0-9):" : "Dial (0-9):") + "</b> " + String(isDe ? "W&auml;hle eine Nummer f&uuml;r Inhalte." : "Input numbers to start content.") + "</li>";
+    html += "<li><b>Timeout:</b> " + String(isDe ? "Nach 5 Sekunden ohne Eingabe ert&ouml;nt das 'Besetzt'-Zeichen. H&ouml;rer auflegen zum Reset." : "After 5 seconds of inactivity, a 'Busy Tone' plays. Hang up to reset.") + "</li>";
     html += "</ul></div>";
 
     // SECTION 2: CODES & SHORTCUTS (Dynamic based on logic, but defaults listed)
     html += "<div class='card'><h3>2. " + String(isDe ? "Nummern & Codes" : "Numbers & Codes") + "</h3>";
     html += "<ul>";
-    html += "<li><b>0:</b> " + String(isDe ? "Zufalls-Mix (Überraschung)" : "Random Surprise Mix") + "</li>";
-    html += "<li><b>1 - 4:</b> " + String(isDe ? "Playlists (über Telefonbuch änderbar)" : "Playlists (Editable via Phonebook)") + "</li>";
+    html += "<li><b>0:</b> " + String(isDe ? "Zufalls-Mix (&Uuml;berraschung)" : "Random Surprise Mix") + "</li>";
+    html += "<li><b>1 - 4:</b> " + String(isDe ? "Playlists (&uuml;ber Telefonbuch &auml;nderbar)" : "Playlists (Editable via Phonebook)") + "</li>";
     html += "<li><b>8:</b> " + String(isDe ? "System Status (IP-Adresse)" : "System Status (IP Address)") + "</li>";
-    html += "<li><b>9:</b> " + String(isDe ? "Sprach-Menü" : "Voice Menu") + "</li>";
+    html += "<li><b>9:</b> " + String(isDe ? "Sprach-Men&uuml;" : "Voice Menu") + "</li>";
     html += "<li><b>90:</b> " + String(isDe ? "Alle Wecker: AN / AUS" : "Toggle All Alarms: ON / OFF") + "</li>";
-    html += "<li><b>91:</b> " + String(isDe ? "Nächsten Wecker überspringen" : "Skip Next Routine Alarm") + "</li>";
+    html += "<li><b>91:</b> " + String(isDe ? "N&auml;chsten Wecker &uuml;berspringen" : "Skip Next Routine Alarm") + "</li>";
     html += "</ul></div>";
 
     // SECTION 3: ALARMS & TIMER
     html += "<div class='card'><h3>3. " + String(isDe ? "Wecker & Timer" : "Alarms & Timer") + "</h3>";
     html += "<ul>";
-    html += "<li><b>Timer (Egg Timer):</b> " + String(isDe ? "Hörer AUFGELEGT lassen -> Zahl wählen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
-    html += "<li><b>Stop Ringing:</b> " + String(isDe ? "Hörer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
-    html += "<li><b>Snooze:</b> " + String(isDe ? "Hörer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
+    html += "<li><b>Timer (Egg Timer):</b> " + String(isDe ? "H&ouml;rer AUFGELEGT lassen -> Zahl w&auml;hlen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
+    html += "<li><b>Stop Ringing:</b> " + String(isDe ? "H&ouml;rer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
+    html += "<li><b>Snooze:</b> " + String(isDe ? "H&ouml;rer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
     html += "</ul></div>";
     
     // SECTION 4: CONFIG
