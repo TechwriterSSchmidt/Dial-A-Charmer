@@ -5,7 +5,7 @@ Dial-A-Charmer is a vintage telephone brought back to life with more personality
 **Easy to Install:**
 1.  **Web Installer (Recommended):** Use the [Dial-A-Charmer Web Installer](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/) to flash directly from Chrome/Edge.
 2.  **PlatformIO:** Build from source for development.
-3.  **Manual Flash:** Download the [latest firmware.bin](https://github.com/TechwriterSSchmidt/Dial-A-Charmer/releases/latest/download/firmware.bin) and upload it via OTA-option.
+3.  **Manual Flash:** Download the [latest firmware.bin](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/firmware.bin) and upload it via OTA-option.
 
 ## Support my projects
 

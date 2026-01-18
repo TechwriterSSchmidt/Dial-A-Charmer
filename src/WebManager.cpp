@@ -779,10 +779,12 @@ String WebManager::getPhonebookHtml() {
 
     // Notepad Container
     // Background: Off-white (#fffef0).
-    // Gradient 1: Vertical Blue Line at 60px.
-    // Gradient 2: Horizontal Red Lines every 40px.
+    // Gradient 1 (Holes): Black circles (matching body bg) on the left every 120px (3 lines).
+    // Gradient 2 (Blue Line): Vertical at 60px.
+    // Gradient 3 (Red Lines): Horizontal every 40px.
     html += ".notepad { width: 100%; max-width: 550px; margin: 20px auto; min-height: 600px; padding: 40px 20px 40px 0px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }";
-    html += ".notepad { background-color: #fffef0; background-image: linear-gradient(90deg, transparent 59px, #aaccff 59px, #aaccff 61px, transparent 61px), linear-gradient(#ffaaaa 1px, transparent 1px); background-size: 100% 100%, 100% 40px; background-attachment: local; }";
+    html += ".notepad { border-top-right-radius: 25px; border-bottom-right-radius: 25px; }";
+    html += ".notepad { background-color: #fffef0; background-image: radial-gradient(circle at 20px 20px, #080808 10px, transparent 11px), linear-gradient(90deg, transparent 59px, #aaccff 59px, #aaccff 61px, transparent 61px), linear-gradient(#ffaaaa 1px, transparent 1px); background-size: 100% 120px, 100% 100%, 100% 40px; background-attachment: local; background-repeat: repeat-y, no-repeat, repeat; }";
 
     // Table Styling - Align with lines
     html += ".pb-table { width: 100%; border-collapse: collapse; margin-top: 0px; }";
@@ -837,8 +839,8 @@ function render() {
         
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td style="width: 140px; padding-left: 70px;">
-                <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}">
+            <td style="width: 105px; padding-left: 65px;">
+                <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}" maxlength="3" type="tel">
             </td>
             <td class="name-cell">
                 ${currentName}
@@ -889,8 +891,8 @@ async function save() {
     html += "<table class='pb-table'>";
     html += "<thead><tr class='pb-head'>";
     // Icons/Labels
-    html += "<th style='width:140px; padding-left:70px; text-align:left; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
-    html += "<th style='text-align:left; padding-left:15px;'>Name</th>";
+    html += "<th style='width:105px; padding-left:65px; text-align:left; font-size:1.5rem;'>&#9742;</th>"; // Phone Icon
+    html += "<th style='text-align:left; padding-left:10px;'>Name</th>";
     html += "</tr></thead>";
     
     html += "<tbody id='tbody'></tbody></table>";
