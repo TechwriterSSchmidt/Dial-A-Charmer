@@ -45,6 +45,7 @@ struct AudioCmd {
 
 // Forward Declaration needed for task
 void audioTaskCode(void * parameter);
+void playSequence(std::vector<String> files, bool useSpeaker);
 
 // Global State
 bool sdAvailable = false;
@@ -980,10 +981,6 @@ void speakAlarmConfirm(int h, int m) {
     
     playSequence(seq, true); // Speaker
 }
-             playSound(mFile, true); 
-         }
-    }
-}
 
 void processBufNumber(String numberStr) {
     // Serial.printf("Processing Buffered Input: %s\n", numberStr.c_str());
@@ -1207,16 +1204,37 @@ String getSystemFileByIndex(int index) {
 }
 
 void playDialTone() {
-    if (!sdAvailable) return;
-    int toneIndex = settings.getDialTone();
-    String freqFile = getSystemFileByIndex(toneIndex);
+    if (isDialTonePlaying) return;
     
-    if (freqFile != "") {
-        Serial.print("Starting Dial Tone: "); Serial.println(freqFile);
-        sendAudioCmd(CMD_LOOP, NULL, 1);
-        sendAudioCmd(CMD_PLAY, freqFile.c_str(), 0);
-        isDialTonePlaying = true;
+    // Stop any speech holding the audio
+    if (audio->isRunning()) audio->stopSong();
+
+    int toneIndex = settings.getDialTone();
+    String dt = getSystemFileByIndex(toneIndex);
+    
+    // SAFETY CHECK: Dial Tone must not be a system announcement!
+    if (dt.indexOf("alarm_active") >= 0 || dt.indexOf("timer_") >= 0 || dt.indexOf("menu_") >= 0) {
+        Serial.println("Warning: Invalid DialTone config detected (" + dt + "). Reverting to default.");
+        dt = "/system/dial_tone.wav";
+        // Auto-fix settings
+        settings.setDialTone(1); // Reset index to 1
     }
+
+    if (dt == "" || !SD.exists(dt)) {
+        dt = "/system/dial_tone.wav";
+    }
+
+    Serial.println("Starting Dial Tone: " + dt);
+    
+    // Ensure loop mode is ON for dial tone
+    sendAudioCmd(CMD_LOOP, NULL, 1);
+    
+    setAudioOutput(OUT_HANDSET);
+    playSound(dt, false); // false = Handset
+    isDialTonePlaying = true;
+    
+    // Reset Timeout Timer for Busy Logic
+    offHookTime = millis();
 }
 
 void stopDialTone() {
