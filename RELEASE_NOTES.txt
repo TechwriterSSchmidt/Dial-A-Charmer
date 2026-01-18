@@ -1,5 +1,14 @@
 # Release Notes - Dial-A-Charmer
 
+## v0.7.0-beta (2026-01-18) - "The Robustness Update"
+- **Audio Multithreading**: Moved audio decoding to dedicated Core 0 task. Prevents stuttering during Web UI usage or heavy WiFi traffic.
+- **Fail-Safe Features**:
+    - **NVS Persistence**: Alarms now survive device reboots.
+    - **RTC Support**: Added DS3231 support for timekeeping during internet outages.
+    - **Fallback Tone**: Synthesized alarm tone generated if SD card files are missing.
+- **Detailed Announcements**: Extended `speakTime()` to announce Weekday, Date, Month, Year, and DST status.
+- **Improved Scripts**: Generator script now creates localized calendar audio assets.
+
 ## v0.6.0-beta (2026-01-18) - "The Streamlined Specialist"
 - **Hardware Cleanup (GPS Removal)**:
     - Removed all dependencies on GNSS/GPS hardware (u-blox M10).

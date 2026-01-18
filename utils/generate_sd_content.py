@@ -309,6 +309,20 @@ def make_ui_sounds():
         
     save_wav("click.wav", click_audio)
 
+    # Fallback Alarm (Penetrant Square Wave)
+    # Used when file access fails
+    fallback_audio = []
+    dur_ms = 1000
+    num = int(SAMPLE_RATE * dur_ms / 1000.0)
+    for i in range(num):
+        # 800Hz / 1200Hz alternating every 250ms
+        t = i / SAMPLE_RATE
+        freq = 800 if int(t * 4) % 2 == 0 else 1200
+        # Square wave
+        val = AMPLITUDE * (1.0 if math.sin(2 * math.pi * freq * t) > 0 else -1.0)
+        fallback_audio.append(val)
+    save_wav("fallback_alarm.wav", fallback_audio, "system")
+
 def make_telephony_tones():
     print("Generating Telephony Tones...")
     # Dial Tone DE (425Hz)

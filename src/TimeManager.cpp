@@ -5,39 +5,99 @@ TimeManager timeManager;
 
 // NTP Servers
 const char* ntpServer = "pool.ntp.org";
-const long  gmtOffset_sec = 0; // We handle timezone via offset addition manually or set it here? 
-// Better set it here so struct tm is correct local time
-// But Settings has an int offset (hours). 
-// configTime takes seconds offset.
 
 void TimeManager::begin() {
-    // NTP Init (Config but don't force sync yet)
+    // 1. Init External RTC
+    bool rtcFound = rtc.begin();
+    if (!rtcFound) {
+        Serial.println("[Time] RTC DS3231 not found. Using internal only.");
+    } else {
+        if (rtc.lostPower()) {
+             Serial.println("[Time] RTC lost power, needs sync.");
+        } else {
+             DateTime now = rtc.now();
+             if (now.year() < 2025) {
+                 Serial.println("[Time] RTC invalid (<2025). Waiting for NTP.");
+             } else {
+                 Serial.printf("[Time] RTC Valid: %04d-%02d-%02d %02d:%02d\n", now.year(), now.month(), now.day(), now.hour(), now.minute());
+                 // Sync MSP32 internal clock from RTC
+                 struct timeval tv;
+                 tv.tv_sec = now.unixtime();
+                 tv.tv_usec = 0;
+                 settimeofday(&tv, NULL);
+                 _currentSource = RTC;
+             }
+        }
+    }
+
+    // 2. Init NTP (System Time)
     // We use settings for timezone.
     configTime(settings.getTimezoneOffset() * 3600, 0, ntpServer);
+    
+    // 3. Load Alarms
+    loadAlarms();
+}
+
+// --- PERSISTENCE ---
+
+void TimeManager::loadAlarms() {
+    alarms.clear();
+    prefs.begin("alarms", true); // R/O
+    int count = prefs.getInt("count", 0);
+    Serial.printf("[Time] Loading %d alarms from NVS...\n", count);
+    
+    for (int i = 0; i < count; i++) {
+        String p = String(i);
+        Alarm a;
+        a.hour = prefs.getInt((p + "_h").c_str(), 0);
+        a.minute = prefs.getInt((p + "_m").c_str(), 0);
+        a.active = prefs.getBool((p + "_act").c_str(), false);
+        uint8_t dMap = prefs.getUChar((p + "_days").c_str(), 127);
+        for(int k=0; k<7; k++) a.days[k] = (dMap >> k) & 1;
+        alarms.push_back(a);
+    }
+    prefs.end();
+}
+
+void TimeManager::saveAlarms() {
+    prefs.begin("alarms", false); // R/W
+    prefs.clear();
+    prefs.putInt("count", alarms.size());
+    
+    for (int i = 0; i < alarms.size(); i++) {
+        String p = String(i);
+        prefs.putInt((p + "_h").c_str(), alarms[i].hour);
+        prefs.putInt((p + "_m").c_str(), alarms[i].minute);
+        prefs.putBool((p + "_act").c_str(), alarms[i].active);
+        
+        uint8_t dMap = 0;
+        for(int k=0; k<7; k++) if(alarms[i].days[k]) dMap |= (1<<k);
+        prefs.putUChar((p + "_days").c_str(), dMap);
+    }
+    prefs.end();
+    Serial.println("[Time] Alarms saved.");
 }
 
 void TimeManager::loop() {
-    // 1. NTP Sync Check (If WiFi is there)
-    if (WiFi.status() == WL_CONNECTED) {
-        // configTime keeps syncing in background, we just check if we have time
-        // Use non-blocking overload (tm struct, ms timeout)
+    // 1. Sync Check
+    // If we have WiFi and system time is updated by NTP, update RTC
+    static unsigned long lastRtcSync = 0;
+    if (WiFi.status() == WL_CONNECTED && (millis() - lastRtcSync > 3600000)) { // Once per hour
         struct tm timeinfo;
         if (::getLocalTime(&timeinfo, 0)) {
             _currentSource = NTP;
+            rtc.adjust(DateTime(timeinfo.tm_year+1900, timeinfo.tm_mon+1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec));
+            lastRtcSync = millis();
+            Serial.println("[Time] Synced RTC from NTP");
         }
     } 
-
-    // 2. Logic Update (Reset Alarm Trigger at midnight, etc)
-    // handled in checkAlarmTrigger
 }
 
 TimeManager::DateTime TimeManager::getLocalTime() {
     DateTime dt = {0,0,0,0,0, 0, 0, false};
-    
-    // Strategy: Prefer System Time (NTP/RTC) if set, else GPS
     struct tm timeinfo;
-    // local time (ESP32 RTC)
-    if (::getLocalTime(&timeinfo, 50)) { // 50ms timeout
+    
+    if (::getLocalTime(&timeinfo, 10)) { 
         dt.year = timeinfo.tm_year + 1900;
         dt.month = timeinfo.tm_mon + 1;
         dt.day = timeinfo.tm_mday;
@@ -48,7 +108,6 @@ TimeManager::DateTime TimeManager::getLocalTime() {
         dt.valid = true;
         return dt;
     }
-
     return dt;
 }
 
@@ -63,29 +122,44 @@ TimeManager::TimeSource TimeManager::getSource() {
 // --- Alarm ---
 
 void TimeManager::setAlarm(int hour, int minute) {
-    _alarmHour = hour;
-    _alarmMinute = minute;
-    _alarmTriggeredToday = false;
+    // Legacy: Clears all and sets one
+    alarms.clear();
+    addAlarm(hour, minute); // Auto-saves
 }
 
-void TimeManager::deleteAlarm() {
-    _alarmHour = -1;
-    _alarmMinute = -1;
+void TimeManager::addAlarm(int h, int m, bool active, uint8_t daysBitmap) {
+    Alarm a;
+    a.hour = h;
+    a.minute = m;
+    a.active = active;
+    for(int i=0; i<7; i++) a.days[i] = (daysBitmap >> i) & 1;
+    alarms.push_back(a);
+    saveAlarms();
+}
+
+void TimeManager::deleteAlarm(int index) {
+    if (index >= 0 && index < alarms.size()) {
+        alarms.erase(alarms.begin() + index);
+        saveAlarms();
+    }
 }
 
 bool TimeManager::isAlarmSet() {
-    return (_alarmHour != -1 && _alarmMinute != -1);
+    return !alarms.empty();
+}
+
+std::vector<TimeManager::Alarm> TimeManager::getAlarms() {
+    return alarms;
 }
 
 String TimeManager::getAlarmString() {
-    if (!isAlarmSet()) return "--:--";
+    if (alarms.empty()) return "--:--";
     char buf[10];
-    sprintf(buf, "%02d:%02d", _alarmHour, _alarmMinute);
+    sprintf(buf, "%02d:%02d", alarms[0].hour, alarms[0].minute);
     return String(buf);
 }
 
 bool TimeManager::checkAlarmTrigger() {
-    // Limit checks to prevent NVS saturation (though now Cached)
     static unsigned long lastCheck = 0;
     if (millis() - lastCheck < 1000) return false;
     lastCheck = millis();
@@ -93,51 +167,42 @@ bool TimeManager::checkAlarmTrigger() {
     DateTime now = getLocalTime();
     if (!now.valid) return false;
 
-    // Reset trigger if minute changed
     if (now.minute != _lastCheckedMinute) {
         _alarmTriggeredToday = false; 
         _lastCheckedMinute = now.minute;
     }
 
-    if (_alarmTriggeredToday) return false; // Already handled this minute
-
+    if (_alarmTriggeredToday) return false; 
     if (!_alarmsEnabled) return false;
 
-    // 1. Check Single/Manual Alarm (High Priority, never skipped by "Skip Next")
-    if (isAlarmSet()) {
-        if (now.hour == _alarmHour && now.minute == _alarmMinute) {
-            _alarmTriggeredToday = true;
-            deleteAlarm(); // Single alarm is one-shot
-            return true;
+    // Iterate Alarms
+    struct tm tinfo;
+    ::getLocalTime(&tinfo); // need wday
+    int todayIndex = (tinfo.tm_wday == 0) ? 6 : (tinfo.tm_wday - 1); // Mon=0 .. Sun=6 needed?
+    // struct tm wday: 0=Sun, 1=Mon ... 6=Sat
+    // Our array: 0=Sun, 1=Mon ... 6=Sat (Standard comp)
+    int day = tinfo.tm_wday; 
+
+    for (int i = 0; i < alarms.size(); i++) {
+        if (alarms[i].active && alarms[i].days[day]) {
+            if (now.hour == alarms[i].hour && now.minute == alarms[i].minute) {
+                // Trigger!
+                if (_skipNextAlarm) {
+                    _skipNextAlarm = false;
+                    _alarmTriggeredToday = true; // Consume minute
+                    return false;
+                }
+                
+                _alarmTriggeredToday = true;
+                // If one-shot (all days full? No, we don't have one-shot flag in struct, assuming repeating for now unless we implement logic)
+                return true;
+            }
         }
     }
-
-    // 2. Check Periodic Alarm (From Settings)
-    struct tm tinfo;
-    if (::getLocalTime(&tinfo)) {
-         // tm_wday: 0=Sun, 1=Mon... 6=Sat
-         // Our Settings: 0=Mon, 1=Tue... 6=Sun
-         int dayIndex = (tinfo.tm_wday == 0) ? 6 : (tinfo.tm_wday - 1);
-         
-         if (settings.isAlarmEnabled(dayIndex)) {
-             int pHour = settings.getAlarmHour(dayIndex);
-             int pMin = settings.getAlarmMinute(dayIndex);
-             
-             if (now.hour == pHour && now.minute == pMin) {
-                 _alarmTriggeredToday = true;
-                     
-                     // Check Skip Logic
-                     if (_skipNextAlarm) {
-                         _skipNextAlarm = false; // Consumed
-                         return false; 
-                     }
-                     return true;
-                 }
-             }
-        }
     
     return false;
 }
+
 
 void TimeManager::setAlarmsEnabled(bool enabled) {
     _alarmsEnabled = enabled;

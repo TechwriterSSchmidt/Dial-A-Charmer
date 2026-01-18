@@ -3,6 +3,9 @@
 
 #include <Arduino.h>
 #include <time.h>
+#include <vector>
+#include <RTClib.h>
+#include <Preferences.h>
 #include "config.h"
 #include "Settings.h"
 
@@ -10,7 +13,15 @@ class TimeManager {
 public:
     enum TimeSource {
         NONE,
-        NTP
+        NTP,
+        RTC
+    };
+    
+    struct Alarm {
+        int hour;
+        int minute;
+        bool active;
+        bool days[7]; // Sun=0, Sat=6
     };
 
     struct DateTime {
@@ -33,10 +44,16 @@ public:
     TimeSource getSource();
 
     // Alarm Management
-    void setAlarm(int hour, int minute);
-    void deleteAlarm();
+    void setAlarm(int hour, int minute); // Simple wrapper
+    void addAlarm(int h, int m, bool active = true, uint8_t daysBitmap = 0b01111111);
+    void deleteAlarm(int index = 0);
     bool isAlarmSet();
     String getAlarmString(); // HH:MM
+    std::vector<Alarm> getAlarms();
+
+    // Persistence
+    void loadAlarms();
+    void saveAlarms();
     
     // Global Alarm Control
     void setAlarmsEnabled(bool enabled);
@@ -65,10 +82,11 @@ public:
 
 private:
     TimeSource _currentSource = NONE;
+    RTC_DS3231 rtc;
+    Preferences prefs;
     
-    // Alarm
-    int _alarmHour = -1;
-    int _alarmMinute = -1;
+    // Alarms
+    std::vector<Alarm> alarms;
     bool _alarmTriggeredToday = false;
     int _lastCheckedMinute = -1;
     bool _alarmsEnabled = true;

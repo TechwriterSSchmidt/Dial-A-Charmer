@@ -40,6 +40,8 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **System** | **Zero-Install Web App** | Modern **Single-Page-Application (SPA)** served directly from the device (requires SPIFFS). |
 | | **System Watchdog** | Integrated Hardware Watchdog auto-resets the device if it freezes (>20s). |
 | | **Smart Deep Sleep** | Device sleeps when idle and wakes up automatically for the next alarm (or when the receiver is lifted). |
+| | **Audio Engine V2** | **Multithreaded** audio core for stutter-free playback even during heavy WiFi traffic. |
+| | **Reliability** | **RTC & NVS Support** ensures alarms survive reboots and power outages. Fallback Tones for missing SD files. |
 | | **OTA Updates** | Update firmware wirelessly via the Web Interface. |
 | | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple initial setup. |
 

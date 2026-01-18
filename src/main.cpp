@@ -7,6 +7,9 @@
 #include <esp_task_wdt.h> // Watchdog
 #include <vector>
 #include <algorithm>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
 
 #define WDT_TIMEOUT 20 // 20 Seconds Watchdog Limit
 
@@ -24,9 +27,24 @@
 #include "PhonebookManager.h"
 
 // --- Objects ---
-Audio *audio = nullptr; // Pointer managed object
+Audio *audio = nullptr; // Pointer managed object (initialized in Task)
+volatile bool isAudioBusy = false; // Thread-safe flag
+
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN, CONF_PIN_DIAL_MODE);
 LedManager ledManager(CONF_PIN_LED);
+
+// --- AUDIO MULTITHREADING SETUP ---
+QueueHandle_t audioQueue;
+
+enum AudioCmdType { CMD_PLAY, CMD_STOP, CMD_VOL, CMD_OUT, CMD_CONNECT_SPEECH, CMD_LOOP };
+struct AudioCmd {
+    AudioCmdType type;
+    char path[128]; // Filename or URL
+    int value;      // Volume or Output ID
+};
+
+// Forward Declaration needed for task
+void audioTaskCode(void * parameter);
 
 // Global State
 bool sdAvailable = false;
@@ -62,6 +80,156 @@ struct Playlist {
 
     int index = 0;
 };
+
+std::map<int, Playlist> categories; // 1=Trump, 2=Badran, 3=Yoda, 4=Neutral
+Playlist mainPlaylist; // For Dial 0
+
+// --- Persistence Helpers ---
+// CHANGED: Use v3 filenames to force cache invalidation (fixes mp3_group vs persona path mismatch)
+String getStoredPlaylistPath(int category) {
+    return "/playlists/cat_" + String(category) + "_v3.m3u";
+}
+
+String getStoredIndexPath(int category) {
+    return "/playlists/cat_" + String(category) + "_v3.idx";
+}
+
+void ensurePlaylistDir() {
+    if (!sdAvailable) return;
+    if (!SD.exists("/playlists")) SD.mkdir("/playlists");
+}
+
+void savePlaylistToSD(int category, Playlist &pl) {
+    if (!sdAvailable) return;
+    ensurePlaylistDir();
+    String path = getStoredPlaylistPath(category);
+    SD.remove(path);
+    File f = SD.open(path, FILE_WRITE);
+    if (!f) return;
+    for (const auto &track : pl.tracks) {
+        f.println(track);
+    }
+    f.close();
+}
+
+void saveProgressToSD(int category, int index) {
+    if (!sdAvailable) return;
+    ensurePlaylistDir();
+    String path = getStoredIndexPath(category);
+    SD.remove(path);
+    File f = SD.open(path, FILE_WRITE);
+    if (f) {
+        f.println(index);
+        f.close();
+    }
+}
+
+bool loadPlaylistFromSD(int category, Playlist &pl) {
+    if (!sdAvailable) return false;
+    String path = getStoredPlaylistPath(category);
+    if (!SD.exists(path)) return false;
+    
+    File f = SD.open(path);
+    if (!f) return false;
+    
+    pl.tracks.clear();
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() > 0) pl.tracks.push_back(line);
+    }
+    f.close();
+    
+    // Load Index
+    String idxPath = getStoredIndexPath(category);
+    if (SD.exists(idxPath)) {
+        File fIdx = SD.open(idxPath);
+        if (fIdx) {
+            String idxStr = fIdx.readStringUntil('\n'); 
+            pl.index = idxStr.toInt();
+            // Sanity check
+            if (pl.index < 0 || (size_t)pl.index >= pl.tracks.size()) pl.index = 0;
+            fIdx.close();
+        }
+    } else {
+        pl.index = 0;
+    }
+    return true;
+}
+
+void scanDirectoryToPlaylist(String path, int categoryId) {
+    if (!sdAvailable) return;
+    File dir = SD.open(path);
+    if(!dir || !dir.isDirectory()) {
+         Serial.print("Dir missing: "); Serial.println(path);
+         return;
+    }
+    
+    Serial.printf("Scanning dir: %s for Cat %d\n", path.c_str(), categoryId);
+
+    File file = dir.openNextFile();
+    while(file) {
+        if(!file.isDirectory()) {
+            String fname = String(file.name());
+            if(fname.endsWith(".mp3") && fname.indexOf("._") == -1) {
+                // Construct full path
+                String fullPath = path;
+                if(!fullPath.endsWith("/")) fullPath += "/";
+                if(fname.startsWith("/")) fname = fname.substring(1); 
+                fullPath += fname;
+                
+                // Serial.printf("  Found: %s\n", fullPath.c_str()); // Debug verbose
+
+                // Add to specific category ONLY
+                categories[categoryId].tracks.push_back(fullPath);
+            }
+        }
+        file = dir.openNextFile();
+    }
+}
+
+void startPersonaScan() {
+    if (!sdAvailable) return;
+    Serial.println("[BG] Starting Background Persona Scan...");
+    bgScanPersonaIndex = 1;
+    bgScanActive = true;
+    bgScanPhonebookChanged = false;
+    // ensure bgScanDir is closed if it was left open
+    if(bgScanDir) bgScanDir.close();
+}
+
+void handlePersonaScan() {
+    // TEMPORARY DEBUG ENABLED AGAIN
+    // return; 
+
+    if (!bgScanActive || !sdAvailable) return;
+
+    // Process a chunk of work
+    // State 0: Open Dir if needed
+    if (!bgScanDir) {
+            if (bgScanPersonaIndex > 4) {
+                // FINISHED
+                bgScanActive = false;
+                if (bgScanPhonebookChanged) {
+                    Serial.println("[BG] Saving updated Phonebook names...");
+                    phonebook.saveChanges();
+                } else {
+                    Serial.println("[BG] Scan finished. No changes.");
+                }
+                return;
+            }
+            // Open next dir
+            // MAPPING: 1->mp3_group_01, 2->mp3_group_02
+            String path = "/mp3_group_0" + String(bgScanPersonaIndex); 
+            // OR /persona_01/ ? 
+            // In generate_sd_content.py we see "persona_01"...
+            // Let's assume persona format for scanning?
+            // The code above in Main uses categories.
+            // Let's stick to what worked before: scanDirectoryToPlaylist used?
+            // Re-check scanDirectoryToPlaylist usage.
+            
+    }
+}
 
 std::map<int, Playlist> categories; // 1=Trump, 2=Badran, 3=Yoda, 4=Neutral
 Playlist mainPlaylist; // For Dial 0
@@ -373,34 +541,79 @@ String getNextTrack(int category) {
 }
 
 
+// --- Audio Task & Helpers ---
+
+void audioTaskCode(void * parameter) {
+    Serial.print("[AudioTask] Started on Core "); Serial.println(xPortGetCoreID());
+    
+    // Create Audio Object Here (Local to Core 0)
+    audio = new Audio();
+    audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+    audio->forceMono(true); 
+    
+    for(;;) {
+        audio->loop();
+        isAudioBusy = audio->isRunning();
+        
+        AudioCmd cmd;
+        if(xQueueReceive(audioQueue, &cmd, 0) == pdTRUE) {
+            switch(cmd.type) {
+                case CMD_PLAY:
+                    if (SD.exists(cmd.path)) {
+                        audio->connecttoFS(SD, cmd.path);
+                    } else {
+                        Serial.printf("[Audio] File missing: %s\n", cmd.path);
+                        if (SD.exists("/system/fallback_alarm.wav")) {
+                             audio->connecttoFS(SD, "/system/fallback_alarm.wav");
+                        }
+                    }
+                    break;
+                case CMD_CONNECT_SPEECH:
+                    audio->connecttoSpeech(cmd.path, "de");
+                    break;
+                case CMD_STOP:
+                    audio->stopSong();
+                    break;
+                case CMD_VOL:
+                    audio->setVolume(cmd.value);
+                    break;
+                case CMD_LOOP:
+                    audio->setFileLoop(cmd.value > 0);
+                    break;
+                case CMD_OUT:
+                    if (cmd.value == 2) { 
+                        audio->setBalance(16); // Right (Speaker)
+                        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
+                        audio->setVolume(vol);
+                    } else {
+                         audio->setBalance(-16); // Left (Handset)
+                         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
+                         audio->setVolume(vol);
+                    }
+                    break;
+            }
+        }
+        vTaskDelay(2 / portTICK_PERIOD_MS);
+    }
+}
+
+void sendAudioCmd(AudioCmdType type, const char* path, int val) {
+    AudioCmd cmd;
+    cmd.type = type;
+    if (path) strncpy(cmd.path, path, 127);
+    else cmd.path[0] = '\0';
+    cmd.value = val;
+    xQueueSend(audioQueue, &cmd, 0);
+}
+
 // --- Helper Functions ---
 enum AudioOutput { OUT_NONE, OUT_HANDSET, OUT_SPEAKER };
 AudioOutput currentOutput = OUT_NONE; 
 
 void setAudioOutput(AudioOutput target) {
-    if (audio == nullptr) return;
     if (currentOutput == target) return; 
-
-    // PCM5100A Shared Bus Logic (Stereo DAC)
-    // Left Channel = Handset
-    // Right Channel = Base Speaker
-    
-    // Force Mono Mix so the audio content plays on the selected speaker
-    audio->forceMono(true);
-
-    if (target == OUT_HANDSET) {
-        audio->setBalance(-16); // Left Only
-        int vol = ::map(settings.getVolume(), 0, 42, 0, 21); // Fixed ambiguous map
-        audio->setVolume(vol);
-        Serial.printf("Output Switched: HANDSET (Vol: %d)\n", vol);
-    } else {
-        audio->setBalance(16); // Right Only
-        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21); // Fixed ambiguous map
-        audio->setVolume(vol);
-        Serial.printf("Output Switched: SPEAKER (Vol: %d)\n", vol);
-    }
     currentOutput = target;
-    delay(20); 
+    sendAudioCmd(CMD_OUT, NULL, (int)target);
 }
 
 void playSound(String filename, bool useSpeaker = false) {
@@ -409,15 +622,7 @@ void playSound(String filename, bool useSpeaker = false) {
         return;
     }
     setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
-
-    if (SD.exists(filename)) {
-        // statusLed handled by loop/state
-        audio->connecttoFS(SD, filename.c_str());
-    } else {
-        Serial.print("File missing: ");
-        Serial.println(filename);
-        // statusLed handled by loop/state
-    }
+    sendAudioCmd(CMD_PLAY, filename.c_str(), 0);
 }
 
 #include <driver/adc.h> // Include Legacy ADC driver
@@ -1143,16 +1348,16 @@ void playDialTone() {
     
     if (freqFile != "") {
         Serial.print("Starting Dial Tone: "); Serial.println(freqFile);
-        audio->setFileLoop(true); // Loop!
-        audio->connecttoFS(SD, freqFile.c_str());
+        sendAudioCmd(CMD_LOOP, NULL, 1);
+        sendAudioCmd(CMD_PLAY, freqFile.c_str(), 0);
         isDialTonePlaying = true;
     }
 }
 
 void stopDialTone() {
-    if (isDialTonePlaying && audio && audio->isRunning()) {
-        audio->stopSong();
-        audio->setFileLoop(false);
+    if (isDialTonePlaying) {
+        sendAudioCmd(CMD_STOP, NULL, 0);
+        sendAudioCmd(CMD_LOOP, NULL, 0);
         isDialTonePlaying = false;
         Serial.println("Dial Tone Stopped.");
     }
@@ -1205,12 +1410,18 @@ void setup() {
         buildPlaylist();
     }
     
-    // 2. Init Audio (PCM5100A)
-    // Audio(internalDAC, channelEnabled, i2sPort)
-    // We use I2S_NUM_1 for DAC to leave I2S_NUM_0 for the internal ADC (Mic)
-    audio = new Audio(false, 3, I2S_NUM_1);
-    audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
-    audio->forceMono(true); // Critical for separation via Balance
+    // 2. Init Audio Task (Multithreading)
+    audioQueue = xQueueCreate(20, sizeof(AudioCmd));
+    xTaskCreatePinnedToCore(
+        audioTaskCode,   /* Function */
+        "AudioTask",     /* Name */
+        8192,            /* Stack size (High for I2S/MP3) */
+        NULL,            /* Param */
+        2,               /* Priority (Higher than Main) */
+        NULL,            /* Handle */
+        0                /* Core 0 */
+    );
+    delay(100); // Allow Task to boot
     
     // Start with Handset
     setAudioOutput(OUT_HANDSET);
