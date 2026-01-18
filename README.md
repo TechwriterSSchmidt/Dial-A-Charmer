@@ -39,6 +39,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | | **Half-Duplex Audio** | Intelligent echo-cancellation ensures AI prompts aren't interrupted by their own output. |
 | **System** | **Zero-Install Web App** | Modern **Single-Page-Application (SPA)** served directly from the device (requires SPIFFS). |
 | | **System Watchdog** | Integrated Hardware Watchdog auto-resets the device if it freezes (>20s). |
+| | **Smart Deep Sleep** | Device sleeps when idle and wakes up automatically for the next alarm (or when the receiver is lifted). |
 | | **OTA Updates** | Update firmware wirelessly via the Web Interface. |
 | | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple initial setup. |
 

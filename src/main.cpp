@@ -1275,21 +1275,37 @@ void loop() {
         lastActivityTime = millis();
     } else {
         if (millis() - lastActivityTime > CONF_SLEEP_TIMEOUT_MS) {
-            Serial.println("zzZ Entering Smart Deep Sleep (Preserving GPS) zzZ");
+            Serial.println("zzZ Preparing for Deep Sleep zzZ");
             
-
+            // 1. Calculate Wakeup Triggers
             
-            // 2. Configure Wakeup
-            // We wake when the hook is lifted.
+            // A) WAKE ON HOOK (User Action)
             // Check current state to wake on change/toggle
             int currentHookState = digitalRead(CONF_PIN_HOOK);
             esp_sleep_enable_ext0_wakeup((gpio_num_t)CONF_PIN_HOOK, !currentHookState);
+            Serial.printf(" - Wakeup configured on PIN %d (Log: %d)\n", CONF_PIN_HOOK, !currentHookState);
+
+            // B) WAKE ON NEXT ALARM (Timer)
+            long secondsToAlarm = timeManager.getSecondsToNextAlarm();
+            if (secondsToAlarm > 0) {
+                // Wakeup exactly at alarm time (conversion to microseconds)
+                uint64_t sleepUs = (uint64_t)secondsToAlarm * 1000000ULL;
+                esp_sleep_enable_timer_wakeup(sleepUs);
+                
+                // Info logging
+                int hours = secondsToAlarm / 3600;
+                int mins = (secondsToAlarm % 3600) / 60;
+                Serial.printf(" - Wakeup Timer set for %ld s (~%dh %dm until Alarm)\n", secondsToAlarm, hours, mins);
+            } else {
+                Serial.println(" - No upcoming alarms set. Sleeping indefinitely until Hook Lift.");
+            }
             
-            // 3. Status LED Off
+            // 2. Status LED Off
             ledManager.setMode(LedManager::OFF);
             ledManager.update(); // Flush change
+            delay(100); // Give Serial time to flush
             
-            // 4. Goodnight
+            // 3. Goodnight
             esp_deep_sleep_start();
         }
     }

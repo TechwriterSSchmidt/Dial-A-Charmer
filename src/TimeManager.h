@@ -60,6 +60,9 @@ public:
     bool isSnoozeActive(); 
     bool checkSnoozeExpired(); // Added
 
+    // Deep Sleep Helper
+    long getSecondsToNextAlarm();
+
 private:
     TimeSource _currentSource = NONE;
     

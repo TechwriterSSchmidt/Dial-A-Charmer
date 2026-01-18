@@ -209,9 +209,108 @@ bool TimeManager::checkSnoozeExpired() {
     return false;
 }
 
-// Helper to check if snooze JUST finished
-// This logic is tricky to separate purely. 
-// Let's add specific trigger check for snooze end.
-// For now, main loop checks `isSnoozeActive()`? 
-// No, main loop needs to know when to start ringing.
+
+// Helper to implement Smart Wakeup Calculation
+long TimeManager::getSecondsToNextAlarm() {
+    // Return -1 if no alarms are pending in the near future (e.g. infinite sleep until Hook)
+    // If not enabled globally, no alarms at all.
+    if (!_alarmsEnabled) return -1;
+
+    DateTime now = getLocalTime();
+    if (!now.valid) return -1; // Without time, we cannot calculate diff
+
+    long minSecondsDiff = -1;
+
+    // 1. Check Single/One-Shot Alarm
+    // This is priority.
+    if (isAlarmSet()) {
+         long currentTotalSeconds = (now.hour * 3600) + (now.minute * 60) + now.second;
+         long alarmTotalSeconds = (_alarmHour * 3600) + (_alarmMinute * 60);
+
+         // Single Alarm is implicitly "Today" unless time passed? 
+         // Logic in checkAlarmTrigger handles exact minute. 
+         // Let's assume Single Alarm is "Next Occurrence Today".
+         // If passed, we assume setup clears it or user clears it. 
+         // If user set alarm 08:00 at 09:00, is it tomorrow? 
+         // Implementation of setAlarm does not store Date. 
+         // Assumption: If AlarmTime > CurrentTime, it's today. Else Tomorrow.
+         
+         long diff = 0;
+         if (alarmTotalSeconds > currentTotalSeconds) {
+             diff = alarmTotalSeconds - currentTotalSeconds;
+         } else {
+             // Tomorrow
+             diff = (24 * 3600 - currentTotalSeconds) + alarmTotalSeconds;
+         }
+         
+         minSecondsDiff = diff;
+    }
+
+    // 2. Check Repeating Alarms (Next 7 days)
+    for (int dayOffset = 0; dayOffset < 8; dayOffset++) {
+        // tm_wday: 0=Sun..6=Sat.
+        // We need 0..6 (Sun..Sat) for calculation math, but need to map to our Settings Index (Mon=0..Sun=6).
+        int currentDayWday = (int)((now.year - 1900) * 365.25); // Rough... no, use tm struct info implied in now variable? 
+        // We lack DayOfWeek in our custom DateTime struct.
+        // Let's re-get it properly.
+        struct tm tinfo;
+        if (! ::getLocalTime(&tinfo)) break; 
+
+        // Current check day
+        int checkWday = (tinfo.tm_wday + dayOffset) % 7; 
+        
+        // Convert to Settings Index: Mon(1)->0, ..., Sat(6)->5, Sun(0)->6
+        int settingsIdx = (checkWday == 0) ? 6 : (checkWday - 1);
+
+        if (settings.isAlarmEnabled(settingsIdx)) {
+             int aH = settings.getAlarmHour(settingsIdx);
+             int aM = settings.getAlarmMinute(settingsIdx);
+
+             long currentTotalSeconds = (tinfo.tm_hour * 3600) + (tinfo.tm_min * 60) + tinfo.tm_sec;
+             long alarmTotalSeconds = (aH * 3600) + (aM * 60);
+
+             // If checking today (dayOffset==0)
+             if (dayOffset == 0) {
+                 if (currentTotalSeconds >= alarmTotalSeconds) continue; // Already passed today
+                 
+                 // If Skip Next is set, and this is the VERY FIRST alarm we find?
+                 // The logic says "Next recurring alarm".
+                 // If we find one today, and skip is active -> SKIP IT.
+                 if (_skipNextAlarm) {
+                     // We found the next alarm, but we skip it.
+                     // IMPORTANT: We do NOT consume the flag here (const method), 
+                     // but we behave as if it's not the target.
+                     // But wait, if we skip THIS one, we need the NEXT one.
+                     // So we continue the loop?
+                     // Yes. But we must ensure we don't apply skip logic to the NEXT one found.
+                     // This simple logic is complex for "peek". 
+                     // Let's simplify: If skipNext is TRUE, we just ignore the FIRST valid match we find.
+                     // But since we iterate day 0..7, the first match IS the next alarm.
+                     // So we just iterate.
+                     // Actually, we can't modify state. 
+                     // Complex. Let's assume for Deep Sleep optimization, waking up and instantly skipping 
+                     // (then sleeping again) is acceptable overhead compared to coding complex date math here.
+                     // Plan: Wake up for the skipped alarm, checkAlarmTrigger will return false (and consume flag),
+                     // device will sleep again. Safe and Robust.
+                 }
+                 
+                 long diff = alarmTotalSeconds - currentTotalSeconds;
+                 if (minSecondsDiff == -1 || diff < minSecondsDiff) minSecondsDiff = diff;
+             } else {
+                 // Future Day
+                 long secUntilMidnight = (24 * 3600) - currentTotalSeconds; // From NOW
+                 // Wait, this math is for dayOffset relative to NOW.
+                 // Correct logic:
+                 // Diff = (Seconds until End of Today) + ((Offset-1) * Full Days) + (Alarm Time on Target Day)
+                 long diff = (24 * 3600 - ((tinfo.tm_hour * 3600) + (tinfo.tm_min * 60) + tinfo.tm_sec))
+                             + ((dayOffset - 1) * 24 * 3600)
+                             + alarmTotalSeconds;
+                 
+                 if (minSecondsDiff == -1 || diff < minSecondsDiff) minSecondsDiff = diff;
+             }
+        }
+    }
+    
+    return minSecondsDiff;
+}
 
