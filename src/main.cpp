@@ -1236,13 +1236,13 @@ void playDialTone() {
     // SAFETY CHECK: Dial Tone must not be a system announcement!
     if (dt.indexOf("alarm_active") >= 0 || dt.indexOf("timer_") >= 0 || dt.indexOf("menu_") >= 0) {
         Serial.println("Warning: Invalid DialTone config detected (" + dt + "). Reverting to default.");
-        dt = "/system/dial_tone.wav";
-        // Auto-fix settings
-        settings.setDialTone(1); // Reset index to 1
+        dt = "/system/dialtone_1.wav";
+        // Auto-fix settings (Don't reset index blindly, just use safe file temporarily)
+        // settings.setDialTone(2); 
     }
 
     if (dt == "" || !SD.exists(dt)) {
-        dt = "/system/dial_tone.wav";
+        dt = "/system/dialtone_1.wav";
     }
 
     Serial.println("Starting Dial Tone: " + dt);

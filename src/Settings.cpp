@@ -61,7 +61,7 @@ void Settings::loadCache() {
         ic.baseVol = _prefs.getInt("base_vol", 30);
         ic.snooze = _prefs.getInt("snooze", 9);
         ic.ringtone = _prefs.getInt("ring", CONF_DEFAULT_RING);
-        ic.dialTone = _prefs.getInt("dt_idx", 1);
+        ic.dialTone = _prefs.getInt("dt_idx", 2);
         ic.ledDay = _prefs.getInt("led_day_b", 100);
         ic.ledNight = _prefs.getInt("led_night_b", 10);
         ic.nightStart = _prefs.getInt("night_start", 22);

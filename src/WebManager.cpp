@@ -915,6 +915,7 @@ String WebManager::getHelpHtml() {
     html += "<div class='card'><h3>3. " + String(isDe ? "Wecker & Timer" : "Alarms & Timer") + "</h3>";
     html += "<ul>";
     html += "<li><b>Timer (Egg Timer):</b> " + String(isDe ? "H&ouml;rer AUFGELEGT lassen -> Zahl w&auml;hlen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
+    html += "<li><b>" + String(isDe ? "Wecker stellen:" : "Set Alarm:") + "</b> " + String(isDe ? "Extra-Taste HALTEN + 4 Ziffern w&auml;hlen (z.B. 0730 = 07:30 Uhr)." : "HOLD Extra Button + Dial 4 digits (e.g. 0730 = 07:30).") + "</li>";
     html += "<li><b>Stop Ringing:</b> " + String(isDe ? "H&ouml;rer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
     html += "<li><b>Snooze:</b> " + String(isDe ? "H&ouml;rer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
     html += "</ul></div>";
