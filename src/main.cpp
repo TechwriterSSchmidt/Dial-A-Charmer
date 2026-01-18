@@ -948,65 +948,45 @@ void handleDialedNumber(String numberStr) {
 
 // Helper to speak Timer/Alarm confirmation
 void speakTimerConfirm(int minutes) {
-    // 1. "Timer set to:"
-    // setAudioOutput(OUT_SPEAKER); // playSound handles this
-    
-    // Check Language
-    String lang = settings.getLanguage(); // "de" or "en"
-    String file = (lang == "de") ? "/system/timer_confirm_de.mp3" : "/system/timer_confirm_en.mp3";
-    
-    playSound(file, true); // Use Speaker
-    delay(100);
-    while(audio->isRunning()) { delay(10); }
-
-    // 2. Speak Number
+    String lang = settings.getLanguage(); 
+    String confirmFile = (lang == "de") ? "/system/timer_confirm_de.mp3" : "/system/timer_confirm_en.mp3";
     String numFile = "/time/" + lang + "/" + String(minutes) + ".mp3";
-    if (SD.exists(numFile)) {
-         playSound(numFile, true); // Use Speaker
-         delay(100);
-         while(audio->isRunning()) { delay(10); }
-    }
-
-    // 3. "Minutes" suffix? (Optional, if "Timer set for" is clear enough)
-    // Let's keep it simple. "Timer set for: [Number]" is sufficient context.
+    
+    std::vector<String> seq;
+    if(SD.exists(confirmFile)) seq.push_back(confirmFile);
+    if(SD.exists(numFile)) seq.push_back(numFile);
+    
+    playSequence(seq, true); // true = Speaker
 }
 
 void speakAlarmConfirm(int h, int m) {
     String lang = settings.getLanguage();
-    
     String confirmFile = (lang == "de") ? "/system/alarm_confirm_de.mp3" : "/system/alarm_confirm_en.mp3";
-    playSound(confirmFile, true); // Use Speaker
-    delay(100);
-    while(audio->isRunning()) { delay(10); }
-
+    
+    std::vector<String> seq;
+    if(SD.exists(confirmFile)) seq.push_back(confirmFile);
+    
     // Hour
     String hFile = "/time/" + lang + "/" + String(h) + ".mp3";
-    if (SD.exists(hFile)) {
-         playSound(hFile, true); // Speaker
-         delay(100);
-         while(audio->isRunning()) { delay(10); }
+    if (SD.exists(hFile)) seq.push_back(hFile);
+    
+    // Minute
+    // Simple logic: If minute > 0, speak it.
+    if (m > 0 || m == 0) { // Always speak minute for alarm? "14 00"? 
+        // File "0.mp3" exists? Yes.
+        String mFile = "/time/" + lang + "/" + String(m) + ".mp3";
+        if (SD.exists(mFile)) seq.push_back(mFile);
     }
     
-    // "Uhr" / Divider
-    // In German logic says "14 Uhr 30", English "14 30".
-    // TimeManager has special logic for time speaking, maybe reuse?
-    // reuse `speakTime()` logic? It's coupled to output?
-    // Let's just play minutes if > 0.
-    
-    if (m > 0 || lang == "en") { // English might say "14 hundred"? or just "14"
-         String mFile = "/time/" + lang + "/" + String(m) + ".mp3";
-         // Low numbers usually need padding handling in file names? 
-         // Check Time folder structure assumption. Usually 0.mp3..59.mp3.
-         if (SD.exists(mFile)) {
-             playSound(mFile, true); // Speaker
-             delay(100);
-             while(audio->isRunning()) { delay(10); }
+    playSequence(seq, true); // Speaker
+}
+             playSound(mFile, true); 
          }
     }
 }
 
 void processBufNumber(String numberStr) {
-    Serial.printf("Processing Buffered Input: %s\n", numberStr.c_str());
+    // Serial.printf("Processing Buffered Input: %s\n", numberStr.c_str());
 
     // 1. Logic: Setting Alarm Clock (Button Held + Dialing 4 digits)
     if (dial.isButtonDown()) {
@@ -1055,12 +1035,12 @@ void processBufNumber(String numberStr) {
 
 void onDial(int number) {
     if (isLineBusy) {
-        Serial.println("Ignored Digit (Line Busy)");
+        // Serial.println("Ignored Digit (Line Busy)");
         return;
     }
 
     if (number == 10) number = 0; // Fix 0
-    Serial.printf("Digit Received: %d\n", number);
+    // Serial.printf("Digit Received: %d\n", number);
     
     // Reset Buffer if it was stale (Safety net, though loop handles timeout)
     // Actually loop handles dispatch, clearing buffer provided we call it.
@@ -1095,7 +1075,7 @@ void playDialTone();
 void stopDialTone();
 
 void onHook(bool offHook) {
-    Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
+    // Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
     
     // 2. Logic: Delete Alarm (Lift Handset + Hold Button)
     if (offHook && dial.isButtonDown()) {
@@ -1343,11 +1323,13 @@ void loop() {
     // Reset Watchdog
     esp_task_wdt_reset();
 
+    /* 
     static unsigned long lastLoopDebug = 0;
     if(millis() - lastLoopDebug > 5000) {
         lastLoopDebug = millis();
         // Serial.printf("[LOOP] running... AudioRun: %d, FreeHeap: %u\n", (audio?audio->isRunning():0), ESP.getFreeHeap());
     }
+    */
 
     // if(audio) audio->loop(); // Handled by AudioTask
     webManager.loop();
@@ -1554,11 +1536,39 @@ void loop() {
     }
 }
 
+// --- Audio Queue System (Non-Blocking) ---
+std::vector<String> globalSpeechQueue;
+bool globalSpeechQueueUseSpeaker = false;
+
+void playSequence(std::vector<String> files, bool useSpeaker) {
+    if (files.empty()) return;
+    
+    globalSpeechQueue = files;
+    globalSpeechQueueUseSpeaker = useSpeaker;
+    
+    // Play First Item
+    String first = globalSpeechQueue[0];
+    globalSpeechQueue.erase(globalSpeechQueue.begin());
+    
+    playSound(first, useSpeaker);
+}
+
 // Audio Events
 void audio_eof_mp3(const char *info){
-    Serial.print("EOF: "); Serial.println(info);
+    // Serial.print("EOF: "); Serial.println(info);
     
-    // Handle Time Speaking Queue
+    // 1. Handle Speech Queue (Priority)
+    if (!globalSpeechQueue.empty()) {
+        String next = globalSpeechQueue[0];
+        globalSpeechQueue.erase(globalSpeechQueue.begin());
+        // Small delay to separate words naturally? 
+        // We can't delay here in callback (might block decoder task if callback is from there? No, usually separate).
+        // If PlaySound sends queue message, it's instant.
+        playSound(next, globalSpeechQueueUseSpeaker);
+        return;
+    }
+    
+    // 2. Handle Time Speaking Queue (Legacy State Machine)
     if (timeState != TIME_IDLE && timeState != TIME_DONE) {
         processTimeQueue();
         return; // Don't idle LED yet

@@ -1,5 +1,17 @@
 # Release Notes - Dial-A-Charmer
 
+## v0.8.0-beta (2026-01-18) - "The Polish & Privacy Update"
+- **Status**: **BETA** (Awaiting Hardware Validation)
+- **Busy Tone Feature**:
+    - "Off-Hook Timeout": If the handset is lifted but no number dialed for 5 seconds, a busy signal loop plays.
+    - Prevents undefined states. Dialing is blocked until hung up.
+    - **Snooze Exception**: Snooze mode keeps the handset silent (no busy tone) to allow "putting the phone aside".
+- **Performance**:
+    - **Non-Blocking Audio**: Converted "Time Speaking" logic to a Queue system. The main loop no longer freezes while the device speaks dates or confirmations.
+    - **Reduced Logging**: Stripped debug output for cleaner serial terminal behavior.
+- **Licensing**:
+    - Applied **PolyForm Noncommercial License 1.0.0** to the repository (see [README.md](README.md)).
+
 ## v0.7.1-beta (2026-01-18) - "The Voice Feedback Update"
 - **Enhanced Voice Navigation**:
     - **Base Speaker confirmation** when canceling timers or deleting manual alarms.
