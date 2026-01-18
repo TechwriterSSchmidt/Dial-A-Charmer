@@ -111,11 +111,7 @@ void WebManager::begin() {
     _server.on("/advanced", [this](){ handleAdvanced(); });
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); });
-    
-    // Serve Static Files (SPA)
-    _server.serveStatic("/", SPIFFS, "/");
-
-extern void playSound(String filename, bool useSpeaker);
+    _server.on("/help", [this](){ handleHelp(); }); // Moved UP
 
     // Reindex Storage
     _server.on("/api/reindex", [this](){
@@ -187,9 +183,14 @@ extern void playSound(String filename, bool useSpeaker);
             }
         });
 
-    _server.on("/help", [this](){ handleHelp(); });
+    // Removed /help handler here as it was moved up
+
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
+    
+    // Serve Static Files (Last resort for assets like .css, .js)
+    _server.serveStatic("/", SPIFFS, "/");
+    
     _server.begin();
     
     // Auto-off AP Timer
@@ -241,13 +242,16 @@ void WebManager::handleRoot() {
     if (_apMode) {
         _server.send(200, "text/html", getApSetupHtml());
     } else {
+        // Fallback to Server-Side Rendering (Classic Mode) to fix "Loading..."
+        _server.send(200, "text/html", getSettingsHtml());
+        
+        /* Broken SPA Mode Logic
         if (SPIFFS.exists("/index.html")) {
             File file = SPIFFS.open("/index.html", "r");
             _server.streamFile(file, "text/html");
             file.close();
-        } else {
-            _server.send(200, "text/html", "<h2>System Error: Web Interface Missing</h2><p>Please upload SPIFFS/Data partition.</p>");
-        }
+        } else { ... }
+        */
     }
 }
 
@@ -869,16 +873,19 @@ String WebManager::getHelpHtml() {
     html += "<h2>User Manual</h2>";
     
     html += "<div class='card'><h3>1. Time & Alarm</h3>";
-    html += "<ul><li><b>Receiver Down:</b> Dial a number (1-9) to set a Timer in minutes.</li>";
+    html += "<ul><li><b>Receiver Down:</b> Dial a number (1-60) to set a Timer in minutes.</li>";
     html += "<li><b>Receiver Up:</b> Dial 0 to hear the current time.</li>";
-    html += "<li><b>Stop Alarm:</b> Lift the receiver or tap the hook switch.</li></ul></div>";
+    html += "<li><b>Stop Alarm:</b> Lift the receiver or tap the hook switch.</li>";
+    html += "<li><b>Cancel Timer:</b> Lift the receiver (Voice Confirmed).</li>";
+    html += "<li><b>Delete Manual Alarm:</b> Hold Button + Lift Receiver.</li></ul></div>";
     
     html += "<div class='card'><h3>2. Compliments (AI)</h3>";
     html += "<ul><li>Lift receiver and dial:</li>";
-    html += "<li><b>1:</b> Direct Compliment</li>";
-    html += "<li><b>2:</b> Nerd Joke</li>";
-    html += "<li><b>3:</b> Sci-Fi Wisdom</li>";
-    html += "<li><b>4:</b> Captain Persona</li></ul></div>";
+    html += "<li><b>0:</b> Random Surprise</li>";
+    html += "<li><b>1:</b> Persona 1 (Trump)</li>";
+    html += "<li><b>2:</b> Persona 2 (Badran)</li>";
+    html += "<li><b>3:</b> Persona 3 (Yoda)</li>";
+    html += "<li><b>4:</b> Persona 4 (Neutral)</li></ul></div>";
     
     html += "<div class='card'><h3>3. Settings</h3>";
     html += "<ul><li><b>Change Ringtone:</b> Hold the 'Extra Button' and dial 1-5.</li>";

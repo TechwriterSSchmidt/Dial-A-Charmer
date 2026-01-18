@@ -1090,14 +1090,20 @@ void stopDialTone();
 void onHook(bool offHook) {
     Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
     
-    // 2. Logic: Delete Alarm (Button + Lift) - REMOVED (Conflicted with new 2s Logic? No, keeping as shortcut)
-    // Legacy support: Button held during pickup still deletes.
+    // 2. Logic: Delete Alarm (Lift Handset + Hold Button)
     if (offHook && dial.isButtonDown()) {
-        timeManager.deleteAlarm();
-        Serial.println("Alarm Deleted/Disabled");
-        setAudioOutput(OUT_HANDSET);
-        playSound("/system/error_tone.wav", false); 
-        return;
+         if (timeManager.isAlarmSet()) {
+             timeManager.deleteAlarm(0); 
+             Serial.println("Manual Alarm Deleted (Button + Lift)");
+             
+             // Feedback on Speaker (Consistent with Timer Cancel)
+             String lang = settings.getLanguage();
+             playSound("/system/alarm_deleted_" + lang + ".mp3", true); 
+         } else {
+             // Nothing to delete
+             playSound("/system/error_tone.wav", false);
+         }
+         return;
     }
 
     if (offHook) {
@@ -1462,7 +1468,8 @@ void loop() {
         
         unsigned long dur = millis() - btnPressStart;
         
-        // 2s Action: Delete Manual Alarm
+        // 2s Action: Delete Manual Alarm - MOVED to onHook combo
+        /*
         if (dur > 2000 && dur < 5000 && !buttonActionTriggered) {
              if (timeManager.isAlarmSet()) {
                  timeManager.deleteAlarm(0); 
@@ -1476,6 +1483,7 @@ void loop() {
                  buttonActionTriggered = true; 
              }
         }
+        */
 
         // 10s Action: AP Mode
         if (dur > 10000 && !buttonActionTriggered) {

@@ -5,8 +5,8 @@
     - **Base Speaker confirmation** when canceling timers or deleting manual alarms.
     - Added dedicated voice prompts for "Timer Cancelled" and "Alarm Deleted".
 - **Hardware Controls**:
-    - **Timer Cancel**: Lifting the handset now instantly cancels any running timer (with voice confirmation).
-    - **Manual Alarm Delete**: Holding the extra button for ~3 seconds deletes the single-shot manual alarm.
+    - **Timer Cancel**: Lifting the handset instantly cancels any running timer (with voice confirmation).
+    - **Manual Alarm Delete**: Holding the extra button **while lifting the handset** deletes the manual alarm.
 - **Dial Codes**:
     - **Dial 90**: Explicit code to toggle ALL alarms.
     - **Dial 91**: Explicit code to toggle "Skip Next Alarm".
