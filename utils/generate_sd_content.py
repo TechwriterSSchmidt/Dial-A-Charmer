@@ -41,7 +41,11 @@ TTS_PROMPTS = {
         ("Next recurring alarm skipped.", "alarm_skipped_en.mp3"),
         ("Recurring alarm reactivated.", "alarm_active_en.mp3"),
         ("Alarm set.", "timer_set.mp3"),
-        ("Error. Playlist empty.", "error_msg_en.mp3") 
+        ("Error. Playlist empty.", "error_msg_en.mp3"),
+        ("Timer set for:", "timer_confirm_en.mp3"),
+        ("Alarm set for:", "alarm_confirm_en.mp3"),
+        ("Timer cancelled.", "timer_deleted_en.mp3"),
+        ("Alarm deleted.", "alarm_deleted_en.mp3")
     ],
     # German
     "de": [
@@ -52,7 +56,11 @@ TTS_PROMPTS = {
         ("Wiederkehrender Wecker wieder aktiv.", "alarm_active_de.mp3"),
         ("Alarm gesetzt.", "timer_set_de.mp3"),
         ("Warnung. Energiezellen kritisch.", "battery_crit.mp3"),
-        ("System bereit.", "system_ready.mp3")
+        ("System bereit.", "system_ready.mp3"),
+        ("Timer gesetzt auf:", "timer_confirm_de.mp3"),
+        ("Wecker gestellt auf:", "alarm_confirm_de.mp3"),
+        ("Timer beendet.", "timer_deleted_de.mp3"),
+        ("Wecker gelöscht.", "alarm_deleted_de.mp3")
     ]
 }
 
@@ -66,6 +74,21 @@ TIME_CONFIG = {
         "intro": "It is now:",
         "divider": "O'Clock",
         "h_one": "One"
+    }
+}
+
+CALENDAR_CONFIG = {
+    "de": {
+        "weekdays": ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
+        "months": ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"],
+        "date_intro": "Heute ist",
+        "dst": ["Es ist Winterzeit", "Es ist Sommerzeit"]
+    },
+    "en": {
+        "weekdays": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+        "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+        "date_intro": "Today is",
+        "dst": ["It is Winter time", "It is Summer time"]
     }
 }
 
@@ -269,6 +292,41 @@ def make_ui_sounds():
         samples.append(AMPLITUDE * 0.5 * (v1+v2))
     save_wav("error_tone.wav", samples)
 
+    # 5. Mechanical Click (Rotary Feedback)
+    # Short burst of high frequency + noise to simulate mechanical switch
+    click_audio = []
+    click_dur_ms = 40 
+    click_s = int(SAMPLE_RATE * click_dur_ms / 1000.0)
+
+    # Simple model: Decaying sine wave at 2.5kHz mixed with noise
+    for i in range(click_s):
+        t = float(i) / SAMPLE_RATE
+        progress = i / click_s
+        envelope = math.exp(-15 * progress)  # Sharp decay
+        
+        sine_comp = math.sin(2 * math.pi * 2500 * t)
+        noise_comp = random.uniform(-1, 1)
+        
+        # Mix mostly noise for the "clack" sound
+        val = (0.3 * sine_comp + 0.8 * noise_comp) * envelope * AMPLITUDE
+        click_audio.append(val)
+        
+    save_wav("click.wav", click_audio)
+
+    # Fallback Alarm (Penetrant Square Wave)
+    # Used when file access fails
+    fallback_audio = []
+    dur_ms = 1000
+    num = int(SAMPLE_RATE * dur_ms / 1000.0)
+    for i in range(num):
+        # 800Hz / 1200Hz alternating every 250ms
+        t = i / SAMPLE_RATE
+        freq = 800 if int(t * 4) % 2 == 0 else 1200
+        # Square wave
+        val = AMPLITUDE * (1.0 if math.sin(2 * math.pi * freq * t) > 0 else -1.0)
+        fallback_audio.append(val)
+    save_wav("fallback_alarm.wav", fallback_audio, "system")
+
 def make_telephony_tones():
     print("Generating Telephony Tones...")
     # Dial Tone DE (425Hz)
@@ -327,6 +385,49 @@ def make_all_tts():
     # Generate Silence for English gap
     save_wav("silence.wav", generate_silence(200), "time") # Shared silence
 
+    # Calendar TTS (Weekdays, Days, Months, Years, DST)
+    for lang in ["de", "en"]:
+        print(f"Generating Calendar TTS ({lang.upper()})...")
+        c_cfg = CALENDAR_CONFIG[lang]
+        subdir = os.path.join("time", lang)
+        
+        # Intro
+        generate_tts_mp3(c_cfg["date_intro"], "date_intro.mp3", lang, subdir)
+        
+        # DST
+        generate_tts_mp3(c_cfg["dst"][0], "dst_winter.mp3", lang, subdir)
+        generate_tts_mp3(c_cfg["dst"][1], "dst_summer.mp3", lang, subdir)
+        
+        # Weekdays
+        for i, wd in enumerate(c_cfg["weekdays"]):
+            generate_tts_mp3(wd, f"wday_{i}.mp3", lang, subdir)
+            
+        # Months
+        for i, mon in enumerate(c_cfg["months"]):
+            generate_tts_mp3(mon, f"month_{i}.mp3", lang, subdir)
+            
+        # Years (2024-2035)
+        for y in range(2024, 2036):
+            generate_tts_mp3(str(y), f"year_{y}.mp3", lang, subdir)
+            
+        # Days (1-31)
+        for d in range(1, 32):
+            txt = str(d)
+            if lang == "de":
+                txt = f"Der {d}." # "Der Erste"
+            else:
+                # English Ordinals
+                if 10 < d < 20: suffix = "th"
+                else:
+                    last = d % 10
+                    if last == 1: suffix = "st"
+                    elif last == 2: suffix = "nd"
+                    elif last == 3: suffix = "rd"
+                    else: suffix = "th"
+                txt = f"The {d}{suffix}"
+            
+            generate_tts_mp3(txt, f"day_{d}.mp3", lang, subdir)
+
 def make_startup_music():
     print("Generating Startup Sound (Ambient Swell)...")
     path_wav = os.path.join(SD_TEMPLATE_DIR, "system", "startup.wav") # temp
@@ -381,6 +482,33 @@ def make_startup_music():
     else:
         print("  [WARN] FFmpeg not found. 'startup.wav' created instead of mp3.")
 
+def download_fonts():
+    print("Checking Fonts...")
+    font_dir = os.path.join(SD_TEMPLATE_DIR, "system", "fonts")
+    os.makedirs(font_dir, exist_ok=True)
+    
+    fonts = [
+        ("https://github.com/google/fonts/raw/main/ofl/zentokyozoo/ZenTokyoZoo-Regular.ttf", "ZenTokyoZoo-Regular.ttf"),
+        ("https://github.com/google/fonts/raw/main/ofl/pompiere/Pompiere-Regular.ttf", "Pompiere-Regular.ttf")
+    ]
+    
+    for url, fname in fonts:
+        path = os.path.join(font_dir, fname)
+        if not os.path.exists(path):
+            print(f"  Downloading {fname}...")
+            try:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                
+                with urllib.request.urlopen(url, context=ctx) as r, open(path, 'wb') as f:
+                    f.write(r.read())
+                print("    Done.")
+            except Exception as e:
+                print(f"    [ERR] Failed to download font: {e}")
+        else:
+            print(f"  {fname} already exists.")
+
 # --- MAIN EXECUTION ---
 
 if __name__ == "__main__":
@@ -396,6 +524,8 @@ if __name__ == "__main__":
     make_all_tts()         # System & Time
     
     make_startup_music()   # Startup pad
+    
+    download_fonts()       # Added Fonts
     
     print("\n=== GENERATION COMPLETE ===")
     print(f"Copy the contents of '{SD_TEMPLATE_DIR}' to your SD Card.")

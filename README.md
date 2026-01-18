@@ -1,10 +1,11 @@
 # Dial-A-Charmer
 
-Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces GNSS-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on?
+Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces internet-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on?
 
 **Easy to Install:**
 1.  **Web Installer (Recommended):** Use the [Dial-A-Charmer Web Installer](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/) to flash directly from Chrome/Edge.
 2.  **PlatformIO:** Build from source for development.
+3.  **Manual Flash:** Download the latest `firmware.bin` directly from our [GitHub Actions Runner Artifacts](https://github.com/TechwriterSSchmidt/Dial-A-Charmer/actions) (look for the latest successful build artifact).
 
 ## Support my projects
 
@@ -29,7 +30,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 
 | Category | Feature | Description |
 | :--- | :--- | :--- |
-| **Timekeeping** | **Atomic Clock** | Syncs time via GNSS (M10 Module) for precision + NTP fallback. |
+| **Timekeeping** | **Atomic Precision** | Syncs time exclusively via **NTP (Internet Time)** over Wi-Fi. |
 | | **Dual Alarm System** | **Single Alarm** (via Rotary Dial) for one-off use + **Repeating Alarm** (via Web) for schedules. |
 | | **Smart Skip** | Dial `91` to skip just the *next* recurring alarm (sleep in!) without canceling the schedule. |
 | | **Kitchen Timer** | Set a countdown using the rotary dial (e.g., dial '12' for a perfect 12 minutes Pizza timer). |
@@ -37,7 +38,11 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | | **AI Assistant** | Integrated **Gemini AI** allows the phone to tell jokes or answer prompts via the Phonebook. |
 | | **Multi-Language** | Supports **German** and **English** for Voice, System prompts, and Web Interface. |
 | | **Half-Duplex Audio** | Intelligent echo-cancellation ensures AI prompts aren't interrupted by their own output. |
-| **System** | **Advanced Web UI** | Configure everything from Ringtones to OTA Updates via a responsive split-view interface. |
+| **System** | **Zero-Install Web App** | Modern **Single-Page-Application (SPA)** served directly from the device (requires SPIFFS). |
+| | **System Watchdog** | Integrated Hardware Watchdog auto-resets the device if it freezes (>20s). |
+| | **Smart Deep Sleep** | Device sleeps when idle and wakes up automatically for the next alarm (or when the receiver is lifted). |
+| | **Audio Engine V2** | **Multithreaded** audio core for stutter-free playback even during heavy WiFi traffic. |
+| | **Reliability** | **RTC & NVS Support** ensures alarms survive reboots and power outages. Fallback Tones for missing SD files. |
 | | **OTA Updates** | Update firmware wirelessly via the Web Interface. |
 | | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple initial setup. |
 
@@ -53,10 +58,13 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Action (Set Single Alarm):** Hold the extra button down while dialing 4 digits.
     *   Dial `0730` (while holding button) -> Sets alarm for 07:30.
     *   This alarm has **Priority** and rings once, then clears itself.
+*   **Action (Cancel Single Alarm):** Press and **Hold** the extra button, then **Lift** the handset.
+    *   Voice confirmation ("Alarm deleted") confirms the deletion of the manual alarm.
 
 ### 2. Active Mode (Handset Lifted)
 *   **Trigger:** Lift the handset (Off-Hook).
-*   **Behavior:** The phone "wakes up" with a dial tone and plays a random compliment (Surprise Mix) after 2s.
+    *   **Special Trigger:** If a **Timer** is running, lifting the handset immediately cancels it (confirmed via Base Speaker).
+*   **Behavior:** The phone "wakes up" with a **Dial Tone**.
 *   **Action (Dialing):** Input numbers to request content:
     *   **Dial `1`-`4`**: Switch to specific Persona Playlist (Trump, Badran, Yoda, Neutral).
     *   **Dial `0`**: Play next random track.
@@ -104,8 +112,6 @@ The device communicates distinct states via the integrated WS2812 LED using orga
 | | Dial Mode | `GPIO 36` | Detects when dial assumes active position |
 | | Hook Switch | `GPIO 32` | |
 | | Extra Button | `GPIO 33` | |
-| **GNSS (GPS)** | RX | `GPIO 34` | M10 Module (Input Only) |
-| | TX | *Disabled* | Disabled to free GPIO 0 for Audio MCLK |
 | **Output** | Vibration | `GPIO 2` | Haptic Feedback |
 | | LED Data | `GPIO 13` | WS2812B |
 | **Storage** | SD CS | `GPIO 4` | On-board SD Slot |
@@ -151,6 +157,18 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 
 ### Audio Utilities (`utils/`)
 
+**`generate_sd_content.py`** (Recommended)
+This all-in-one script prepares a complete `sd_card_template` folder for you. It ensures your device works immediately without hunting for MP3 files.
+
+*   **Usage:** `python utils/generate_sd_content.py`
+*   **Features:**
+    *   **Structure:** Creates all required folders (`persona_XX`, `system`, `time` etc.).
+    *   **TTS Integration:** Automatically downloads high-quality Google TTS speech files for Numbers (0-100), Dates (Days, Months, Years), and System Messages ("Alarm Set", "Error", etc.) in both **German & English**.
+    *   **Tone Synthesis:** Generates clean `wav` files for Dial Tone, Busy Signal, and Beeps using Python's audio libraries (no recording needed).
+    *   **Offline Fonts:** Downloads "Zen Tokyo Zoo" and "Pompiere" fonts to `/system/fonts/` so the Web UI looks perfect even without Internet.
+    *   **Startup Sound:** Synthesizes a musical ambient chord for boot-up.
+*   **Output:** Populates `sd_card_template/` which you just copy to your SD card.
+
 **`split_audio.py`**
 This tool splits large, long audio files (e.g. combined recordings) into individual MP3 files based on silence.
 
@@ -186,14 +204,15 @@ The system uses specific WAV files in `/system/` for feedback:
 
 1.  **Prepare Hardware:** Assemble the ESP32, Audio Module, and Rotary Phone mechanics according to the pinout.
 2.  **Prepare SD Card:**
-    *   Format MicroSD card to **FAT32**.
-    *   Copy the contents of `sd_card_template` to the root of the card.
-    *   Fill `persona_XX` folders with your desired MP3 files.
+    *   **Run Generator:** Execute `python utils/generate_sd_content.py` to create the essential system files, voice prompts, and fonts.
+    *   **Format:** Format your MicroSD card to **FAT32**.
+    *   **Copy:** Copy the *contents* of the generated `sd_card_template` folder to the root of the SD card.
+    *   **Personalize:** Add your own MP3 music/compliments to the `persona_XX` folders.
 3.  **Flash Firmware:**
     *   Open project in VS Code with PlatformIO.
     *   Connect Wemos D32 Pro via USB.
-    *   Upload Filesystem (Optional, if using LittleFS, otherwise just skip this).
-    *   **Upload Firmware**.
+    *   **Upload Filesystem Image**: This is **REQUIRED** for the new Web UI. Run `PlatformIO: Upload Filesystem Image`.
+    *   **Upload Firmware**: Run `The standard PlatformIO Upload` task.
 4.  **Configure:**
     *   On first boot, connect to WiFi AP `DialACharmer`.
     *   Go to `192.168.4.1` to set your Timezone and Credentials (if needed for future OTA).
@@ -205,6 +224,6 @@ The system uses specific WAV files in `/system/` for feedback:
 ## Maintenance
 
 *   **Battery:** The system runs on a 3000mAh LiPo. Charge when the LED indicates low battery (if configured) or audio becomes distorted.
-*   **Time:** Thanks to GNSS, time is always accurate as long as the device has occasional sky visibility.
+*   **Time:** Time is maintained via NTP. Ensure the device connects to Wi-Fi at least once on boot to sync the clock.
 
 

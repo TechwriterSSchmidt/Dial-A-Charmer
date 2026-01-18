@@ -1,5 +1,42 @@
 # Release Notes - Dial-A-Charmer
 
+## v0.7.1-beta (2026-01-18) - "The Voice Feedback Update"
+- **Enhanced Voice Navigation**:
+    - **Base Speaker confirmation** when canceling timers or deleting manual alarms.
+    - Added dedicated voice prompts for "Timer Cancelled" and "Alarm Deleted".
+- **Hardware Controls**:
+    - **Timer Cancel**: Lifting the handset instantly cancels any running timer (with voice confirmation).
+    - **Manual Alarm Delete**: Holding the extra button **while lifting the handset** deletes the manual alarm.
+- **Dial Codes**:
+    - **Dial 90**: Explicit code to toggle ALL alarms.
+    - **Dial 91**: Explicit code to toggle "Skip Next Alarm".
+
+## v0.7.0-beta (2026-01-18) - "The Robustness Update"
+- **Audio Multithreading**: Moved audio decoding to dedicated Core 0 task. Prevents stuttering during Web UI usage or heavy WiFi traffic.
+- **Fail-Safe Features**:
+    - **NVS Persistence**: Alarms now survive device reboots.
+    - **RTC Support**: Added DS3231 support for timekeeping during internet outages.
+    - **Fallback Tone**: Synthesized alarm tone generated if SD card files are missing.
+- **Detailed Announcements**: Extended `speakTime()` to announce Weekday, Date, Month, Year, and DST status.
+- **Improved Scripts**: Generator script now creates localized calendar audio assets.
+
+## v0.6.0-beta (2026-01-18) - "The Streamlined Specialist"
+- **Hardware Cleanup (GPS Removal)**:
+    - Removed all dependencies on GNSS/GPS hardware (u-blox M10).
+    - Timekeeping now relies exclusively on **NTP (Network Time Protocol)** via Wi-Fi.
+    - Removed `TinyGPS++` library and associated UART handling code to reduce firmware size and complexity.
+    - Updated `config.h` and pin definitions to reflect the hardware changes.
+- **Web Interface 2.0 (SPA)**:
+    - **Single Page Application**: The Web Manager now serves a static `index.html` from the device's SPIFFS filesystem instead of generating HTML strings in C++.
+    - **Performance**: Faster load times and cleaner code separation between frontend (HTML/JS) and backend (API).
+    - **Optimization**: Added `generate_mockups.py` and file serving logic to support the new architecture.
+- **System Stability**:
+    - **Watchdog Timer**: Implemented ESP32 Task Watchdog (WDT) with a 20-second timeout to automatically reset the device in case of system freeze.
+    - **Audio Tools**: Updated `split_audio.py` with High-Pass Filtering and intelligent noise thresholding (-25dB) for cleaner audio segmenting.
+- **Bug Fixes**:
+    - Fixed `esp_task_wdt_init` compilation error by updating to the correct `esp_task_wdt_config_t` structure.
+    - Fixed Web UI dropdowns showing file extensions.
+
 ## v0.5.0-beta (2026-01-16) - "The Intelligent Timekeeper"
 - **Dual Alarm System**: 
     - **Single Alarm**: Priority alarm set via Rotary Dial (one-time use).

@@ -34,7 +34,7 @@ private:
     // Helpers
     void resetApTimer();
     
-    String getHtml();
+    // String getHtml(); // Removed (SPA Request)
     String getApSetupHtml(); // New: Dedicated AP Setup Page
     String getSettingsHtml(); // New
     String getAdvancedHtml(); // New

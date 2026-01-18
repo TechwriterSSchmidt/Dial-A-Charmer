@@ -1,11 +1,18 @@
 #include "WebManager.h"
+#include <esp_task_wdt.h>
 #include "LedManager.h"
 #include "PhonebookManager.h"
+#include "WebResources.h" // Setup Styles
 #include <ESPmDNS.h>
 #include <Update.h>
 #include <SD.h>
+#include <FS.h>
+#include <SPIFFS.h>
 #include <vector>
 #include <algorithm>
+
+// Extern from main.cpp
+extern void playSound(String filename, bool useSpeaker);
 
 WebManager webManager;
 
@@ -36,155 +43,25 @@ String getSdFileOptions(String folder, int currentSelection) {
         // IDs start at 1 usually in this system
         int id = i + 1;
         String sel = (id == currentSelection) ? " selected" : "";
-        options += "<option value='" + String(id) + "'" + sel + ">" + files[i] + "</option>";
+        
+        // Remove extension for display
+        String displayName = files[i];
+        int dotIndex = displayName.lastIndexOf('.');
+        if (dotIndex > 0) displayName = displayName.substring(0, dotIndex);
+        
+        options += "<option value='" + String(id) + "'" + sel + ">" + displayName + "</option>";
     }
     return options;
 }
 
-const char* htmlStyle = R"rawliteral(
-<style>
-body {
-    font-family: 'Times New Roman', Times, serif;
-    background-color: #080808; /* Deep Black */
-    color: #f0e6d2; /* Cream/Champagne */
-    margin: 0;
-    padding: 20px;
-    line-height: 1.5;
-}
-h2 {
-    text-align: center;
-    text-transform: uppercase;
-    letter-spacing: 6px; /* Art Deco Spacing */
-    color: #d4af37; /* Metallic Gold */
-    border-bottom: 2px solid #d4af37;
-    margin-bottom: 40px;
-    padding-bottom: 15px;
-    font-weight: normal;
-}
-.card {
-    background: #111;
-    border: 1px solid #222;
-    border-top: 4px solid #d4af37; /* Gold Accent */
-    padding: 30px;
-    margin-bottom: 30px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-    border-radius: 15px; /* Soft Card */
-}
-.card h3 {
-    margin-top: 0;
-    color: #d4af37;
-    font-size: 1.5rem;
-    text-transform: uppercase;
-    letter-spacing: 3px;
-    border-bottom: 1px solid #333;
-    padding-bottom: 15px;
-    font-weight: normal;
-}
-label {
-    display: block;
-    margin-top: 20px;
-    font-size: 1.2rem;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    color: #888;
-}
-input, select {
-    width: 100%;
-    padding: 12px;
-    margin-top: 5px;
-    background-color: #f0e6d2;
-    border: 2px solid #333;
-    color: #111;
-    font-family: 'Times New Roman', Times, serif;
-    font-size: 1.4rem;
-    box-sizing: border-box;
-    border-radius: 12px; /* Soft Rounded Edges */
-}
-input:focus, select:focus {
-    outline: none;
-    border-color: #d4af37;
-    background-color: #fff;
-}
-button {
-    width: 100%;
-    padding: 18px;
-    margin-top: 30px;
-    background-color: #8b0000; /* Deep Red */
-    color: #f0e6d2;
-    border: 1px solid #a00000;
-    text-transform: uppercase;
-    letter-spacing: 4px;
-    font-size: 1.5rem;
-    cursor: pointer;
-    transition: all 0.3s;
-    font-family: 'Times New Roman', Times, serif;
-    border-radius: 12px; /* Rounded Button */
-}
-button:hover {
-    background-color: #b22222;
-    color: #fff;
-    border-color: #f00;
-    box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
-}
-/* Toggle Switch Style (Radio-look replacement) */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 50px;
-  height: 28px;
-  margin: 0;
-}
-.switch input { 
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #333;
-  transition: .4s;
-  border-radius: 34px;
-  border: 1px solid #555;
-}
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 3px;
-  bottom: 3px;
-  background-color: #888;
-  transition: .4s;
-  border-radius: 50%;
-}
-input:checked + .slider {
-  background-color: #d4af37;
-  border-color: #d4af37;
-}
-input:focus + .slider {
-  box-shadow: 0 0 1px #d4af37;
-}
-input:checked + .slider:before {
-  transform: translateX(22px);
-  background-color: #fff;
-}
-output {
-    float: right;
-    color: #d4af37;
-    font-family: monospace;
-    font-size: 1.2em;
-}
-a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; transition: 0.3s; }
-a:hover { color: #fff; border-bottom: 1px solid #fff; }
-</style>
-)rawliteral";
+// MOVED TO WebResources.h: const char* htmlStyle
 
 void WebManager::begin() {
+    // Init FileSystem for Web Assets
+    if(!SPIFFS.begin(true)){
+        Serial.println("SPIFFS Mount Failed");
+    }
+
     String ssid = settings.getWifiSSID();
     String pass = settings.getWifiPass();
     bool connected = false;
@@ -200,6 +77,8 @@ void WebManager::begin() {
         while (WiFi.status() != WL_CONNECTED && tries < 20) {
             delay(500);
             Serial.print(".");
+            // Keep WDT happy during potential 10sec block
+            esp_task_wdt_reset();
             tries++;
         }
         Serial.println();
@@ -235,8 +114,7 @@ void WebManager::begin() {
     _server.on("/advanced", [this](){ handleAdvanced(); });
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); });
-    
-extern void playSound(String filename, bool useSpeaker);
+    _server.on("/help", [this](){ handleHelp(); }); // Moved UP
 
     // Reindex Storage
     _server.on("/api/reindex", [this](){
@@ -308,9 +186,35 @@ extern void playSound(String filename, bool useSpeaker);
             }
         });
 
-    _server.on("/help", [this](){ handleHelp(); });
+    // Removed /help handler here as it was moved up
+
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
+
+    // --- FONTS FROM SD CARD ---
+    _server.on("/fonts/ZenTokyoZoo-Regular.ttf", [this](){
+        if(SD.exists("/system/fonts/ZenTokyoZoo-Regular.ttf")){
+            File f = SD.open("/system/fonts/ZenTokyoZoo-Regular.ttf", "r");
+            _server.streamFile(f, "font/ttf");
+            f.close();
+        } else {
+            _server.send(404, "text/plain", "Font Missing");
+        }
+    });
+
+    _server.on("/fonts/Pompiere-Regular.ttf", [this](){
+        if(SD.exists("/system/fonts/Pompiere-Regular.ttf")){
+            File f = SD.open("/system/fonts/Pompiere-Regular.ttf", "r");
+            _server.streamFile(f, "font/ttf");
+            f.close();
+        } else {
+            _server.send(404, "text/plain", "Font Missing");
+        }
+    });
+    
+    // Serve Static Files (Last resort for assets like .css, .js)
+    _server.serveStatic("/", SPIFFS, "/");
+    
     _server.begin();
     
     // Auto-off AP Timer
@@ -362,7 +266,41 @@ void WebManager::handleRoot() {
     if (_apMode) {
         _server.send(200, "text/html", getApSetupHtml());
     } else {
-        _server.send(200, "text/html", getHtml());
+        // --- DASHBOARD (HOME) ---
+        String lang = settings.getLanguage();
+        bool isDe = (lang == "de");
+        
+        String t_title = "Dial-A-Charmer";
+        String t_subtitle = isDe ? "H&ouml;rer abheben zum W&auml;hlen" : "Lift receiver to dial";
+        String t_alarms = isDe ? "Wecker (Alarms)" : "Alarms";
+        String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+        String t_config = isDe ? "Konfiguration" : "Configuration";
+        String t_help = isDe ? "Hilfe / Manual" : "Help / Manual";
+
+        String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
+        html += COMMON_CSS; 
+        html += "</head><body>";
+        
+        html += "<h2>" + t_title + "</h2>";
+        
+        html += "<div class='card' style='text-align:center;'>";
+        html += "<p style='color:#888; font-style:italic; margin-bottom:25px; font-family: \"Pompiere\", cursive; font-size:1.3rem;'>" + t_subtitle + "</p>";
+        
+        // Navigation Buttons
+        String btnStyle = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Zen Tokyo Zoo', cursive; transition: all 0.2s;";
+        
+        html += "<button onclick=\"location.href='/settings'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_alarms + "</button>";
+        html += "<button onclick=\"location.href='/phonebook'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_pb + "</button>";
+        html += "<button onclick=\"location.href='/advanced'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_config + "</button>";
+        html += "<button onclick=\"location.href='/help'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_help + "</button>";
+        
+        html += "</div>";
+
+        // Version Footer
+        html += "<div style='text-align:center; padding-top:20px; color:#444; font-size:0.8rem;'>v0.7.1-beta</div>";
+        html += "</body></html>";
+
+        _server.send(200, "text/html", html);
     }
 }
 
@@ -520,7 +458,7 @@ String WebManager::getSettingsHtml() {
     String t_adv = isDe ? "Erweiterte Einstellungen" : "Advanced Settings";
 
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += htmlStyle;
+    html += COMMON_CSS; // Use Shared Resource
     html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>"; // Save Lang
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
@@ -595,15 +533,8 @@ String WebManager::getSettingsHtml() {
 String WebManager::getApSetupHtml() {
     // Basic Style for Setup
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += "<style>";
-    html += "body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; text-align: center; }";
-    html += "h2 { color: #d4af37; margin-bottom: 30px; }";
-    html += "input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #444; background: #222; color: #fff; font-size: 1.2rem; border-radius: 5px; box-sizing: border-box; }";
-    html += "button { width: 100%; padding: 15px; margin-top: 20px; background: #d4af37; color: #000; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; }";
-    html += "button:hover { background: #eac14d; }";
-    html += ".card { background: #1a1a1a; padding: 20px; border-radius: 10px; max-width: 400px; margin: 0 auto; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }";
-    html += "a { color: #888; text-decoration: underline; margin-top: 20px; display: inline-block; }";
-    html += "</style></head><body>";
+    html += AP_SETUP_CSS; // Use Shared Resource
+    html += "</head><body>";
     
     html += "<h2>WiFi Setup</h2>";
     html += "<div class='card'>";
@@ -633,46 +564,7 @@ String WebManager::getApSetupHtml() {
     return html;
 }
 
-// New Dashboard
-String WebManager::getHtml() {
-    String lang = settings.getLanguage();
-    bool isDe = (lang == "de");
-    String t_audio_btn = isDe ? "Wecker" : "Alarms";
-    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
-    String t_conf = isDe ? "Konfiguration" : "Configuration";
-    String t_help = isDe ? "Hilfe" : "Help";
-    
-    // Simple Dashboard
-    String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += htmlStyle;
-    html += "<style>.dash-btn { display:block; padding:20px; margin:15px 0; background:#222; border:1px solid #d4af37; color:#d4af37; text-align:center; text-transform:uppercase; font-size:1.2rem; transition:0.3s; } .dash-btn:hover { background:#d4af37; color:#111; }</style>";
-    html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>";
-    html += "</head><body>";
-    
-    html += "<h2>Dial-A-Charmer</h2>";
-    html += "<div class='card' style='text-align:center; padding: 40px 20px;'>";
-    html += "<h3 style='margin:0; font-size:2.5rem; color:#fff; letter-spacing: 2px;'>" + String(isDe ? "Willkommen." : "Welcome.") + "</h3>";
-    
-    String statusColor = (WiFi.status() == WL_CONNECTED) ? "#4caf50" : "#f44336";
-    String statusText = (WiFi.status() == WL_CONNECTED) ? "ONLINE" : "OFFLINE";
-    html += "<p style='color:" + statusColor + "; font-family:sans-serif; font-size:1.2rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;'>STATUS: " + statusText + "</p>";
-    html += "</div>";
-
-    html += "<a href='/settings' class='dash-btn'>" + t_audio_btn + "</a>";
-    html += "<a href='/phonebook' class='dash-btn'>" + t_pb + "</a>";
-    html += "<a href='/advanced' class='dash-btn'>" + t_conf + "</a>";
-    html += "<a href='/help' class='dash-btn'>" + t_help + "</a>";
-
-    html += "<div style='text-align:center; margin-top:40px; opacity: 0.7;'>";
-    html += "<select onchange='sl(this.value)' style='width:auto; display:inline-block; background:#111; color:#888; border:1px solid #444;'>";
-    html += "<option value='de'" + String(isDe ? " selected" : "") + ">Deutsch</option>";
-    html += "<option value='en'" + String(!isDe ? " selected" : "") + ">English</option>";
-    html += "</select>";
-    html += "</div>";
-
-    html += "</body></html>";
-    return html;
-}
+// WebManager::getHtml() removed (Replaced by SPA index.html)
 
 String WebManager::getAdvancedHtml() {
     String lang = settings.getLanguage();
@@ -720,7 +612,7 @@ String WebManager::getAdvancedHtml() {
     }
 
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += htmlStyle;
+    html += COMMON_CSS; // Use Shared Resource
     html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>";
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
@@ -874,7 +766,7 @@ String WebManager::getPhonebookHtml() {
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     
     // Gatsby Style (Global) included, but we override for "Lined Paper" mode
-    html += htmlStyle; 
+    html += COMMON_CSS; // Use Shared Resource 
     html += "<style>";
     
     // Global Body (reset to dark/gold) is default from htmlStyle
@@ -901,7 +793,7 @@ String WebManager::getPhonebookHtml() {
     html += "input:focus { background: rgba(255,255,0,0.1); }";
     
     // Name Cell - Handwritten
-    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 2.0rem; color: #222; text-shadow: none; padding-left: 15px; }";
+    html += ".name-cell { font-family: 'Brush Script MT', 'Bradley Hand', cursive; font-size: 1.3rem; color: #222; text-shadow: none; padding-left: 15px; line-height: 1.2; }";
     
     html += "</style>";
 
@@ -1016,7 +908,7 @@ async function save() {
 
 String WebManager::getHelpHtml() {
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += htmlStyle;
+    html += COMMON_CSS; // Use Shared Resource
     
     // Add translation logic for Help Footer
     String lang = settings.getLanguage();
@@ -1030,16 +922,19 @@ String WebManager::getHelpHtml() {
     html += "<h2>User Manual</h2>";
     
     html += "<div class='card'><h3>1. Time & Alarm</h3>";
-    html += "<ul><li><b>Receiver Down:</b> Dial a number (1-9) to set a Timer in minutes.</li>";
+    html += "<ul><li><b>Receiver Down:</b> Dial a number (1-60) to set a Timer in minutes.</li>";
     html += "<li><b>Receiver Up:</b> Dial 0 to hear the current time.</li>";
-    html += "<li><b>Stop Alarm:</b> Lift the receiver or tap the hook switch.</li></ul></div>";
+    html += "<li><b>Stop Alarm:</b> Lift the receiver or tap the hook switch.</li>";
+    html += "<li><b>Cancel Timer:</b> Lift the receiver (Voice Confirmed).</li>";
+    html += "<li><b>Delete Manual Alarm:</b> Hold Button + Lift Receiver.</li></ul></div>";
     
     html += "<div class='card'><h3>2. Compliments (AI)</h3>";
     html += "<ul><li>Lift receiver and dial:</li>";
-    html += "<li><b>1:</b> Direct Compliment</li>";
-    html += "<li><b>2:</b> Nerd Joke</li>";
-    html += "<li><b>3:</b> Sci-Fi Wisdom</li>";
-    html += "<li><b>4:</b> Captain Persona</li></ul></div>";
+    html += "<li><b>0:</b> Random Surprise</li>";
+    html += "<li><b>1:</b> Persona 1 (Trump)</li>";
+    html += "<li><b>2:</b> Persona 2 (Badran)</li>";
+    html += "<li><b>3:</b> Persona 3 (Yoda)</li>";
+    html += "<li><b>4:</b> Persona 4 (Neutral)</li></ul></div>";
     
     html += "<div class='card'><h3>3. Settings</h3>";
     html += "<ul><li><b>Change Ringtone:</b> Hold the 'Extra Button' and dial 1-5.</li>";

@@ -4,8 +4,15 @@
 #include <SD.h>
 #include <FS.h>
 #include <SPIFFS.h>
+#include <esp_task_wdt.h> // Watchdog
 #include <vector>
 #include <algorithm>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/queue.h>
+
+#define WDT_TIMEOUT 20 // 20 Seconds Watchdog Limit
+
 #include <random>
 #include <map>
 #include <driver/i2s.h> // For ADC Mic
@@ -20,9 +27,24 @@
 #include "PhonebookManager.h"
 
 // --- Objects ---
-Audio *audio = nullptr; // Pointer managed object
+Audio *audio = nullptr; // Pointer managed object (initialized in Task)
+volatile bool isAudioBusy = false; // Thread-safe flag
+
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN, CONF_PIN_DIAL_MODE);
 LedManager ledManager(CONF_PIN_LED);
+
+// --- AUDIO MULTITHREADING SETUP ---
+QueueHandle_t audioQueue;
+
+enum AudioCmdType { CMD_PLAY, CMD_STOP, CMD_VOL, CMD_OUT, CMD_CONNECT_SPEECH, CMD_LOOP };
+struct AudioCmd {
+    AudioCmdType type;
+    char path[128]; // Filename or URL
+    int value;      // Volume or Output ID
+};
+
+// Forward Declaration needed for task
+void audioTaskCode(void * parameter);
 
 // Global State
 bool sdAvailable = false;
@@ -175,6 +197,7 @@ void startPersonaScan() {
     // ensure bgScanDir is closed if it was left open
     if(bgScanDir) bgScanDir.close();
 }
+
 
 void handlePersonaScan() {
     // TEMPORARY DEBUG ENABLED AGAIN
@@ -369,34 +392,79 @@ String getNextTrack(int category) {
 }
 
 
+// --- Audio Task & Helpers ---
+
+void audioTaskCode(void * parameter) {
+    Serial.print("[AudioTask] Started on Core "); Serial.println(xPortGetCoreID());
+    
+    // Create Audio Object Here (Local to Core 0)
+    audio = new Audio();
+    audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+    audio->forceMono(true); 
+    
+    for(;;) {
+        audio->loop();
+        isAudioBusy = audio->isRunning();
+        
+        AudioCmd cmd;
+        if(xQueueReceive(audioQueue, &cmd, 0) == pdTRUE) {
+            switch(cmd.type) {
+                case CMD_PLAY:
+                    if (SD.exists(cmd.path)) {
+                        audio->connecttoFS(SD, cmd.path);
+                    } else {
+                        Serial.printf("[Audio] File missing: %s\n", cmd.path);
+                        if (SD.exists("/system/fallback_alarm.wav")) {
+                             audio->connecttoFS(SD, "/system/fallback_alarm.wav");
+                        }
+                    }
+                    break;
+                case CMD_CONNECT_SPEECH:
+                    audio->connecttospeech(cmd.path, "de");
+                    break;
+                case CMD_STOP:
+                    audio->stopSong();
+                    break;
+                case CMD_VOL:
+                    audio->setVolume(cmd.value);
+                    break;
+                case CMD_LOOP:
+                    audio->setFileLoop(cmd.value > 0);
+                    break;
+                case CMD_OUT:
+                    if (cmd.value == 2) { 
+                        audio->setBalance(16); // Right (Speaker)
+                        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
+                        audio->setVolume(vol);
+                    } else {
+                         audio->setBalance(-16); // Left (Handset)
+                         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
+                         audio->setVolume(vol);
+                    }
+                    break;
+            }
+        }
+        vTaskDelay(2 / portTICK_PERIOD_MS);
+    }
+}
+
+void sendAudioCmd(AudioCmdType type, const char* path, int val) {
+    AudioCmd cmd;
+    cmd.type = type;
+    if (path) strncpy(cmd.path, path, 127);
+    else cmd.path[0] = '\0';
+    cmd.value = val;
+    xQueueSend(audioQueue, &cmd, 0);
+}
+
 // --- Helper Functions ---
 enum AudioOutput { OUT_NONE, OUT_HANDSET, OUT_SPEAKER };
 AudioOutput currentOutput = OUT_NONE; 
 
 void setAudioOutput(AudioOutput target) {
-    if (audio == nullptr) return;
     if (currentOutput == target) return; 
-
-    // PCM5100A Shared Bus Logic (Stereo DAC)
-    // Left Channel = Handset
-    // Right Channel = Base Speaker
-    
-    // Force Mono Mix so the audio content plays on the selected speaker
-    audio->forceMono(true);
-
-    if (target == OUT_HANDSET) {
-        audio->setBalance(-16); // Left Only
-        int vol = ::map(settings.getVolume(), 0, 42, 0, 21); // Fixed ambiguous map
-        audio->setVolume(vol);
-        Serial.printf("Output Switched: HANDSET (Vol: %d)\n", vol);
-    } else {
-        audio->setBalance(16); // Right Only
-        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21); // Fixed ambiguous map
-        audio->setVolume(vol);
-        Serial.printf("Output Switched: SPEAKER (Vol: %d)\n", vol);
-    }
     currentOutput = target;
-    delay(20); 
+    sendAudioCmd(CMD_OUT, NULL, (int)target);
 }
 
 void playSound(String filename, bool useSpeaker = false) {
@@ -405,15 +473,7 @@ void playSound(String filename, bool useSpeaker = false) {
         return;
     }
     setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
-
-    if (SD.exists(filename)) {
-        // statusLed handled by loop/state
-        audio->connecttoFS(SD, filename.c_str());
-    } else {
-        Serial.print("File missing: ");
-        Serial.println(filename);
-        // statusLed handled by loop/state
-    }
+    sendAudioCmd(CMD_PLAY, filename.c_str(), 0);
 }
 
 #include <driver/adc.h> // Include Legacy ADC driver
@@ -424,10 +484,29 @@ bool checkBattery() {
 }
 
 // --- Time Speaking Logic ---
-enum TimeSpeakState { TIME_IDLE, TIME_INTRO, TIME_HOUR, TIME_UHR, TIME_MINUTE, TIME_DONE };
+enum TimeSpeakState { 
+    TIME_IDLE, 
+    TIME_INTRO, 
+    TIME_HOUR, 
+    TIME_UHR, 
+    TIME_MINUTE, 
+    TIME_DATE_INTRO,
+    TIME_WEEKDAY,
+    TIME_DAY,
+    TIME_MONTH,
+    TIME_YEAR,
+    TIME_DST,
+    TIME_DONE 
+};
 TimeSpeakState timeState = TIME_IDLE;
 int currentHour = 0;
 int currentMinute = 0;
+// Date Globals
+int currentDay = 0;
+int currentMonth = 0; 
+int currentYear = 0;
+int currentWeekday = 0;
+bool currentIsDst = false;
 
 void speakTime() {
     Serial.println("Speaking Time...");
@@ -437,10 +516,22 @@ void speakTime() {
     if (dt.valid) {
         currentHour = dt.hour;
         currentMinute = dt.minute;
+        
+        // Use rawTime to get full calendar details via standard library
+        struct tm * tInfo;
+        tInfo = localtime(&dt.rawTime);
+        currentDay = tInfo->tm_mday;     // 1-31
+        currentMonth = tInfo->tm_mon;    // 0-11
+        currentYear = tInfo->tm_year + 1900;
+        currentWeekday = tInfo->tm_wday; // 0-6 (Sun-Sat)
+        currentIsDst = (tInfo->tm_isdst > 0);
+        
     } else {
-        Serial.println("Time Invalid (No Sync), using 12:00");
+        Serial.println("Time Invalid (No Sync), using 12:00 default");
         currentHour = 12;
         currentMinute = 0;
+        // Defaults if needed (1970)
+        currentDay = 1; currentMonth = 0; currentYear = 1970; currentWeekday = 4;
     }
 
     setAudioOutput(OUT_HANDSET);
@@ -470,12 +561,12 @@ void processTimeQueue() {
             
         case TIME_UHR: // "Uhr" finished, play Minute (if not 0)
             if (currentMinute == 0) {
-                timeState = TIME_DONE;
-                Serial.println("Time Speak Done (Exact Hour)");
+                // If minute is 0, skip to Date
+                timeState = TIME_DATE_INTRO;
+                nextFile = basePath + "date_intro.mp3";
             } else {
                 timeState = TIME_MINUTE;
                 if (currentMinute < 10) {
-                     // Play "null five" format? 
                      nextFile = basePath + "m_0" + String(currentMinute) + ".mp3";
                 } else {
                      nextFile = basePath + "m_" + String(currentMinute) + ".mp3";
@@ -484,8 +575,40 @@ void processTimeQueue() {
             break;
             
         case TIME_MINUTE: // Minute finished
+            timeState = TIME_DATE_INTRO;
+            nextFile = basePath + "date_intro.mp3";
+            break;
+
+        // --- NEW DATE LOGIC ---
+        case TIME_DATE_INTRO:
+            timeState = TIME_WEEKDAY;
+            nextFile = basePath + "wday_" + String(currentWeekday) + ".mp3";
+            break;
+
+        case TIME_WEEKDAY:
+            timeState = TIME_DAY;
+            nextFile = basePath + "day_" + String(currentDay) + ".mp3";
+            break;
+
+        case TIME_DAY:
+            timeState = TIME_MONTH;
+            nextFile = basePath + "month_" + String(currentMonth) + ".mp3";
+            break;
+
+        case TIME_MONTH:
+            timeState = TIME_YEAR;
+            nextFile = basePath + "year_" + String(currentYear) + ".mp3";
+            break;
+
+        case TIME_YEAR:
+            timeState = TIME_DST;
+            if (currentIsDst) nextFile = basePath + "dst_summer.mp3";
+            else nextFile = basePath + "dst_winter.mp3";
+            break;
+
+        case TIME_DST:
             timeState = TIME_DONE;
-            Serial.println("Time Speak Done");
+            Serial.println("Time & Date Speak Done");
             break;
             
         default: break;
@@ -513,10 +636,9 @@ void speakCompliment(int number) {
         unsigned long startThink = millis();
         // Play for max 3 seconds or until file ends
         while (audio->isRunning() && (millis() - startThink < 3000)) {
-            audio->loop(); 
-            delay(1);
+            delay(10);
         }
-        audio->stopSong(); // Clean break
+        sendAudioCmd(CMD_STOP, NULL, 0); // Clean break
         // ----------------------------
         
         // 1. Get Text from Gemini
@@ -743,6 +865,16 @@ void executePhonebookFunction(String func, String param) {
 // Central Logic for Dialed Numbers (Phonebook + Features)
 void handleDialedNumber(String numberStr) {
     
+    // System Codes (Fixed)
+    if (numberStr == "90") {
+         executePhonebookFunction("TOGGLE_ALARMS", "");
+         return;
+    }
+    if (numberStr == "91") {
+         executePhonebookFunction("SKIP_NEXT_ALARM", "");
+         return;
+    }
+
     // Check Phonebook First
     PhonebookEntry entry = phonebook.getEntry(numberStr);
     
@@ -812,6 +944,65 @@ void handleDialedNumber(String numberStr) {
     }
 }
 
+// Helper to speak Timer/Alarm confirmation
+void speakTimerConfirm(int minutes) {
+    // 1. "Timer set to:"
+    // setAudioOutput(OUT_SPEAKER); // playSound handles this
+    
+    // Check Language
+    String lang = settings.getLanguage(); // "de" or "en"
+    String file = (lang == "de") ? "/system/timer_confirm_de.mp3" : "/system/timer_confirm_en.mp3";
+    
+    playSound(file, true); // Use Speaker
+    delay(100);
+    while(audio->isRunning()) { delay(10); }
+
+    // 2. Speak Number
+    String numFile = "/time/" + lang + "/" + String(minutes) + ".mp3";
+    if (SD.exists(numFile)) {
+         playSound(numFile, true); // Use Speaker
+         delay(100);
+         while(audio->isRunning()) { delay(10); }
+    }
+
+    // 3. "Minutes" suffix? (Optional, if "Timer set for" is clear enough)
+    // Let's keep it simple. "Timer set for: [Number]" is sufficient context.
+}
+
+void speakAlarmConfirm(int h, int m) {
+    String lang = settings.getLanguage();
+    
+    String confirmFile = (lang == "de") ? "/system/alarm_confirm_de.mp3" : "/system/alarm_confirm_en.mp3";
+    playSound(confirmFile, true); // Use Speaker
+    delay(100);
+    while(audio->isRunning()) { delay(10); }
+
+    // Hour
+    String hFile = "/time/" + lang + "/" + String(h) + ".mp3";
+    if (SD.exists(hFile)) {
+         playSound(hFile, true); // Speaker
+         delay(100);
+         while(audio->isRunning()) { delay(10); }
+    }
+    
+    // "Uhr" / Divider
+    // In German logic says "14 Uhr 30", English "14 30".
+    // TimeManager has special logic for time speaking, maybe reuse?
+    // reuse `speakTime()` logic? It's coupled to output?
+    // Let's just play minutes if > 0.
+    
+    if (m > 0 || lang == "en") { // English might say "14 hundred"? or just "14"
+         String mFile = "/time/" + lang + "/" + String(m) + ".mp3";
+         // Low numbers usually need padding handling in file names? 
+         // Check Time folder structure assumption. Usually 0.mp3..59.mp3.
+         if (SD.exists(mFile)) {
+             playSound(mFile, true); // Speaker
+             delay(100);
+             while(audio->isRunning()) { delay(10); }
+         }
+    }
+}
+
 void processBufNumber(String numberStr) {
     Serial.printf("Processing Buffered Input: %s\n", numberStr.c_str());
 
@@ -826,8 +1017,7 @@ void processBufNumber(String numberStr) {
                 Serial.printf("ALARM SET TO: %02d:%02d\n", h, m);
                 
                 // Audio Feedback
-                setAudioOutput(OUT_HANDSET);
-                playSound("/system/timer_set.mp3", false); 
+                speakAlarmConfirm(h, m);
             } else {
                 Serial.println("Invalid Time Format");
                 playSound("/system/error_tone.wav", false);
@@ -850,7 +1040,9 @@ void processBufNumber(String numberStr) {
          if (num > 0 && num <= 120) { // Allow up to 120 minutes
             Serial.printf("Setting Timer for %d minutes\n", num);
             timeManager.setTimer(num);
-            playSound("/system/beep.wav", true); 
+            
+            // Confirm via Speaker
+            speakTimerConfirm(num);
          } else {
             // Unknown
             Serial.println("Invalid Timer Value");
@@ -890,17 +1082,28 @@ void onDial(int number) {
     }
 }
 
+// Forward Declarations
+String getSystemFileByIndex(int index);
+void playDialTone();
+void stopDialTone();
+
 void onHook(bool offHook) {
     Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
     
-    // 2. Logic: Delete Alarm (Button + Lift)
+    // 2. Logic: Delete Alarm (Lift Handset + Hold Button)
     if (offHook && dial.isButtonDown()) {
-        timeManager.deleteAlarm();
-        Serial.println("Alarm Deleted/Disabled");
-        // Audio Feedback
-        setAudioOutput(OUT_HANDSET);
-        playSound("/system/error_tone.wav", false); // "Deleted" tone
-        return;
+         if (timeManager.isAlarmSet()) {
+             timeManager.deleteAlarm(0); 
+             Serial.println("Manual Alarm Deleted (Button + Lift)");
+             
+             // Feedback on Speaker (Consistent with Timer Cancel)
+             String lang = settings.getLanguage();
+             playSound("/system/alarm_deleted_" + lang + ".mp3", true); 
+         } else {
+             // Nothing to delete
+             playSound("/system/error_tone.wav", false);
+         }
+         return;
     }
 
     if (offHook) {
@@ -912,11 +1115,16 @@ void onHook(bool offHook) {
             return;
         }
         
+        // Check running Timer -> Cancel and Speak on Base
         if (timeManager.isTimerRunning()) {
              timeManager.cancelTimer();
-             stopAlarm(); // Should stop timer ringing too
+             stopAlarm(); 
              Serial.println("Timer Stopped by Pickup");
-             return; // Don't play compliment logic
+             
+             setAudioOutput(OUT_SPEAKER);
+             String lang = settings.getLanguage();
+             playSound("/system/timer_deleted_" + lang + ".mp3", true);
+             return; 
         }
         
         // --- Battery Check ---
@@ -975,64 +1183,9 @@ bool isUsbPowerConnected() {
     return true; // Assume USB Power -> No Deep Sleep
 }
 
-void setGpsStandby() {
-    Serial.println("GPS: Entering Standby (UBX-RXM-PMREQ)");
-    // UBX-RXM-PMREQ (Backup Mode, Infinite Duration)
-    uint8_t packet[] = {
-        0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 
-        0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
-        0x4D, 0x3B
-    };
-    Serial2.write(packet, sizeof(packet));
-    delay(100); // Give it time to sleep
-}
 
-void wakeGps() {
-    Serial.println("GPS: Waking Up...");
-    // Send dummy bytes to wake UART
-    Serial2.write(0xFF);
-    delay(100);
-}
 
 unsigned long lastActivityTime = 0;
-
-/*
- * SETUP I2S ADC (Input from MAX9814)
- * Using I2S_NUM_0 in ADC Built-In Mode (REQUIRED for ADC)
- * GPIO 36 is ADC1_CHANNEL_0
- */
-void setupI2S_ADC() {
-    // 16-bit sampling, only need mono
-    // Note: Built-in ADC mode requires higher sample rates to satisfy clock dividers (approx > 22kHz)
-    i2s_config_t i2s_config = {
-        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-        .sample_rate = 44100, 
-        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT, 
-        .communication_format = I2S_COMM_FORMAT_I2S_MSB,
-        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = 4,
-        .dma_buf_len = 128,
-        .use_apll = false
-    };
-
-    // Install Driver on I2S_NUM_0
-    esp_err_t err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
-    if (err != ESP_OK) {
-        Serial.printf("Failed installing I2S ADC driver: %d\n", err);
-        return;
-    }
-
-    // Configure ADC mode
-    // GPIO 36 is ADC1_CHANNEL_0
-    err = i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_0);
-    if (err != ESP_OK) {
-        Serial.printf("Failed setting ADC mode: %d\n", err);
-    } else {
-        i2s_adc_enable(I2S_NUM_0);
-        Serial.println("I2S ADC (Mic) Initialized on I2S_NUM_0");
-    }
-}
 
 // --- HELPER DIAL TONE ---
 String getSystemFileByIndex(int index) {
@@ -1064,16 +1217,16 @@ void playDialTone() {
     
     if (freqFile != "") {
         Serial.print("Starting Dial Tone: "); Serial.println(freqFile);
-        audio->setFileLoop(true); // Loop!
-        audio->connecttoFS(SD, freqFile.c_str());
+        sendAudioCmd(CMD_LOOP, NULL, 1);
+        sendAudioCmd(CMD_PLAY, freqFile.c_str(), 0);
         isDialTonePlaying = true;
     }
 }
 
 void stopDialTone() {
-    if (isDialTonePlaying && audio && audio->isRunning()) {
-        audio->stopSong();
-        audio->setFileLoop(false);
+    if (isDialTonePlaying) {
+        sendAudioCmd(CMD_STOP, NULL, 0);
+        sendAudioCmd(CMD_LOOP, NULL, 0);
         isDialTonePlaying = false;
         Serial.println("Dial Tone Stopped.");
     }
@@ -1082,6 +1235,16 @@ void stopDialTone() {
 
 void setup() {
     Serial.begin(CONF_SERIAL_BAUD);
+    
+    // --- WATCHDOG INIT ---
+    // Initialize WDT with timeout and panic (reset) enabled
+    esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = WDT_TIMEOUT * 1000,
+        .idle_core_mask = (1 << 0) | (1 << 1), // Optional: Monitor Idle tasks
+        .trigger_panic = true
+    };
+    esp_task_wdt_init(&wdt_config);
+    esp_task_wdt_add(NULL); // Add current thread (Loop) to WDT
     
     // Check Wakeup Cause
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -1116,19 +1279,22 @@ void setup() {
         buildPlaylist();
     }
     
-    // 2. Init Audio (PCM5100A)
-    // Audio(internalDAC, channelEnabled, i2sPort)
-    // We use I2S_NUM_1 for DAC to leave I2S_NUM_0 for the internal ADC (Mic)
-    audio = new Audio(false, 3, I2S_NUM_1);
-    audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
-    audio->forceMono(true); // Critical for separation via Balance
+    // 2. Init Audio Task (Multithreading)
+    audioQueue = xQueueCreate(20, sizeof(AudioCmd));
+    xTaskCreatePinnedToCore(
+        audioTaskCode,   /* Function */
+        "AudioTask",     /* Name */
+        8192,            /* Stack size (High for I2S/MP3) */
+        NULL,            /* Param */
+        2,               /* Priority (Higher than Main) */
+        NULL,            /* Handle */
+        0                /* Core 0 */
+    );
+    delay(100); // Allow Task to boot
     
     // Start with Handset
     setAudioOutput(OUT_HANDSET);
 
-    // 3. Init Mic (ADC)
-    setupI2S_ADC();
-    
     dial.onDialComplete(onDial);
     dial.onHookChange(onHook);
     dial.onButtonPress(onButton);
@@ -1136,10 +1302,7 @@ void setup() {
     
     webManager.begin();
     
-    // If we woke from Deep Sleep, the GPS is likely in Backup Mode. Wake it up!
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-        wakeGps();
-    }
+
     
     Serial.println("Dial-A-Charmer Started (PCM5100A + MAX9814)");
     
@@ -1156,16 +1319,47 @@ void setup() {
 }
 
 void loop() {
+    // Reset Watchdog
+    esp_task_wdt_reset();
+
     static unsigned long lastLoopDebug = 0;
     if(millis() - lastLoopDebug > 2000) {
         lastLoopDebug = millis();
         Serial.printf("[LOOP] running... AudioRun: %d, WebClient: ?, FreeHeap: %u\n", (audio?audio->isRunning():0), ESP.getFreeHeap());
     }
 
-    if(audio) audio->loop();
+    // if(audio) audio->loop(); // REMOVED: Audio loop is handled by AudioTask on Core 0
     webManager.loop();
     dial.loop();
     
+    // --- PULSE FEEDBACK (Mechanical Click) ---
+    if (dial.hasNewPulse()) {
+        // 1. Stop Dial Tone if active (First pulse logic)
+        if (isDialTonePlaying) {
+             stopDialTone();
+        }
+        
+        // 2. Play Click if the channel is free
+        // Note: rapid re-triggering might cause stutter if file is too large. 
+        // Use a very short <50ms file: /system/click.wav
+        // if (!audio->isRunning()) {
+        //    audio->connecttoFS(SD, "/system/click.wav");
+        // }
+        // Actually, re-triggering connecttoFS is heavy.
+        // Better: Just mute/unmute or toggle a pin if we had a buzzer.
+        // Since we only have I2S, and it's single stream, we skipping audio feedback for now if song is playing.
+        // But for DialTone (which we just stopped), we are free.
+        
+        if (!audio->isRunning()) {
+             // For now, we attempt to play. Ensure file is TINY.
+             // If loop latency is high, this will slow down dialing detection!
+             // Proceed with caution.
+             if (SD.exists("/system/click.wav")) {
+                audio->connecttoFS(SD, "/system/click.wav");
+             }
+        }
+    }
+
     // --- DIAL TONE LOGIC ---
     if (isDialTonePlaying && dial.isDialing()) {
         stopDialTone();
@@ -1262,20 +1456,47 @@ void loop() {
     wasAudioRunning = isAudioRunning;
     */
 
-    // --- AP Mode Long Press ---
+    // --- AP Mode Long Press & Alarm Delete (2s) ---
     static unsigned long btnPressStart = 0;
+    static bool buttonActionTriggered = false;
+
     if (dial.isButtonDown()) {
-        if (btnPressStart == 0) btnPressStart = millis();
-        if (millis() - btnPressStart > 10000) { // 10 Seconds
+        if (btnPressStart == 0) { 
+            btnPressStart = millis(); 
+            buttonActionTriggered = false; 
+        }
+        
+        unsigned long dur = millis() - btnPressStart;
+        
+        // 2s Action: Delete Manual Alarm - MOVED to onHook combo
+        /*
+        if (dur > 2000 && dur < 5000 && !buttonActionTriggered) {
+             if (timeManager.isAlarmSet()) {
+                 timeManager.deleteAlarm(0); 
+                 Serial.println("Manual Alarm Deleted (Long Press 2s)");
+                 
+                 // Feedback on Speaker (Base)
+                 setAudioOutput(OUT_SPEAKER);
+                 String lang = settings.getLanguage();
+                 playSound("/system/alarm_deleted_" + lang + ".mp3", true);
+                 
+                 buttonActionTriggered = true; 
+             }
+        }
+        */
+
+        // 10s Action: AP Mode
+        if (dur > 10000 && !buttonActionTriggered) {
              Serial.println("Long Press Detected: Starting AP Mode");
              playSound("/system/beep.wav", false);
              webManager.startAp();
-             btnPressStart = 0; // Trigger once
+             buttonActionTriggered = true; 
              // Wait for release
              while(dial.isButtonDown()) { dial.loop(); delay(10); }
         }
     } else {
         btnPressStart = 0;
+        buttonActionTriggered = false;
     }
     
     // --- SMART DEEP SLEEP LOGIC ---
@@ -1286,22 +1507,37 @@ void loop() {
         lastActivityTime = millis();
     } else {
         if (millis() - lastActivityTime > CONF_SLEEP_TIMEOUT_MS) {
-            Serial.println("zzZ Entering Smart Deep Sleep (Preserving GPS) zzZ");
+            Serial.println("zzZ Preparing for Deep Sleep zzZ");
             
-            // 1. Send GPS to Sleep (Backup Mode)
-            setGpsStandby();
+            // 1. Calculate Wakeup Triggers
             
-            // 2. Configure Wakeup
-            // We wake when the hook is lifted.
+            // A) WAKE ON HOOK (User Action)
             // Check current state to wake on change/toggle
             int currentHookState = digitalRead(CONF_PIN_HOOK);
             esp_sleep_enable_ext0_wakeup((gpio_num_t)CONF_PIN_HOOK, !currentHookState);
+            Serial.printf(" - Wakeup configured on PIN %d (Log: %d)\n", CONF_PIN_HOOK, !currentHookState);
+
+            // B) WAKE ON NEXT ALARM (Timer)
+            long secondsToAlarm = timeManager.getSecondsToNextAlarm();
+            if (secondsToAlarm > 0) {
+                // Wakeup exactly at alarm time (conversion to microseconds)
+                uint64_t sleepUs = (uint64_t)secondsToAlarm * 1000000ULL;
+                esp_sleep_enable_timer_wakeup(sleepUs);
+                
+                // Info logging
+                int hours = secondsToAlarm / 3600;
+                int mins = (secondsToAlarm % 3600) / 60;
+                Serial.printf(" - Wakeup Timer set for %ld s (~%dh %dm until Alarm)\n", secondsToAlarm, hours, mins);
+            } else {
+                Serial.println(" - No upcoming alarms set. Sleeping indefinitely until Hook Lift.");
+            }
             
-            // 3. Status LED Off
+            // 2. Status LED Off
             ledManager.setMode(LedManager::OFF);
             ledManager.update(); // Flush change
+            delay(100); // Give Serial time to flush
             
-            // 4. Goodnight
+            // 3. Goodnight
             esp_deep_sleep_start();
         }
     }
