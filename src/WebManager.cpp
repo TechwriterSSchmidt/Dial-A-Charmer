@@ -113,44 +113,9 @@ void WebManager::begin() {
 
     // Reindex Storage
     _server.on("/api/reindex", [this](){
-        Serial.println("Reindex requested via WebUI...");
-        
-        // Signal Start: Blue Pulse (CONNECTING)
-        ledManager.setMode(LedManager::CONNECTING);
-        ledManager.update();
-        _server.send(200, "text/plain", "Reindexing started. Please wait for signal.");
-
-        // Do the work
-        File dir = SD.open("/playlists");
-        std::vector<String> files;
-        if (dir && dir.isDirectory()) {
-            File f = dir.openNextFile();
-            while(f) {
-                String n = String(f.name());
-                if (n.endsWith(".m3u") || n.endsWith(".idx")) {
-                    if(n.startsWith("/")) files.push_back(n);
-                    else files.push_back("/playlists/" + n);
-                }
-                f = dir.openNextFile();
-            }
-            dir.close();
-        }
-        for(const auto& p : files) {
-            SD.remove(p);
-            Serial.print("Removed cached playlist: "); Serial.println(p);
-        }
-
-        // Wait a bit to simulate/ensure processing
-        delay(2000); 
-
-        // Sound Feedback on Base Speaker
-        playSound("/system/system_ready.mp3", true); 
-        
-        // We do NOT reboot immediately here, as the user might want to hear the sound.
-        // We will play sound, wait for it, then reboot.
-        
-        delay(4000); // Wait for sound
-        ESP.restart();
+        Serial.println("WebCMD: Reindex requested.");
+        _reindexTriggered = true; // Set Flag
+        _server.send(200, "text/plain", "ACCEPTED"); // Immediate Response
     });
 
     _server.on("/update", HTTP_POST, [this](){
@@ -181,8 +146,8 @@ void WebManager::begin() {
 
     // --- FONTS FROM SD CARD ---
     _server.on("/fonts/ZenTokyoZoo-Regular.ttf", [this](){
-        if(SD.exists("/system/fonts/ZenTokyoZoo-Regular.ttf")){
-            File f = SD.open("/system/fonts/ZenTokyoZoo-Regular.ttf", "r");
+        if(SD.exists(Path::FONT_MAIN)){
+            File f = SD.open(Path::FONT_MAIN, "r");
             _server.streamFile(f, "font/ttf");
             f.close();
         } else {
@@ -191,8 +156,8 @@ void WebManager::begin() {
     });
 
     _server.on("/fonts/Pompiere-Regular.ttf", [this](){
-        if(SD.exists("/system/fonts/Pompiere-Regular.ttf")){
-            File f = SD.open("/system/fonts/Pompiere-Regular.ttf", "r");
+        if(SD.exists(Path::FONT_SEC)){
+            File f = SD.open(Path::FONT_SEC, "r");
             _server.streamFile(f, "font/ttf");
             f.close();
         } else {
@@ -220,6 +185,12 @@ void WebManager::loop() {
         }
     }
     _server.handleClient();
+    
+    // --- WORKER LOOP ---
+    if (_reindexTriggered) {
+        processReindex(); 
+        _reindexTriggered = false; 
+    }
 }
 
 void WebManager::startAp() {
@@ -494,7 +465,7 @@ String WebManager::getSettingsHtml() {
         // Tone Select
         html += "<div style='flex-grow:1; margin-left:15px;'>";
         html += "<select name='alm_t_" + String(i) + "' style='width:100%;'>";
-        html += getSdFileOptions("/ringtones", settings.getAlarmTone(i));
+        html += getSdFileOptions(Path::RINGTONES, settings.getAlarmTone(i));
         html += "</select>";
         html += "</div>";
         
@@ -640,8 +611,8 @@ String WebManager::getAdvancedHtml() {
     
     // Tones
     html += "<div style='display:flex; gap:10px; margin-top:15px;'>";
-    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>" + getSdFileOptions("/ringtones", settings.getRingtone()) + "</select></div>";
-    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>" + getSdFileOptions("/system", settings.getDialTone()) + "</select></div>";
+    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>" + getSdFileOptions(Path::RINGTONES, settings.getRingtone()) + "</select></div>";
+    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>" + getSdFileOptions(Path::SYSTEM, settings.getDialTone()) + "</select></div>";
     html += "</div>";
     
     // AEC Switch
@@ -707,7 +678,7 @@ void WebManager::handlePhonebook() {
 void WebManager::handlePhonebookApi() {
     if (_server.method() == HTTP_GET) {
         // Return JSON
-        File f = SPIFFS.open("/phonebook.json", "r");
+        File f = SPIFFS.open(Path::PHONEBOOK, "r");
         if (!f) {
             _server.send(500, "application/json", "{\"error\":\"File not found\"}");
             return;
@@ -936,4 +907,34 @@ String WebManager::getHelpHtml() {
     
     html += "</body></html>";
     return html;
+}
+
+void WebManager::processReindex() {
+    Serial.println("Worker: Starting Reindex...");
+    
+    // Visual Feedback
+    ledManager.setMode(LedManager::CONNECTING);
+    ledManager.update();
+
+    // 1. Delete Playlists
+    if(SD.exists(Path::PLAYLISTS)) {
+        File root = SD.open(Path::PLAYLISTS);
+        if (root && root.isDirectory()) {
+             File file = root.openNextFile();
+             while(file){
+                String path = String(Path::PLAYLISTS) + "/" + String(file.name());
+                if(!file.isDirectory()) {
+                    SD.remove(path);
+                    Serial.printf("Deleted: %s\n", path.c_str());
+                }
+                file = root.openNextFile();
+             }
+             root.close();
+             SD.rmdir(Path::PLAYLISTS);
+        }
+    }
+
+    Serial.println("Reindex Logic Complete. Rebooting in 1s...");
+    delay(1000);
+    ESP.restart();
 }

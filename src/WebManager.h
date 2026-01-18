@@ -6,6 +6,7 @@
 #include <DNSServer.h>
 #include "Settings.h"
 #include "config.h"
+#include "Constants.h"
 
 class WebManager {
 public:
@@ -17,6 +18,11 @@ public:
 private:
     WebServer _server;
     DNSServer _dnsServer;
+    
+    // --- Async Reindex Flags ---
+    bool _reindexTriggered = false;
+    void processReindex(); 
+    
     const uint8_t _dnsPort = CONF_DNS_PORT;
     bool _apMode = false;
     unsigned long _apEndTime = 0; // Auto-off timer

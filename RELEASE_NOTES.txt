@@ -7,6 +7,7 @@
     - Prevents undefined states. Dialing is blocked until hung up.
     - **Snooze Exception**: Snooze mode keeps the handset silent (no busy tone) to allow "putting the phone aside".
 - **Performance**:
+    - **Non-Blocking Storage**: Refactored the "Reindex Storage" web operation. It now runs asynchronously in the background loop instead of blocking the web server request (which previously caused timeouts).
     - **Non-Blocking Audio**: Converted "Time Speaking" logic to a Queue system. The main loop no longer freezes while the device speaks dates or confirmations.
     - **Reduced Logging**: Stripped debug output for cleaner serial terminal behavior.
 - **Stability Fixes**:
