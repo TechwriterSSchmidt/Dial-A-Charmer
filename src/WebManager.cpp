@@ -51,6 +51,35 @@ String getSdFileOptions(String folder, int currentSelection) {
     return options;
 }
 
+String getFooterHtml(bool isDe, String activePage) {
+    String t_home = "Home";
+    String t_alarms = isDe ? "Wecker" : "Alarms";
+    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
+    String t_conf = isDe ? "Konfiguration" : "Configuration";
+    String t_help = isDe ? "Hilfe" : "Manual";
+
+    // Standardized Footer with consistent styling
+    String html = "<div style='text-align:center; padding-bottom: 20px; margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;'>";
+    String style = "color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1.2rem; letter-spacing:1px; font-weight:normal; font-family: 'Pompiere', cursive, sans-serif;";
+
+    html += "<a href='/' style='" + style + "'>" + t_home + "</a>";
+    
+    if (activePage != "settings")
+        html += "<a href='/settings' style='" + style + "'>" + t_alarms + "</a>";
+        
+    if (activePage != "phonebook")
+        html += "<a href='/phonebook' style='" + style + "'>" + t_pb + "</a>";
+        
+    if (activePage != "advanced")
+        html += "<a href='/advanced' style='" + style + "'>" + t_conf + "</a>";
+        
+    if (activePage != "help")
+        html += "<a href='/help' style='" + style + "'>" + t_help + "</a>";
+
+    html += "</div>";
+    return html;
+}
+
 void WebManager::begin() {
     // Init FileSystem for Web Assets
     if(!SPIFFS.begin(true)){
@@ -489,12 +518,7 @@ String WebManager::getSettingsHtml() {
     html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
     
-    html += "<div style='text-align:center; padding-bottom: 20px;'>";
-    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
-    html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Telefonbuch</a>";
-    html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Konfiguration</a>";
-    html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
-    html += "</div>";
+    html += getFooterHtml(isDe, "settings");
     
     html += "</body></html>";
     return html;
@@ -670,12 +694,7 @@ String WebManager::getAdvancedHtml() {
     html += "<button type='submit' style='background-color:#444; margin-top:10px;'>Start Update</button>";
     html += "</form></div>";
     
-    html += "<div style='text-align:center; padding-bottom: 20px;'>";
-    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Wecker</a>";
-    html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Telefonbuch</a>";
-    html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
-    html += "</div>";
+    html += getFooterHtml(isDe, "advanced");
     
     html += "</body></html>";
     return html;
@@ -864,12 +883,10 @@ async function save() {
     // Standard Footer (Button + Links)
     html += "<div style='max-width:550px; margin:0 auto;'>";
     html += "<button onclick='save()' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
-    html += "<div style='text-align:center; padding-bottom: 20px;'>";
-    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Wecker</a>";
-    html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Konfiguration</a>";
-    html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
-    html += "</div></div>";
+    
+    html += getFooterHtml(isDe, "phonebook");
+
+    html += "</div>";
     
     html += "</body></html>";
     return html;
@@ -925,13 +942,7 @@ String WebManager::getHelpHtml() {
     html += "<p>" + String(isDe ? "Verwende das Web-Interface 'Wecker' und 'Konfiguration' Tabs." : "Use the 'Alarms' and 'Configuration' tabs above.") + "</p>";
     html += "</div>";
     
-    // Updated Footer
-    html += "<div style='text-align:center; padding-bottom: 20px; margin-top:20px;'>";
-    html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
-    html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>" + t_audio_btn + "</a>";
-    html += "<a href='/phonebook' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>" + t_pb + "</a>";
-    html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>" + t_conf + "</a>";
-    html += "</div>";
+    html += getFooterHtml(isDe, "help");
     
     html += "</body></html>";
     return html;
