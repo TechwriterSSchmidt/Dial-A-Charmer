@@ -456,11 +456,15 @@ void WebManager::handleSave() {
 
     ledManager.reloadSettings(); // Apply new LED settings immediately
 
-    String html = "<html><body><h1>Saved!</h1>";
+    String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'><style>body{background:#111;color:#d4af37;text-align:center;font-family:sans-serif;padding:30px;}</style></head><body>";
     if (wifiChanged) {
-        html += "<p>WiFi settings changed. Rebooting to apply...</p></body></html>";
+        html += "<h2>Settings Saved</h2>";
+        html += "<p>The device is restarting to connect to your network.</p>";
+        html += "<p>Please close this window, connect to your WiFi, and visit:</p>";
+        html += "<h3><a href='http://dial-a-charmer.local' style='color:#fff;'>http://dial-a-charmer.local</a></h3>";
+        html += "</body></html>";
         _server.send(200, "text/html", html);
-        delay(1000);
+        delay(2000); // Give time to send response
         ESP.restart();
     } else {
         // Redirect back
@@ -583,6 +587,47 @@ String WebManager::getSettingsHtml() {
     html += "<a href='/advanced' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Konfiguration</a>";
     html += "<a href='/help' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Hilfe</a>";
     html += "</div>";
+    
+    html += "</body></html>";
+    return html;
+}
+
+String WebManager::getApSetupHtml() {
+    // Basic Style for Setup
+    String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
+    html += "<style>";
+    html += "body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; text-align: center; }";
+    html += "h2 { color: #d4af37; margin-bottom: 30px; }";
+    html += "input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #444; background: #222; color: #fff; font-size: 1.2rem; border-radius: 5px; box-sizing: border-box; }";
+    html += "button { width: 100%; padding: 15px; margin-top: 20px; background: #d4af37; color: #000; font-size: 1.2rem; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; }";
+    html += "button:hover { background: #eac14d; }";
+    html += ".card { background: #1a1a1a; padding: 20px; border-radius: 10px; max-width: 400px; margin: 0 auto; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }";
+    html += "a { color: #888; text-decoration: underline; margin-top: 20px; display: inline-block; }";
+    html += "</style></head><body>";
+    
+    html += "<h2>WiFi Setup</h2>";
+    html += "<div class='card'>";
+    html += "<form action='/save' method='POST'>";
+    
+    // Scan
+    int n = WiFi.scanNetworks();
+    html += "<label>Select Network</label>";
+    html += "<input type='text' name='ssid' list='ssidList' placeholder='SSID' required>";
+    html += "<datalist id='ssidList'>";
+    for (int i = 0; i < n; ++i) {
+        html += "<option value='" + WiFi.SSID(i) + "'>";
+    }
+    html += "</datalist>";
+    
+    html += "<label>Password</label>";
+    html += "<input type='password' name='pass' placeholder='Password'>";
+    
+    html += "<button type='submit'>Save & Connect</button>";
+    html += "</form>";
+    html += "</div>";
+    
+    html += "<p>Enter credentials for your local network.<br>The device will restart.</p>";
+    html += "<a href='/save?redirect=/'>(Skip / Reload)</a>";
     
     html += "</body></html>";
     return html;
@@ -777,6 +822,8 @@ String WebManager::getAdvancedHtml() {
 }
 
 void WebManager::handlePhonebook() {
+    resetApTimer();
+    if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
     _server.send(200, "text/html", getPhonebookHtml());
 }
 
