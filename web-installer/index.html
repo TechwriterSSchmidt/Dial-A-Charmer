@@ -7,115 +7,94 @@
     <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
     <style>
         body {
-            font-family: 'Times New Roman', Times, serif;
-            background-color: #080808; /* Deep Black */
-            color: #f0e6d2; /* Cream/Champagne */
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background-color: #121212; /* Modern Dark */
+            color: #e0e0e0;
             margin: 0;
             padding: 20px;
-            line-height: 1.5;
+            line-height: 1.6;
             text-align: center;
         }
         .container {
             max-width: 600px;
-            margin: 0 auto;
-            background: #111;
-            border: 1px solid #222;
-            border-top: 4px solid #d4af37; /* Gold Accent */
+            margin: 40px auto;
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 12px; /* Modern Rounded Corners */
             padding: 30px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         h1 { 
-            text-transform: uppercase;
-            letter-spacing: 6px; /* Art Deco Spacing */
-            color: #d4af37; /* Metallic Gold */
-            border-bottom: 2px solid #d4af37;
-            margin-bottom: 40px;
-            padding-bottom: 15px;
-            font-weight: normal;
+            text-transform: none; /* Removed uppercase */
+            letter-spacing: normal;
+            color: #d4af37; /* Gold remains for accent */
+            margin-bottom: 20px;
+            font-weight: 300;
+            border-bottom: none;
         }
-        p { margin-bottom: 1.5rem; line-height: 1.5; color: #f0e6d2; font-size: 1.1rem; }
+        p { 
+            margin-bottom: 1.5rem; 
+            color: #aaaaaa;
+            font-size: 1rem;
+        }
         
-        /* Style for the button slot to match Webinterface buttons */
+        /* Modern Button Slot */
         button[slot="activate"] {
             width: 100%;
-            padding: 18px;
+            padding: 15px;
             margin-top: 10px;
-            background-color: #8b0000; /* Deep Red */
-            color: #f0e6d2;
-            border: 1px solid #a00000;
-            text-transform: uppercase;
-            letter-spacing: 4px;
-            font-size: 1.5rem;
+            background-color: #d4af37;
+            color: #121212;
+            border: none;
+            border-radius: 8px; /* Rounded */
+            font-weight: bold;
+            font-size: 1.1rem;
             cursor: pointer;
-            transition: all 0.3s;
-            font-family: 'Times New Roman', Times, serif;
-            border-radius: 0; /* Sharp Edges */
+            transition: transform 0.1s ease, background-color 0.2s;
+            text-transform: none;
+            letter-spacing: normal;
+            font-family: inherit;
         }
         button[slot="activate"]:hover {
-            background-color: #b22222;
-            color: #fff;
-            border-color: #f00;
-            box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
+            background-color: #c49f30;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
         }
-
-        .unsupported { color: #8b0000; font-weight: bold; border: 1px solid #8b0000; padding: 10px; margin-top:10px; }
         
-        #error-info {
-            margin-top: 1rem;
-            padding: 1rem;
-            background-color: #300;
-            color: #f00;
-            border: 1px solid #800;
-            display: none;
-            font-size: 0.9rem;
-            text-align: left;
-        }
-
         .footer {
-            margin-top: 2rem;
+            margin-top: 40px;
             font-size: 0.8rem;
             color: #666;
-            text-transform: uppercase;
-            letter-spacing: 2px;
+            text-transform: none;
+            letter-spacing: normal;
         }
-        a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; transition: 0.3s; }
-        a:hover { color: #fff; border-bottom: 1px solid #fff; }
+        a { color: #d4af37; text-decoration: none; border-bottom: none; }
+        a:hover { color: #e0e0e0; border-bottom: 1px solid #e0e0e0; }
+
+        .unsupported { color: #d4af37; background: #332b00; border: 1px solid #d4af37; padding: 10px; border-radius: 8px; margin-top:10px; }
     </style>
-    <script>
-        window.addEventListener('load', () => {
-             // Check for file protocol
-             if (window.location.protocol === 'file:') {
-                const err = document.getElementById('error-info');
-                err.style.display = 'block';
-                err.innerHTML = '⚠️ <b>Warning:</b> You are opening this file directly from your computer.<br>' +
-                                'The Web Installer requires a web server (HTTPS or localhost) to work.<br>' +
-                                'Please upload this folder to GitHub Pages or run a local server (e.g. <code>python -m http.server</code>).';
-            }
-        });
-    </script>
 </head>
 <body>
     <div class="container">
-        <h1>The Atomic Charmer</h1>
+        <h1>Dial-A-Charmer</h1>
         <p>
-            Welcome, Time Traveller.<br>
-            Connect your apparatus via USB to update its firmware.
+            Give your vintage rotary phone a new life as a smart timekeeper, alarm clock, and AI assistant.<br>
+            Connect your Wemos D32 Pro via USB to install.
         </p>
-        <p style="color: #d4af37; font-style: italic;">
-            v1.4.0 - Smart Alarm, Volume Control & New Content<br>
-            <span style="font-size: 0.8em; opacity: 0.7;">(Build: 2026-01-16)</span>
+        <p style="color: #888; font-size: 0.9em; margin-bottom: 30px;">
+            Current Release: <strong>v0.7.0-beta</strong><br>
+            Multi-Core Audio, NVS Persistence & Detailed Voice Announcements
         </p>
         
         <esp-web-install-button manifest="manifest.json">
-            <button slot="activate">INITIATE UPDATE</button>
+            <button slot="activate">Connect & Install</button>
             <div slot="unsupported" class="unsupported">
-                Browser not supported. Please use Chrome, Edge, or Opera.
+                Your browser does not support Web Serial. Please use Chrome, Edge, or Opera on Desktop.
             </div>
         </esp-web-install-button>
 
-        <p style="margin-top: 2rem; font-size: 0.9rem; border-top: 1px solid #333; padding-top: 1rem;">
-            Instructions: Connect device, click the red button above, select the port, and confirm installation.
+        <p style="margin-top: 30px; font-size: 0.85em; color: #555; border-top: 1px solid #333; padding-top: 20px;">
+            Note: This installer requires a secure context (HTTPS or localhost) and a fast internet connection to download the firmware parts.
         </p>
     </div>
     
