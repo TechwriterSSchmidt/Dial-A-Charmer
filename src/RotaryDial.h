@@ -16,6 +16,7 @@ public:
 
     bool isOffHook();
     bool isButtonDown();
+    bool isDialing() const { return _dialing; }
 
 private:
     int _pulsePin;

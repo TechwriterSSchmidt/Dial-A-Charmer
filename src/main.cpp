@@ -24,8 +24,10 @@ Audio *audio = nullptr; // Pointer managed object
 RotaryDial dial(CONF_PIN_DIAL_PULSE, CONF_PIN_HOOK, CONF_PIN_EXTRA_BTN, CONF_PIN_DIAL_MODE);
 LedManager ledManager(CONF_PIN_LED);
 
-// Global flag for hardware availability
+// Global State
 bool sdAvailable = false;
+bool isDialTonePlaying = false; // New Dial Tone State
+
 // Note: PCM5100A is a "dumb" DAC and doesn't report I2C status. We assume it's working.
 
 // --- Background Scan Globals ---
@@ -924,11 +926,16 @@ void onHook(bool offHook) {
             return; 
         }
         
-        // Automatic Surprise Mix on Pickup
-        Serial.println("Auto-Start: Random Surprise Mix");
-        speakCompliment(0); 
+        // NEW Standard Behavior: Play Dial Tone
+        Serial.println("OFF HOOK -> Playing Dial Tone");
+        playDialTone();
+
+        // Automatic Surprise Mix on Pickup - REMOVED for Realism
+        // speakCompliment(0); 
     } else {
         // ON HOOK (Hung Up)
+        // Ensure Tone is stopped
+        stopDialTone();
         
         if (timeManager.isSnoozeActive()) {
             // User hung up during snooze -> Cancel Snooze (I am awake)
@@ -1027,6 +1034,52 @@ void setupI2S_ADC() {
     }
 }
 
+// --- HELPER DIAL TONE ---
+String getSystemFileByIndex(int index) {
+    File dir = SD.open("/system");
+    if(!dir || !dir.isDirectory()) return "";
+    
+    std::vector<String> files;
+    File file = dir.openNextFile();
+    while(file){
+        if(!file.isDirectory()) {
+            String name = file.name();
+            if (!name.startsWith(".")) files.push_back(name);
+        }
+        file = dir.openNextFile();
+    }
+    std::sort(files.begin(), files.end());
+    
+    // Index is 1-based (from settings dropdown)
+    if (index > 0 && index <= files.size()) {
+        return "/system/" + files[index - 1];
+    }
+    return "";
+}
+
+void playDialTone() {
+    if (!sdAvailable) return;
+    int toneIndex = settings.getDialTone();
+    String freqFile = getSystemFileByIndex(toneIndex);
+    
+    if (freqFile != "") {
+        Serial.print("Starting Dial Tone: "); Serial.println(freqFile);
+        audio->setFileLoop(true); // Loop!
+        audio->connecttoFS(SD, freqFile.c_str());
+        isDialTonePlaying = true;
+    }
+}
+
+void stopDialTone() {
+    if (isDialTonePlaying && audio && audio->isRunning()) {
+        audio->stopSong();
+        audio->setFileLoop(false);
+        isDialTonePlaying = false;
+        Serial.println("Dial Tone Stopped.");
+    }
+}
+// --- END HELPER ---
+
 void setup() {
     Serial.begin(CONF_SERIAL_BAUD);
     
@@ -1112,6 +1165,13 @@ void loop() {
     if(audio) audio->loop();
     webManager.loop();
     dial.loop();
+    
+    // --- DIAL TONE LOGIC ---
+    if (isDialTonePlaying && dial.isDialing()) {
+        stopDialTone();
+        // audio->setVolume(0); // Optional: Mute click noise?
+    }
+
     timeManager.loop();
     handlePersonaScan(); // Run BG Task
     

@@ -859,6 +859,7 @@ const systemItems = [
     { id:'p2', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'2', defName:'Persona 2 (Badran)', defNum:'2' },
     { id:'p3', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'3', defName:'Persona 3 (Yoda)', defNum:'3' },
     { id:'p4', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'4', defName:'Persona 4 (Neutral)', defNum:'4' },
+    { id:'p5', type:'FUNCTION', val:'COMPLIMENT_MIX', param:'0', defName:'Random Mix (Surprise)', defNum:'5' },
     { id:'menu', type:'FUNCTION', val:'VOICE_MENU', param:'', defName:'Operator Menu', defNum:'9' },
     { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'', defName:'Toggle Alarms', defNum:'90' },
     { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' }

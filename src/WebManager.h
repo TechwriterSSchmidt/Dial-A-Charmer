@@ -35,6 +35,7 @@ private:
     void resetApTimer();
     
     String getHtml();
+    String getApSetupHtml(); // New: Dedicated AP Setup Page
     String getSettingsHtml(); // New
     String getAdvancedHtml(); // New
     String getPhonebookHtml();
