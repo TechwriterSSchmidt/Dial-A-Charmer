@@ -37,7 +37,13 @@ String getSdFileOptions(String folder, int currentSelection) {
         // IDs start at 1 usually in this system
         int id = i + 1;
         String sel = (id == currentSelection) ? " selected" : "";
-        options += "<option value='" + String(id) + "'" + sel + ">" + files[i] + "</option>";
+        
+        // Remove extension for display
+        String displayName = files[i];
+        int dotIndex = displayName.lastIndexOf('.');
+        if (dotIndex > 0) displayName = displayName.substring(0, dotIndex);
+        
+        options += "<option value='" + String(id) + "'" + sel + ">" + displayName + "</option>";
     }
     return options;
 }
