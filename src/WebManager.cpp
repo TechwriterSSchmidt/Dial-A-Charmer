@@ -1,4 +1,5 @@
 #include "WebManager.h"
+#include <esp_task_wdt.h>
 #include "LedManager.h"
 #include "PhonebookManager.h"
 #include "WebResources.h" // Setup Styles
