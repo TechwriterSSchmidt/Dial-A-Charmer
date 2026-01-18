@@ -4,8 +4,12 @@
 #include <SD.h>
 #include <FS.h>
 #include <SPIFFS.h>
+#include <esp_task_wdt.h> // Watchdog
 #include <vector>
 #include <algorithm>
+
+#define WDT_TIMEOUT 20 // 20 Seconds Watchdog Limit
+
 #include <random>
 #include <map>
 #include <driver/i2s.h> // For ADC Mic
@@ -1001,44 +1005,6 @@ void wakeGps() {
 
 unsigned long lastActivityTime = 0;
 
-/*
- * SETUP I2S ADC (Input from MAX9814)
- * Using I2S_NUM_0 in ADC Built-In Mode (REQUIRED for ADC)
- * GPIO 36 is ADC1_CHANNEL_0
- */
-void setupI2S_ADC() {
-    // 16-bit sampling, only need mono
-    // Note: Built-in ADC mode requires higher sample rates to satisfy clock dividers (approx > 22kHz)
-    i2s_config_t i2s_config = {
-        .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_ADC_BUILT_IN),
-        .sample_rate = 44100, 
-        .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
-        .channel_format = I2S_CHANNEL_FMT_ONLY_LEFT, 
-        .communication_format = I2S_COMM_FORMAT_I2S_MSB,
-        .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = 4,
-        .dma_buf_len = 128,
-        .use_apll = false
-    };
-
-    // Install Driver on I2S_NUM_0
-    esp_err_t err = i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
-    if (err != ESP_OK) {
-        Serial.printf("Failed installing I2S ADC driver: %d\n", err);
-        return;
-    }
-
-    // Configure ADC mode
-    // GPIO 36 is ADC1_CHANNEL_0
-    err = i2s_set_adc_mode(ADC_UNIT_1, ADC1_CHANNEL_0);
-    if (err != ESP_OK) {
-        Serial.printf("Failed setting ADC mode: %d\n", err);
-    } else {
-        i2s_adc_enable(I2S_NUM_0);
-        Serial.println("I2S ADC (Mic) Initialized on I2S_NUM_0");
-    }
-}
-
 // --- HELPER DIAL TONE ---
 String getSystemFileByIndex(int index) {
     File dir = SD.open("/system");
@@ -1088,6 +1054,16 @@ void stopDialTone() {
 void setup() {
     Serial.begin(CONF_SERIAL_BAUD);
     
+    // --- WATCHDOG INIT ---
+    // Initialize WDT with timeout and panic (reset) enabled
+    esp_task_wdt_config_t wdt_config = {
+        .timeout_ms = WDT_TIMEOUT * 1000,
+        .idle_core_mask = (1 << 0) | (1 << 1), // Optional: Monitor Idle tasks
+        .trigger_panic = true
+    };
+    esp_task_wdt_init(&wdt_config);
+    esp_task_wdt_add(NULL); // Add current thread (Loop) to WDT
+    
     // Check Wakeup Cause
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
@@ -1131,9 +1107,6 @@ void setup() {
     // Start with Handset
     setAudioOutput(OUT_HANDSET);
 
-    // 3. Init Mic (ADC)
-    setupI2S_ADC();
-    
     dial.onDialComplete(onDial);
     dial.onHookChange(onHook);
     dial.onButtonPress(onButton);
@@ -1161,6 +1134,9 @@ void setup() {
 }
 
 void loop() {
+    // Reset Watchdog
+    esp_task_wdt_reset();
+
     static unsigned long lastLoopDebug = 0;
     if(millis() - lastLoopDebug > 2000) {
         lastLoopDebug = millis();

@@ -5,6 +5,8 @@
 #include <ESPmDNS.h>
 #include <Update.h>
 #include <SD.h>
+#include <FS.h>
+#include <SPIFFS.h>
 #include <vector>
 #include <algorithm>
 
@@ -51,6 +53,11 @@ String getSdFileOptions(String folder, int currentSelection) {
 // MOVED TO WebResources.h: const char* htmlStyle
 
 void WebManager::begin() {
+    // Init FileSystem for Web Assets
+    if(!SPIFFS.begin(true)){
+        Serial.println("SPIFFS Mount Failed");
+    }
+
     String ssid = settings.getWifiSSID();
     String pass = settings.getWifiPass();
     bool connected = false;
@@ -102,6 +109,9 @@ void WebManager::begin() {
     _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
     _server.on("/api/preview", [this](){ handlePreviewApi(); });
     
+    // Serve Static Files (SPA)
+    _server.serveStatic("/", SPIFFS, "/");
+
 extern void playSound(String filename, bool useSpeaker);
 
     // Reindex Storage
@@ -228,7 +238,13 @@ void WebManager::handleRoot() {
     if (_apMode) {
         _server.send(200, "text/html", getApSetupHtml());
     } else {
-        _server.send(200, "text/html", getHtml());
+        if (SPIFFS.exists("/index.html")) {
+            File file = SPIFFS.open("/index.html", "r");
+            _server.streamFile(file, "text/html");
+            file.close();
+        } else {
+            _server.send(200, "text/html", "<h2>System Error: Web Interface Missing</h2><p>Please upload SPIFFS/Data partition.</p>");
+        }
     }
 }
 
@@ -492,46 +508,7 @@ String WebManager::getApSetupHtml() {
     return html;
 }
 
-// New Dashboard
-String WebManager::getHtml() {
-    String lang = settings.getLanguage();
-    bool isDe = (lang == "de");
-    String t_audio_btn = isDe ? "Wecker" : "Alarms";
-    String t_pb = isDe ? "Telefonbuch" : "Phonebook";
-    String t_conf = isDe ? "Konfiguration" : "Configuration";
-    String t_help = isDe ? "Hilfe" : "Help";
-    
-    // Simple Dashboard
-    String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
-    html += COMMON_CSS; // Use Shared Resource
-    html += "<style>.dash-btn { display:block; padding:20px; margin:15px 0; background:#222; border:1px solid #d4af37; color:#d4af37; text-align:center; text-transform:uppercase; font-size:1.2rem; transition:0.3s; } .dash-btn:hover { background:#d4af37; color:#111; }</style>";
-    html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>";
-    html += "</head><body>";
-    
-    html += "<h2>Dial-A-Charmer</h2>";
-    html += "<div class='card' style='text-align:center; padding: 40px 20px;'>";
-    html += "<h3 style='margin:0; font-size:2.5rem; color:#fff; letter-spacing: 2px;'>" + String(isDe ? "Willkommen." : "Welcome.") + "</h3>";
-    
-    String statusColor = (WiFi.status() == WL_CONNECTED) ? "#4caf50" : "#f44336";
-    String statusText = (WiFi.status() == WL_CONNECTED) ? "ONLINE" : "OFFLINE";
-    html += "<p style='color:" + statusColor + "; font-family:sans-serif; font-size:1.2rem; font-weight:bold; margin-top:15px; letter-spacing: 1px;'>STATUS: " + statusText + "</p>";
-    html += "</div>";
-
-    html += "<a href='/settings' class='dash-btn'>" + t_audio_btn + "</a>";
-    html += "<a href='/phonebook' class='dash-btn'>" + t_pb + "</a>";
-    html += "<a href='/advanced' class='dash-btn'>" + t_conf + "</a>";
-    html += "<a href='/help' class='dash-btn'>" + t_help + "</a>";
-
-    html += "<div style='text-align:center; margin-top:40px; opacity: 0.7;'>";
-    html += "<select onchange='sl(this.value)' style='width:auto; display:inline-block; background:#111; color:#888; border:1px solid #444;'>";
-    html += "<option value='de'" + String(isDe ? " selected" : "") + ">Deutsch</option>";
-    html += "<option value='en'" + String(!isDe ? " selected" : "") + ">English</option>";
-    html += "</select>";
-    html += "</div>";
-
-    html += "</body></html>";
-    return html;
-}
+// WebManager::getHtml() removed (Replaced by SPA index.html)
 
 String WebManager::getAdvancedHtml() {
     String lang = settings.getLanguage();
