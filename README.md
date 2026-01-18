@@ -58,9 +58,12 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Action (Set Single Alarm):** Hold the extra button down while dialing 4 digits.
     *   Dial `0730` (while holding button) -> Sets alarm for 07:30.
     *   This alarm has **Priority** and rings once, then clears itself.
+*   **Action (Cancel Single Alarm):** Hold the extra button down for **3 seconds**.
+    *   A beep/tone confirms the deletion of the manual alarm.
 
 ### 2. Active Mode (Handset Lifted)
 *   **Trigger:** Lift the handset (Off-Hook).
+    *   **Special Trigger:** If a **Timer** is running, lifting the handset immediately cancels it (confirmed via Base Speaker).
 *   **Behavior:** The phone "wakes up" with a dial tone and plays a random compliment (Surprise Mix) after 2s.
 *   **Action (Dialing):** Input numbers to request content:
     *   **Dial `1`-`4`**: Switch to specific Persona Playlist (Trump, Badran, Yoda, Neutral).

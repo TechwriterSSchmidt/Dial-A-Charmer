@@ -636,10 +636,9 @@ void speakCompliment(int number) {
         unsigned long startThink = millis();
         // Play for max 3 seconds or until file ends
         while (audio->isRunning() && (millis() - startThink < 3000)) {
-            audio->loop(); 
-            delay(1);
+            delay(10);
         }
-        audio->stopSong(); // Clean break
+        sendAudioCmd(CMD_STOP, NULL, 0); // Clean break
         // ----------------------------
         
         // 1. Get Text from Gemini
@@ -866,6 +865,16 @@ void executePhonebookFunction(String func, String param) {
 // Central Logic for Dialed Numbers (Phonebook + Features)
 void handleDialedNumber(String numberStr) {
     
+    // System Codes (Fixed)
+    if (numberStr == "90") {
+         executePhonebookFunction("TOGGLE_ALARMS", "");
+         return;
+    }
+    if (numberStr == "91") {
+         executePhonebookFunction("SKIP_NEXT_ALARM", "");
+         return;
+    }
+
     // Check Phonebook First
     PhonebookEntry entry = phonebook.getEntry(numberStr);
     
@@ -938,26 +947,22 @@ void handleDialedNumber(String numberStr) {
 // Helper to speak Timer/Alarm confirmation
 void speakTimerConfirm(int minutes) {
     // 1. "Timer set to:"
-    setAudioOutput(OUT_SPEAKER); // Force Speaker
+    // setAudioOutput(OUT_SPEAKER); // playSound handles this
     
     // Check Language
     String lang = settings.getLanguage(); // "de" or "en"
-    if (lang == "de") playSound("/system/timer_confirm_de.mp3", false);
-    else playSound("/system/timer_confirm_en.mp3", false);
-
-    // Wait for playback? playSound is non-blocking usually, but we need sequence.
-    // Assuming playSound just queues or starts. If we call connecttoFS inside playSound, it stops previous.
-    // We need a queue or simple delay loop. Since this is a dedicated action, blocking loop is acceptable.
-    while(audio->isRunning()) { audio->loop(); delay(10); }
+    String file = (lang == "de") ? "/system/timer_confirm_de.mp3" : "/system/timer_confirm_en.mp3";
+    
+    playSound(file, true); // Use Speaker
+    delay(100);
+    while(audio->isRunning()) { delay(10); }
 
     // 2. Speak Number
-    // We need audio files for numbers 1..60? 
-    // Or we use TTS? We don't have online TTS guaranteed. 
-    // We should use the "Time" folder logic? The `Time` folder has 0..59.mp3 for minutes!
     String numFile = "/time/" + lang + "/" + String(minutes) + ".mp3";
     if (SD.exists(numFile)) {
-         audio->connecttoFS(SD, numFile.c_str());
-         while(audio->isRunning()) { audio->loop(); delay(10); }
+         playSound(numFile, true); // Use Speaker
+         delay(100);
+         while(audio->isRunning()) { delay(10); }
     }
 
     // 3. "Minutes" suffix? (Optional, if "Timer set for" is clear enough)
@@ -965,18 +970,19 @@ void speakTimerConfirm(int minutes) {
 }
 
 void speakAlarmConfirm(int h, int m) {
-    setAudioOutput(OUT_SPEAKER);
     String lang = settings.getLanguage();
     
-    if (lang == "de") playSound("/system/alarm_confirm_de.mp3", false);
-    else playSound("/system/alarm_confirm_en.mp3", false);
-    while(audio->isRunning()) { audio->loop(); delay(10); }
+    String confirmFile = (lang == "de") ? "/system/alarm_confirm_de.mp3" : "/system/alarm_confirm_en.mp3";
+    playSound(confirmFile, true); // Use Speaker
+    delay(100);
+    while(audio->isRunning()) { delay(10); }
 
     // Hour
     String hFile = "/time/" + lang + "/" + String(h) + ".mp3";
     if (SD.exists(hFile)) {
-         audio->connecttoFS(SD, hFile.c_str());
-         while(audio->isRunning()) { audio->loop(); delay(10); }
+         playSound(hFile, true); // Speaker
+         delay(100);
+         while(audio->isRunning()) { delay(10); }
     }
     
     // "Uhr" / Divider
@@ -990,8 +996,9 @@ void speakAlarmConfirm(int h, int m) {
          // Low numbers usually need padding handling in file names? 
          // Check Time folder structure assumption. Usually 0.mp3..59.mp3.
          if (SD.exists(mFile)) {
-             audio->connecttoFS(SD, mFile.c_str());
-             while(audio->isRunning()) { audio->loop(); delay(10); }
+             playSound(mFile, true); // Speaker
+             delay(100);
+             while(audio->isRunning()) { delay(10); }
          }
     }
 }
@@ -1083,13 +1090,13 @@ void stopDialTone();
 void onHook(bool offHook) {
     Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
     
-    // 2. Logic: Delete Alarm (Button + Lift)
+    // 2. Logic: Delete Alarm (Button + Lift) - REMOVED (Conflicted with new 2s Logic? No, keeping as shortcut)
+    // Legacy support: Button held during pickup still deletes.
     if (offHook && dial.isButtonDown()) {
         timeManager.deleteAlarm();
         Serial.println("Alarm Deleted/Disabled");
-        // Audio Feedback
         setAudioOutput(OUT_HANDSET);
-        playSound("/system/error_tone.wav", false); // "Deleted" tone
+        playSound("/system/error_tone.wav", false); 
         return;
     }
 
@@ -1102,11 +1109,16 @@ void onHook(bool offHook) {
             return;
         }
         
+        // Check running Timer -> Cancel and Speak on Base
         if (timeManager.isTimerRunning()) {
              timeManager.cancelTimer();
-             stopAlarm(); // Should stop timer ringing too
+             stopAlarm(); 
              Serial.println("Timer Stopped by Pickup");
-             return; // Don't play compliment logic
+             
+             setAudioOutput(OUT_SPEAKER);
+             String lang = settings.getLanguage();
+             playSound("/system/timer_deleted_" + lang + ".mp3", true);
+             return; 
         }
         
         // --- Battery Check ---
@@ -1310,7 +1322,7 @@ void loop() {
         Serial.printf("[LOOP] running... AudioRun: %d, WebClient: ?, FreeHeap: %u\n", (audio?audio->isRunning():0), ESP.getFreeHeap());
     }
 
-    if(audio) audio->loop();
+    // if(audio) audio->loop(); // REMOVED: Audio loop is handled by AudioTask on Core 0
     webManager.loop();
     dial.loop();
     
@@ -1438,20 +1450,45 @@ void loop() {
     wasAudioRunning = isAudioRunning;
     */
 
-    // --- AP Mode Long Press ---
+    // --- AP Mode Long Press & Alarm Delete (2s) ---
     static unsigned long btnPressStart = 0;
+    static bool buttonActionTriggered = false;
+
     if (dial.isButtonDown()) {
-        if (btnPressStart == 0) btnPressStart = millis();
-        if (millis() - btnPressStart > 10000) { // 10 Seconds
+        if (btnPressStart == 0) { 
+            btnPressStart = millis(); 
+            buttonActionTriggered = false; 
+        }
+        
+        unsigned long dur = millis() - btnPressStart;
+        
+        // 2s Action: Delete Manual Alarm
+        if (dur > 2000 && dur < 5000 && !buttonActionTriggered) {
+             if (timeManager.isAlarmSet()) {
+                 timeManager.deleteAlarm(0); 
+                 Serial.println("Manual Alarm Deleted (Long Press 2s)");
+                 
+                 // Feedback on Speaker (Base)
+                 setAudioOutput(OUT_SPEAKER);
+                 String lang = settings.getLanguage();
+                 playSound("/system/alarm_deleted_" + lang + ".mp3", true);
+                 
+                 buttonActionTriggered = true; 
+             }
+        }
+
+        // 10s Action: AP Mode
+        if (dur > 10000 && !buttonActionTriggered) {
              Serial.println("Long Press Detected: Starting AP Mode");
              playSound("/system/beep.wav", false);
              webManager.startAp();
-             btnPressStart = 0; // Trigger once
+             buttonActionTriggered = true; 
              // Wait for release
              while(dial.isButtonDown()) { dial.loop(); delay(10); }
         }
     } else {
         btnPressStart = 0;
+        buttonActionTriggered = false;
     }
     
     // --- SMART DEEP SLEEP LOGIC ---

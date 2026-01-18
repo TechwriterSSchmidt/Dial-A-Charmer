@@ -43,7 +43,9 @@ TTS_PROMPTS = {
         ("Alarm set.", "timer_set.mp3"),
         ("Error. Playlist empty.", "error_msg_en.mp3"),
         ("Timer set for:", "timer_confirm_en.mp3"),
-        ("Alarm set for:", "alarm_confirm_en.mp3") 
+        ("Alarm set for:", "alarm_confirm_en.mp3"),
+        ("Timer cancelled.", "timer_deleted_en.mp3"),
+        ("Alarm deleted.", "alarm_deleted_en.mp3")
     ],
     # German
     "de": [
@@ -56,7 +58,9 @@ TTS_PROMPTS = {
         ("Warnung. Energiezellen kritisch.", "battery_crit.mp3"),
         ("System bereit.", "system_ready.mp3"),
         ("Timer gesetzt auf:", "timer_confirm_de.mp3"),
-        ("Wecker gestellt auf:", "alarm_confirm_de.mp3")
+        ("Wecker gestellt auf:", "alarm_confirm_de.mp3"),
+        ("Timer beendet.", "timer_deleted_de.mp3"),
+        ("Wecker gelöscht.", "alarm_deleted_de.mp3")
     ]
 }
 
