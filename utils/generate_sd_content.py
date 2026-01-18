@@ -482,6 +482,33 @@ def make_startup_music():
     else:
         print("  [WARN] FFmpeg not found. 'startup.wav' created instead of mp3.")
 
+def download_fonts():
+    print("Checking Fonts...")
+    font_dir = os.path.join(SD_TEMPLATE_DIR, "system", "fonts")
+    os.makedirs(font_dir, exist_ok=True)
+    
+    fonts = [
+        ("https://github.com/google/fonts/raw/main/ofl/zentokyozoo/ZenTokyoZoo-Regular.ttf", "ZenTokyoZoo-Regular.ttf"),
+        ("https://github.com/google/fonts/raw/main/ofl/pompiere/Pompiere-Regular.ttf", "Pompiere-Regular.ttf")
+    ]
+    
+    for url, fname in fonts:
+        path = os.path.join(font_dir, fname)
+        if not os.path.exists(path):
+            print(f"  Downloading {fname}...")
+            try:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                
+                with urllib.request.urlopen(url, context=ctx) as r, open(path, 'wb') as f:
+                    f.write(r.read())
+                print("    Done.")
+            except Exception as e:
+                print(f"    [ERR] Failed to download font: {e}")
+        else:
+            print(f"  {fname} already exists.")
+
 # --- MAIN EXECUTION ---
 
 if __name__ == "__main__":
@@ -497,6 +524,8 @@ if __name__ == "__main__":
     make_all_tts()         # System & Time
     
     make_startup_music()   # Startup pad
+    
+    download_fonts()       # Added Fonts
     
     print("\n=== GENERATION COMPLETE ===")
     print(f"Copy the contents of '{SD_TEMPLATE_DIR}' to your SD Card.")

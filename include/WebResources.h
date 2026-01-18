@@ -5,8 +5,20 @@
 
 const char* COMMON_CSS = R"rawliteral(
 <style>
+@font-face {
+    font-family: 'Zen Tokyo Zoo';
+    src: url('/fonts/ZenTokyoZoo-Regular.ttf') format('truetype');
+    font-display: swap;
+}
+@font-face {
+    font-family: 'Pompiere';
+    src: url('/fonts/Pompiere-Regular.ttf') format('truetype');
+    font-display: swap;
+}
+
 body {
-    font-family: 'Times New Roman', Times, serif;
+    font-family: 'Pompiere', cursive, sans-serif;
+    font-size: 1.4rem;
     background-color: #080808; /* Deep Black */
     color: #f0e6d2; /* Cream/Champagne */
     margin: 0;
@@ -14,14 +26,16 @@ body {
     line-height: 1.5;
 }
 h2 {
+    font-family: 'Zen Tokyo Zoo', cursive;
     text-align: center;
     text-transform: uppercase;
-    letter-spacing: 6px; /* Art Deco Spacing */
+    letter-spacing: 4px; /* Art Deco Spacing */
     color: #d4af37; /* Metallic Gold */
     border-bottom: 2px solid #d4af37;
     margin-bottom: 40px;
     padding-bottom: 15px;
     font-weight: normal;
+    font-size: 2.2rem;
 }
 .card {
     background: #111;
@@ -33,11 +47,12 @@ h2 {
     border-radius: 15px; /* Soft Card */
 }
 .card h3 {
+    font-family: 'Zen Tokyo Zoo', cursive;
     margin-top: 0;
     color: #d4af37;
     font-size: 1.5rem;
     text-transform: uppercase;
-    letter-spacing: 3px;
+    letter-spacing: 2px;
     border-bottom: 1px solid #333;
     padding-bottom: 15px;
     font-weight: normal;
@@ -45,7 +60,7 @@ h2 {
 label {
     display: block;
     margin-top: 20px;
-    font-size: 1.2rem;
+    font-size: 1.3rem;
     text-transform: uppercase;
     letter-spacing: 2px;
     color: #888;

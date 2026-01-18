@@ -157,6 +157,18 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 
 ### Audio Utilities (`utils/`)
 
+**`generate_sd_content.py`** (Recommended)
+This all-in-one script prepares a complete `sd_card_template` folder for you. It ensures your device works immediately without hunting for MP3 files.
+
+*   **Usage:** `python utils/generate_sd_content.py`
+*   **Features:**
+    *   **Structure:** Creates all required folders (`persona_XX`, `system`, `time` etc.).
+    *   **TTS Integration:** Automatically downloads high-quality Google TTS speech files for Numbers (0-100), Dates (Days, Months, Years), and System Messages ("Alarm Set", "Error", etc.) in both **German & English**.
+    *   **Tone Synthesis:** Generates clean `wav` files for Dial Tone, Busy Signal, and Beeps using Python's audio libraries (no recording needed).
+    *   **Offline Fonts:** Downloads "Zen Tokyo Zoo" and "Pompiere" fonts to `/system/fonts/` so the Web UI looks perfect even without Internet.
+    *   **Startup Sound:** Synthesizes a musical ambient chord for boot-up.
+*   **Output:** Populates `sd_card_template/` which you just copy to your SD card.
+
 **`split_audio.py`**
 This tool splits large, long audio files (e.g. combined recordings) into individual MP3 files based on silence.
 
@@ -192,9 +204,10 @@ The system uses specific WAV files in `/system/` for feedback:
 
 1.  **Prepare Hardware:** Assemble the ESP32, Audio Module, and Rotary Phone mechanics according to the pinout.
 2.  **Prepare SD Card:**
-    *   Format MicroSD card to **FAT32**.
-    *   Copy the contents of `sd_card_template` to the root of the card.
-    *   Fill `persona_XX` folders with your desired MP3 files.
+    *   **Run Generator:** Execute `python utils/generate_sd_content.py` to create the essential system files, voice prompts, and fonts.
+    *   **Format:** Format your MicroSD card to **FAT32**.
+    *   **Copy:** Copy the *contents* of the generated `sd_card_template` folder to the root of the SD card.
+    *   **Personalize:** Add your own MP3 music/compliments to the `persona_XX` folders.
 3.  **Flash Firmware:**
     *   Open project in VS Code with PlatformIO.
     *   Connect Wemos D32 Pro via USB.

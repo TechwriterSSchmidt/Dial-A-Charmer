@@ -190,6 +190,27 @@ void WebManager::begin() {
 
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
+
+    // --- FONTS FROM SD CARD ---
+    _server.on("/fonts/ZenTokyoZoo-Regular.ttf", [this](){
+        if(SD.exists("/system/fonts/ZenTokyoZoo-Regular.ttf")){
+            File f = SD.open("/system/fonts/ZenTokyoZoo-Regular.ttf", "r");
+            _server.streamFile(f, "font/ttf");
+            f.close();
+        } else {
+            _server.send(404, "text/plain", "Font Missing");
+        }
+    });
+
+    _server.on("/fonts/Pompiere-Regular.ttf", [this](){
+        if(SD.exists("/system/fonts/Pompiere-Regular.ttf")){
+            File f = SD.open("/system/fonts/Pompiere-Regular.ttf", "r");
+            _server.streamFile(f, "font/ttf");
+            f.close();
+        } else {
+            _server.send(404, "text/plain", "Font Missing");
+        }
+    });
     
     // Serve Static Files (Last resort for assets like .css, .js)
     _server.serveStatic("/", SPIFFS, "/");
@@ -263,10 +284,10 @@ void WebManager::handleRoot() {
         html += "<h2>" + t_title + "</h2>";
         
         html += "<div class='card' style='text-align:center;'>";
-        html += "<p style='color:#888; font-style:italic; margin-bottom:25px; font-family:serif; font-size:1.1rem;'>" + t_subtitle + "</p>";
+        html += "<p style='color:#888; font-style:italic; margin-bottom:25px; font-family: \"Pompiere\", cursive; font-size:1.3rem;'>" + t_subtitle + "</p>";
         
         // Navigation Buttons
-        String btnStyle = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.2rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family:sans-serif; transition: all 0.2s;";
+        String btnStyle = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Zen Tokyo Zoo', cursive; transition: all 0.2s;";
         
         html += "<button onclick=\"location.href='/settings'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_alarms + "</button>";
         html += "<button onclick=\"location.href='/phonebook'\" style='" + btnStyle + "' onmouseover=\"this.style.borderColor='#d4af37'\" onmouseout=\"this.style.borderColor='#444'\">" + t_pb + "</button>";
