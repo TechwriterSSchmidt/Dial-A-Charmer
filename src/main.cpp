@@ -50,6 +50,11 @@ void audioTaskCode(void * parameter);
 bool sdAvailable = false;
 bool isDialTonePlaying = false; // New Dial Tone State
 
+// --- Timeout / Busy Logic ---
+bool isLineBusy = false;       
+unsigned long offHookTime = 0; 
+#define OFF_HOOK_TIMEOUT 5000  
+
 // Note: PCM5100A is a "dumb" DAC and doesn't report I2C status. We assume it's working.
 
 // --- Background Scan Globals ---
@@ -1049,6 +1054,11 @@ void processBufNumber(String numberStr) {
 }
 
 void onDial(int number) {
+    if (isLineBusy) {
+        Serial.println("Ignored Digit (Line Busy)");
+        return;
+    }
+
     if (number == 10) number = 0; // Fix 0
     Serial.printf("Digit Received: %d\n", number);
     
@@ -1104,6 +1114,10 @@ void onHook(bool offHook) {
     }
 
     if (offHook) {
+        // Reset Timeout State
+        offHookTime = millis();
+        isLineBusy = false;
+
         // statusLed.setIdle();
         
         // Stop Alarm if ringing
@@ -1139,6 +1153,11 @@ void onHook(bool offHook) {
         // speakCompliment(0); 
     } else {
         // ON HOOK (Hung Up)
+        
+        // Reset Busy State and Stop Loop
+        isLineBusy = false;
+        sendAudioCmd(CMD_LOOP, NULL, 0);
+
         // Ensure Tone is stopped
         stopDialTone();
         
@@ -1334,6 +1353,35 @@ void loop() {
     webManager.loop();
     dial.loop();
     
+    // --- TIMEOUT / BUSY LOGIC ---
+    if (dial.isOffHook()) {
+        if (!isLineBusy) {
+             // Reset Timer Conditions
+             bool active = false;
+             // 1. Dialing buffer not empty (User started dialing)
+             if (dialBuffer.length() > 0) active = true;
+             // 2. Audio playing (EXCEPT Dial Tone) - e.g. Compliment, Menu, Alarm
+             if (audio && audio->isRunning() && !isDialTonePlaying) active = true;
+             // 3. Snooze Exception (Phone silent while snoozing)
+             if (timeManager.isSnoozeActive()) active = true;
+
+             if (active) {
+                 offHookTime = millis();
+             } else {
+                 // Idle (or Dial Tone playing)
+                 if (millis() - offHookTime > OFF_HOOK_TIMEOUT) {
+                     Serial.println("[Timeout] Off-Hook Limit Reached -> Busy Line");
+                     isLineBusy = true;
+                     stopDialTone(); 
+                     // Play Busy Signal Loop
+                     setAudioOutput(OUT_HANDSET);
+                     playSound("/system/busy_tone.wav", false);
+                     sendAudioCmd(CMD_LOOP, NULL, 1);
+                 }
+             }
+        }
+    }
+
     // --- PULSE FEEDBACK (Mechanical Click) ---
     if (dial.hasNewPulse()) {
         // 1. Stop Dial Tone if active (First pulse logic)
