@@ -867,37 +867,52 @@ String WebManager::getHelpHtml() {
     String html = "<html><head><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += COMMON_CSS; // Use Shared Resource
     
-    // Add translation logic for Help Footer
+    // Translation Logic
     String lang = settings.getLanguage();
     bool isDe = (lang == "de");
+    
+    // UI Labels
     String t_audio_btn = isDe ? "Wecker" : "Alarms";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
     String t_conf = isDe ? "Konfiguration" : "Configuration";
-    // Help is current page
-    
+    String t_manual = isDe ? "Bedienungsanleitung" : "User Manual";
+
     html += "</head><body>";
-    html += "<h2>User Manual</h2>";
+    html += "<h2>" + t_manual + "</h2>";
     
-    html += "<div class='card'><h3>1. Time & Alarm</h3>";
-    html += "<ul><li><b>Receiver Down:</b> Dial a number (1-60) to set a Timer in minutes.</li>";
-    html += "<li><b>Receiver Up:</b> Dial 0 to hear the current time.</li>";
-    html += "<li><b>Stop Alarm:</b> Lift the receiver or tap the hook switch.</li>";
-    html += "<li><b>Cancel Timer:</b> Lift the receiver (Voice Confirmed).</li>";
-    html += "<li><b>Delete Manual Alarm:</b> Hold Button + Lift Receiver.</li></ul></div>";
+    // SECTION 1: BASIC USAGE
+    html += "<div class='card'><h3>1. " + String(isDe ? "Bedienung" : "Basic Operation") + "</h3>";
+    html += "<ul>";
+    html += "<li><b>" + String(isDe ? "Hörer abnehmen:" : "Lift Receiver:") + "</b> " + String(isDe ? "Wählton erklingt." : "You hear a Dial Tone.") + "</li>";
+    html += "<li><b>" + String(isDe ? "Wählen (0-9):" : "Dial (0-9):") + "</b> " + String(isDe ? "Wähle eine Nummer für Inhalte." : "Input numbers to start content.") + "</li>";
+    html += "<li><b>Timeout:</b> " + String(isDe ? "Nach 5 Sekunden ohne Eingabe ertönt das 'Besetzt'-Zeichen. Hörer auflegen zum Reset." : "After 5 seconds of inactivity, a 'Busy Tone' plays. Hang up to reset.") + "</li>";
+    html += "</ul></div>";
+
+    // SECTION 2: CODES & SHORTCUTS (Dynamic based on logic, but defaults listed)
+    html += "<div class='card'><h3>2. " + String(isDe ? "Nummern & Codes" : "Numbers & Codes") + "</h3>";
+    html += "<ul>";
+    html += "<li><b>0:</b> " + String(isDe ? "Zufalls-Mix (Überraschung)" : "Random Surprise Mix") + "</li>";
+    html += "<li><b>1 - 4:</b> " + String(isDe ? "Playlists (über Telefonbuch änderbar)" : "Playlists (Editable via Phonebook)") + "</li>";
+    html += "<li><b>8:</b> " + String(isDe ? "System Status (IP-Adresse)" : "System Status (IP Address)") + "</li>";
+    html += "<li><b>9:</b> " + String(isDe ? "Sprach-Menü" : "Voice Menu") + "</li>";
+    html += "<li><b>90:</b> " + String(isDe ? "Alle Wecker: AN / AUS" : "Toggle All Alarms: ON / OFF") + "</li>";
+    html += "<li><b>91:</b> " + String(isDe ? "Nächsten Wecker überspringen" : "Skip Next Routine Alarm") + "</li>";
+    html += "</ul></div>";
+
+    // SECTION 3: ALARMS & TIMER
+    html += "<div class='card'><h3>3. " + String(isDe ? "Wecker & Timer" : "Alarms & Timer") + "</h3>";
+    html += "<ul>";
+    html += "<li><b>Timer (Egg Timer):</b> " + String(isDe ? "Hörer AUFGELEGT lassen -> Zahl wählen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
+    html += "<li><b>Stop Ringing:</b> " + String(isDe ? "Hörer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
+    html += "<li><b>Snooze:</b> " + String(isDe ? "Hörer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
+    html += "</ul></div>";
     
-    html += "<div class='card'><h3>2. Compliments (AI)</h3>";
-    html += "<ul><li>Lift receiver and dial:</li>";
-    html += "<li><b>0:</b> Random Surprise</li>";
-    html += "<li><b>1:</b> Persona 1 (Trump)</li>";
-    html += "<li><b>2:</b> Persona 2 (Badran)</li>";
-    html += "<li><b>3:</b> Persona 3 (Yoda)</li>";
-    html += "<li><b>4:</b> Persona 4 (Neutral)</li></ul></div>";
+    // SECTION 4: CONFIG
+    html += "<div class='card'><h3>4. " + String(isDe ? "Einstellungen" : "Configuration") + "</h3>";
+    html += "<p>" + String(isDe ? "Verwende das Web-Interface 'Wecker' und 'Konfiguration' Tabs." : "Use the 'Alarms' and 'Configuration' tabs above.") + "</p>";
+    html += "</div>";
     
-    html += "<div class='card'><h3>3. Settings</h3>";
-    html += "<ul><li><b>Change Ringtone:</b> Hold the 'Extra Button' and dial 1-5.</li>";
-    html += "<li><b>Web Config:</b> Connect to 'DialACharmer' WiFi.</li></ul></div>";
-    
-    // Updated Footer (consistent style, no self-link to Help)
+    // Updated Footer
     html += "<div style='text-align:center; padding-bottom: 20px; margin-top:20px;'>";
     html += "<a href='/' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>Home</a>";
     html += "<a href='/settings' style='color:#ffc107; text-decoration:underline; margin:0 10px; font-size:1rem; letter-spacing:1px;'>" + t_audio_btn + "</a>";

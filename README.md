@@ -39,6 +39,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | | **AI Assistant** | Integrated **Gemini AI** allows the phone to tell jokes or answer prompts via the Phonebook. |
 | | **Multi-Language** | Supports **German** and **English** for Voice, System prompts, and Web Interface. |
 | | **Half-Duplex Audio** | Intelligent echo-cancellation ensures AI prompts aren't interrupted by their own output. |
+| | **Refined Logic** | **Interrupt-friendly**: Hang up or press the button at any time to instantly stop current speech or music playback. |
 | **System** | **Zero-Install Web App** | Modern **Single-Page-Application (SPA)** served directly from the device (requires SPIFFS). |
 | | **System Watchdog** | Integrated Hardware Watchdog auto-resets the device if it freezes (>20s). |
 | | **Smart Deep Sleep** | Device sleeps when idle and wakes up automatically for the next alarm (or when the receiver is lifted). |
@@ -66,6 +67,7 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Trigger:** Lift the handset (Off-Hook).
     *   **Special Trigger:** If a **Timer** is running, lifting the handset immediately cancels it (confirmed via Base Speaker).
 *   **Behavior:** The phone "wakes up" with a **Dial Tone**.
+*   **Timeout / Busy Signal:** Use the dial within **5 seconds**. If no action is taken, the system assumes an error and plays a **Busy Tone**. You must hang up and lift again to reset. (Exception: In Snooze mode, the line remains silent).
 *   **Action (Dialing):** Input numbers to request content (numbers be changed via webinterface):
     *   **Dial `1`-`4`**: Switch to specific Persona Playlist.
     *   **Dial `0`**: Play next random track.

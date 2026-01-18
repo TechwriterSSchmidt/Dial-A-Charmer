@@ -1,42 +1,29 @@
 # Quick Reference Guide - Dial-A-Charmer
 
 ## 📞 How to Use
-1. **Hear a Compliment:**
-   - Lift the receiver (Dial Tone plays).
+1. **Active Mode (Make a Call):**
+   - Lift the receiver. Wait for the **Dial Tone**.
+   - **Important:** specific content must be dialed within **5 seconds**. 
+   - *Behavior:* If no number is dialed, a **Busy Signal** plays. Hang up to reset.
    - **Dial 0:** Random Surprise Track.
-   - **Dial 1:** Persona 1 Style (Trump).
-   - **Dial 2:** Persona 2 Style (Badran).
-   - **Dial 3:** Persona 3 Style (Yoda).
-   - **Dial 4:** Persona 4 Style (Neutral).
+   - **Dial 1-4:** Persona Playlists (Configurable).
 
-2. **Hear the Time:**
-   - Press the **Extra Button** (if available).
-   
-3. **Set a Kitchen Timer:**
+2. **Set a Kitchen Timer:**
    - Keep receiver **ON** the hook.
-   - Dial a number (e.g., 5).
-   - A timer is set for **5 minutes**.
+   - Dial a number (e.g., dial `5`).
+   - A timer is set for **5 minutes** (Confirmed by voice).
    - Phone rings when time is up. Lift receiver to stop ringing.
 
-4. **Set a Single Priority Alarm:**
-   - Keep receiver **ON** the hook.
-   - Press and **HOLD** the Extra Button.
-   - Dial 4 digits for the time (e.g., `0`, `7`, `3`, `0` for 07:30).
-   - A confirmation sound ("Alarm Set") plays.
-   - *Note: This alarm rings once and then clears itself.*
-
-5. **Stop / Snooze Alarm:**
+3. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
    - **Snooze:** Lift receiver but **DO NOT** hang up (put it aside). 
    - *Snooze duration is configurable in Web Interface (Default: 9 min).*
 
-6. **Voice Menu & Admin:**
-   - **Dial 9:** Hear current status and menu options.
+4. **Voice Menu & Admin:**
+   - **Dial 9:** System Menu Instructions.
    - **Dial 90:** Toggle **ALL** Alarms (On/Off).
-   - **Dial 91:** Skip **Next Repeating Alarm** (e.g. skip tomorrow morning, but keep schedule active).
-   - **Dial 8:** Speak full system status (IP, Signal, etc.).
-   - **Delete Single Alarm:** 
-     - Press and Hold Extra Button, then **Lift Receiver**. (Voice Confirmed)
+   - **Dial 91:** Skip **Next Repeating Alarm** (e.g. skip tomorrow morning).
+   - **Dial 8:** Speak full system status (IP, Signal).
 
 ## 📂 Content Management (SD Card)
 Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` script automatically creates the required structure:
