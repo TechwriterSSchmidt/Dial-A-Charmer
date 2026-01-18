@@ -890,6 +890,11 @@ void onDial(int number) {
     }
 }
 
+// Forward Declarations
+String getSystemFileByIndex(int index);
+void playDialTone();
+void stopDialTone();
+
 void onHook(bool offHook) {
     Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
     
