@@ -20,11 +20,6 @@
 // Vibration Motor
 #define CONF_PIN_VIB_MOTOR  2
 
-// GNSS (U-Blox M10)
-#define CONF_GPS_RX         34  // Input Only
-#define CONF_GPS_TX         -1  // Disabled
-#define CONF_GPS_BAUD       9600
-
 // Battery Monitoring
 #define CONF_PIN_BATTERY    35
 

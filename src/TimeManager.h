@@ -2,19 +2,14 @@
 #define TIMEMANAGER_H
 
 #include <Arduino.h>
-#include <TinyGPS++.h>
 #include <time.h>
 #include "config.h"
 #include "Settings.h"
-
-// Forward declaration of Serial for GPS
-// We assume Serial2 is used as per config.
 
 class TimeManager {
 public:
     enum TimeSource {
         NONE,
-        GPS,
         NTP
     };
 
@@ -66,7 +61,6 @@ public:
     bool checkSnoozeExpired(); // Added
 
 private:
-    TinyGPSPlus _gps;
     TimeSource _currentSource = NONE;
     
     // Alarm

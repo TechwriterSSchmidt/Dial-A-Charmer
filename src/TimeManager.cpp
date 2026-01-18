@@ -11,21 +11,13 @@ const long  gmtOffset_sec = 0; // We handle timezone via offset addition manuall
 // configTime takes seconds offset.
 
 void TimeManager::begin() {
-    // GPS Init
-    Serial2.begin(CONF_GPS_BAUD, SERIAL_8N1, CONF_GPS_RX, CONF_GPS_TX);
-    
     // NTP Init (Config but don't force sync yet)
     // We use settings for timezone.
     configTime(settings.getTimezoneOffset() * 3600, 0, ntpServer);
 }
 
 void TimeManager::loop() {
-    // 1. GPS Parsing
-    while (Serial2.available() > 0) {
-        _gps.encode(Serial2.read());
-    }
-
-    // 2. NTP Sync Check (If WiFi is there)
+    // 1. NTP Sync Check (If WiFi is there)
     if (WiFi.status() == WL_CONNECTED) {
         // configTime keeps syncing in background, we just check if we have time
         // Use non-blocking overload (tm struct, ms timeout)
@@ -33,19 +25,9 @@ void TimeManager::loop() {
         if (::getLocalTime(&timeinfo, 0)) {
             _currentSource = NTP;
         }
-    } else {
-        // Fallback to GPS if NTP invalid? 
-        // Or if we once had NTP, stick to internal RTC?
-        // ESP32 internal RTC is decent.
-        // If we have GPS fix, we can prefer that over drifting RTC if no WiFi?
-        if (_gps.time.isValid() && _gps.date.isValid()) {
-             // We could set system time from GPS here if we wanted perfect sync
-             // For now, getLocalTime() abstraction handles priority
-             if (_currentSource != NTP) _currentSource = GPS;
-        }
-    }
+    } 
 
-    // 3. Logic Update (Reset Alarm Trigger at midnight, etc)
+    // 2. Logic Update (Reset Alarm Trigger at midnight, etc)
     // handled in checkAlarmTrigger
 }
 
@@ -64,21 +46,6 @@ TimeManager::DateTime TimeManager::getLocalTime() {
         dt.second = timeinfo.tm_sec;
         dt.rawTime = mktime(&timeinfo);
         dt.valid = true;
-        return dt;
-    }
-    
-    // Fallback GPS
-    if (_gps.time.isValid()) {
-        dt.hour = _gps.time.hour() + settings.getTimezoneOffset();
-        dt.minute = _gps.time.minute();
-        dt.second = _gps.time.second();
-        // Handle overflow for simple timezone math
-        if (dt.hour >= 24) dt.hour -= 24;
-        if (dt.hour < 0) dt.hour += 24;
-        
-        dt.valid = true;
-        // Date might be wrong if we crossed midnight on timezone... 
-        // simplified validation
         return dt;
     }
 

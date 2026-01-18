@@ -984,24 +984,7 @@ bool isUsbPowerConnected() {
     return true; // Assume USB Power -> No Deep Sleep
 }
 
-void setGpsStandby() {
-    Serial.println("GPS: Entering Standby (UBX-RXM-PMREQ)");
-    // UBX-RXM-PMREQ (Backup Mode, Infinite Duration)
-    uint8_t packet[] = {
-        0xB5, 0x62, 0x02, 0x41, 0x08, 0x00, 
-        0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
-        0x4D, 0x3B
-    };
-    Serial2.write(packet, sizeof(packet));
-    delay(100); // Give it time to sleep
-}
 
-void wakeGps() {
-    Serial.println("GPS: Waking Up...");
-    // Send dummy bytes to wake UART
-    Serial2.write(0xFF);
-    delay(100);
-}
 
 unsigned long lastActivityTime = 0;
 
@@ -1114,10 +1097,7 @@ void setup() {
     
     webManager.begin();
     
-    // If we woke from Deep Sleep, the GPS is likely in Backup Mode. Wake it up!
-    if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-        wakeGps();
-    }
+
     
     Serial.println("Dial-A-Charmer Started (PCM5100A + MAX9814)");
     
@@ -1297,8 +1277,7 @@ void loop() {
         if (millis() - lastActivityTime > CONF_SLEEP_TIMEOUT_MS) {
             Serial.println("zzZ Entering Smart Deep Sleep (Preserving GPS) zzZ");
             
-            // 1. Send GPS to Sleep (Backup Mode)
-            setGpsStandby();
+
             
             // 2. Configure Wakeup
             // We wake when the hook is lifted.
