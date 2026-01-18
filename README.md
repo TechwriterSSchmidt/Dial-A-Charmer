@@ -66,8 +66,8 @@ The device differentiates between two main usage modes based on the handset stat
 *   **Trigger:** Lift the handset (Off-Hook).
     *   **Special Trigger:** If a **Timer** is running, lifting the handset immediately cancels it (confirmed via Base Speaker).
 *   **Behavior:** The phone "wakes up" with a **Dial Tone**.
-*   **Action (Dialing):** Input numbers to request content:
-    *   **Dial `1`-`4`**: Switch to specific Persona Playlist (Trump, Badran, Yoda, Neutral).
+*   **Action (Dialing):** Input numbers to request content (numbers be changed via webinterface):
+    *   **Dial `1`-`4`**: Switch to specific Persona Playlist.
     *   **Dial `0`**: Play next random track.
     *   **Dial `8`**: Speak System IP & Status.
     *   **Dial `9`**: Voice Menu Instructions.
