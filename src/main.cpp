@@ -816,6 +816,67 @@ void handleDialedNumber(String numberStr) {
     }
 }
 
+// Helper to speak Timer/Alarm confirmation
+void speakTimerConfirm(int minutes) {
+    // 1. "Timer set to:"
+    setAudioOutput(OUT_SPEAKER); // Force Speaker
+    
+    // Check Language
+    String lang = settings.getLanguage(); // "de" or "en"
+    if (lang == "de") playSound("/system/timer_confirm_de.mp3", false);
+    else playSound("/system/timer_confirm_en.mp3", false);
+
+    // Wait for playback? playSound is non-blocking usually, but we need sequence.
+    // Assuming playSound just queues or starts. If we call connecttoFS inside playSound, it stops previous.
+    // We need a queue or simple delay loop. Since this is a dedicated action, blocking loop is acceptable.
+    while(audio->isRunning()) { audio->loop(); delay(10); }
+
+    // 2. Speak Number
+    // We need audio files for numbers 1..60? 
+    // Or we use TTS? We don't have online TTS guaranteed. 
+    // We should use the "Time" folder logic? The `Time` folder has 0..59.mp3 for minutes!
+    String numFile = "/time/" + lang + "/" + String(minutes) + ".mp3";
+    if (SD.exists(numFile)) {
+         audio->connecttoFS(SD, numFile.c_str());
+         while(audio->isRunning()) { audio->loop(); delay(10); }
+    }
+
+    // 3. "Minutes" suffix? (Optional, if "Timer set for" is clear enough)
+    // Let's keep it simple. "Timer set for: [Number]" is sufficient context.
+}
+
+void speakAlarmConfirm(int h, int m) {
+    setAudioOutput(OUT_SPEAKER);
+    String lang = settings.getLanguage();
+    
+    if (lang == "de") playSound("/system/alarm_confirm_de.mp3", false);
+    else playSound("/system/alarm_confirm_en.mp3", false);
+    while(audio->isRunning()) { audio->loop(); delay(10); }
+
+    // Hour
+    String hFile = "/time/" + lang + "/" + String(h) + ".mp3";
+    if (SD.exists(hFile)) {
+         audio->connecttoFS(SD, hFile.c_str());
+         while(audio->isRunning()) { audio->loop(); delay(10); }
+    }
+    
+    // "Uhr" / Divider
+    // In German logic says "14 Uhr 30", English "14 30".
+    // TimeManager has special logic for time speaking, maybe reuse?
+    // reuse `speakTime()` logic? It's coupled to output?
+    // Let's just play minutes if > 0.
+    
+    if (m > 0 || lang == "en") { // English might say "14 hundred"? or just "14"
+         String mFile = "/time/" + lang + "/" + String(m) + ".mp3";
+         // Low numbers usually need padding handling in file names? 
+         // Check Time folder structure assumption. Usually 0.mp3..59.mp3.
+         if (SD.exists(mFile)) {
+             audio->connecttoFS(SD, mFile.c_str());
+             while(audio->isRunning()) { audio->loop(); delay(10); }
+         }
+    }
+}
+
 void processBufNumber(String numberStr) {
     Serial.printf("Processing Buffered Input: %s\n", numberStr.c_str());
 
@@ -830,8 +891,7 @@ void processBufNumber(String numberStr) {
                 Serial.printf("ALARM SET TO: %02d:%02d\n", h, m);
                 
                 // Audio Feedback
-                setAudioOutput(OUT_HANDSET);
-                playSound("/system/timer_set.mp3", false); 
+                speakAlarmConfirm(h, m);
             } else {
                 Serial.println("Invalid Time Format");
                 playSound("/system/error_tone.wav", false);
@@ -854,7 +914,9 @@ void processBufNumber(String numberStr) {
          if (num > 0 && num <= 120) { // Allow up to 120 minutes
             Serial.printf("Setting Timer for %d minutes\n", num);
             timeManager.setTimer(num);
-            playSound("/system/beep.wav", true); 
+            
+            // Confirm via Speaker
+            speakTimerConfirm(num);
          } else {
             // Unknown
             Serial.println("Invalid Timer Value");
