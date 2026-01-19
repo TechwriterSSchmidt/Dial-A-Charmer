@@ -60,30 +60,32 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 
 ## Hardware Support & Pinout
 
-**Target Board:** Wemos Lolin D32 Pro (ESP32)
+The project supports two primary hardware configurations:
 
-**Audio Architecture (v2):**
-*   **DAC:** PCM5100A (I2S) - Shared Stereo Output.
-    *   **Left Channel:** Handset Earpiece (Low Power).
-    *   **Right Channel:** Base Speaker (Amplified/Loud).
-*   **ADC:** MAX9814 (Analog) - Electret Microphone with Auto Gain Control.
+### Option 1: DIY Standard (Lolin D32 Pro)
+Recommended for custom builds. Uses I2S DAC (PCM5100A) and I2S/Analog Mic (MAX9814).
 
-| Component | Pin Function | GPIO | Notes |
+**Pinout:**
+| Component | Function | GPIO | Notes |
 | :--- | :--- | :--- | :--- |
-| **I2S Audio Out** | BCLK | `GPIO 26` | PCM5100A I2S Bit Clock |
-| (PCM5100A)   | LRC (WS) | `GPIO 25` | PCM5100A Word Select |
-|              | DOUT | `GPIO 27` | ESP32 DOUT -> PCM5100A DIN |
-|              | MCLK | N/A | Generated internally by PCM5100A |
-| **Audio Input**  | ADC | `GPIO 36` | MAX9814 Out -> ESP32 VP/ADC1_CH0 |
-| **I2C Bus**  | SDA | `GPIO 21` | Sensors / Port Expanders (Optional) |
-|              | SCL | `GPIO 22` | |
-| **Controls** | Dial Pulse | `GPIO 5` | Rotary Dial Pulse (Active Low) |
-| | Dial Mode | `GPIO 36` | Detects when dial assumes active position |
-| | Hook Switch | `GPIO 32` | |
-| | Extra Button | `GPIO 33` | |
-| **Output** | Vibration | `GPIO 2` | Haptic Feedback |
-| | LED Data | `GPIO 13` | WS2812B |
-| **Storage** | SD CS | `GPIO 4` | On-board SD Slot |
+| **I2S Audio** | BCLK / LRC / DOUT | `26`, `25`, `27` | PCM5100A DAC |
+| **Audio In** | ADC Mic | `36` | MAX9814 (Analog) |
+| **Controls** | Pulse / Hook / Btn | `5`, `32`, `33` | Rotary Interface |
+| **Peripherals**| LED / Vibrate / I2C | `13`, `2`, `21`/`22` | WS2812, DRV2605, RTC |
+
+### Option 2: All-in-One (Ai-Thinker Audio Kit v2.2)
+Uses the onboard ES8388 Codec. Most peripherals connect via Header P2.
+
+**Pinout (Header P2):**
+| Component | Function | GPIO | Notes |
+| :--- | :--- | :--- | :--- |
+| **Audio** | Codec (I2S/I2C) | *Internal* | ES8388 (Stereo In/Out) |
+| **Controls** | Pulse / Hook / Btn | `5`, `19`, `18` | Connect to Header P2 |
+| **LED** | WS2812 Data | `23` | *Note: Disables Key 4* |
+| **I2C Ext.** | SDA / SCL | `21`, `22` | For RTC module |
+| **SD Card** | SPI | *Internal* | On-board Slot |
+
+*Note: Ensure you select the correct environment (`lolin_d32_pro` or `esp32_audio_kit`) in PlatformIO before flashing.*
 
 ## Accessing the Configuration
 
