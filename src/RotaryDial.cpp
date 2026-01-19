@@ -70,7 +70,6 @@ void RotaryDial::loop() {
     } else {
         // Fallback: Timeout Logic
         if (_dialing && (now - _lastPulseTime > CONF_DIAL_TIMEOUT)) {
-            // ... (Original Logic)
             _dialing = false;
             int digit = _pulseCount;
             if (digit > 9) digit = 0; 
