@@ -148,7 +148,12 @@ void WebManager::begin() {
     });
 
     _server.on("/update", HTTP_POST, [this](){
-            _server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
+            _server.sendHeader("Connection", "close");
+            if (Update.hasError()) {
+                _server.send(500, "text/plain", "FAIL");
+            } else {
+                _server.send(200, "text/html", "<html><head><meta http-equiv='refresh' content='10;url=/'><style>body{background:#111;color:#d4af37;font-family:sans-serif;text-align:center;padding:50px;}</style></head><body><h2>Update Successful</h2><p>Rebooting... Please wait.</p></body></html>");
+            }
             ESP.restart();
         }, [this](){
             HTTPUpload& upload = _server.upload();
@@ -271,6 +276,7 @@ void WebManager::handleRoot() {
         html += "</head><body>";
         
         html += "<h2>" + t_title + "</h2>";
+        html += "<div style='text-align:center; margin-top:-15px; margin-bottom:15px; color:#888; font-family: \"Pompiere\", cursive; font-size:1.2rem;'>" + String(FIRMWARE_VERSION) + "</div>";
         
         html += "<div class='card' style='text-align:center;'>";
         
@@ -297,7 +303,7 @@ void WebManager::handleRoot() {
         html += "</div>";
 
         // Version Footer
-        html += "<div style='text-align:center; padding-top:20px; color:#444; font-size:0.8rem;'>v0.7.1-beta</div>";
+        html += "<div style='text-align:center; padding-top:20px; color:#444; font-size:0.8rem;'>" + String(FIRMWARE_VERSION) + "</div>";
         html += "</body></html>";
 
         _server.send(200, "text/html", html);
@@ -688,7 +694,8 @@ String WebManager::getAdvancedHtml() {
     html += "</div>";
 
     // OTA Update Form
-    html += "<div class='card'><h3>Firmware Update (OTA)</h3>";
+    html += "<div class='card'><h3>Firmware Update</h3>";
+    html += "<p style='margin-bottom:15px;'><a href='https://github.com/TechwriterSSchmidt/Dial-A-Charmer/releases/latest/download/firmware.bin' target='_blank' style='color:#d4af37; text-decoration:underline;'>Download latest firmware.bin</a></p>";
     html += "<form method='POST' action='/update' enctype='multipart/form-data'>";
     html += "<input type='file' name='update' accept='.bin'>";
     html += "<button type='submit' style='background-color:#444; margin-top:10px;'>Start Update</button>";
