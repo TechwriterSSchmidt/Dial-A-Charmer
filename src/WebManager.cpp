@@ -904,7 +904,7 @@ String WebManager::getHelpHtml() {
     String t_audio_btn = isDe ? "Wecker" : "Alarms";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
     String t_conf = isDe ? "Konfiguration" : "Configuration";
-    String t_manual = isDe ? "Bedienungsanleitung" : "User Manual";
+    String t_manual = isDe ? "Anleitung" : "User Manual";
 
     html += "</head><body>";
     html += "<h2>" + t_manual + "</h2>";
@@ -931,16 +931,11 @@ String WebManager::getHelpHtml() {
     // SECTION 3: ALARMS & TIMER
     html += "<div class='card'><h3>3. " + String(isDe ? "Wecker & Timer" : "Alarms & Timer") + "</h3>";
     html += "<ul>";
-    html += "<li><b>Timer (Egg Timer):</b> " + String(isDe ? "H&ouml;rer AUFGELEGT lassen -> Zahl w&auml;hlen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
+    html += "<li><b>Timer (Kurzzeitmesser):</b> " + String(isDe ? "H&ouml;rer AUFGELEGT lassen -> Zahl w&auml;hlen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
     html += "<li><b>" + String(isDe ? "Wecker stellen:" : "Set Alarm:") + "</b> " + String(isDe ? "Extra-Taste HALTEN + 4 Ziffern w&auml;hlen (z.B. 0730 = 07:30 Uhr)." : "HOLD Extra Button + Dial 4 digits (e.g. 0730 = 07:30).") + "</li>";
-    html += "<li><b>Stop Ringing:</b> " + String(isDe ? "H&ouml;rer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
+    html += "<li><b>Timer/Alarm stoppen:</b> " + String(isDe ? "H&ouml;rer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
     html += "<li><b>Snooze:</b> " + String(isDe ? "H&ouml;rer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
     html += "</ul></div>";
-    
-    // SECTION 4: CONFIG
-    html += "<div class='card'><h3>4. " + String(isDe ? "Einstellungen" : "Configuration") + "</h3>";
-    html += "<p>" + String(isDe ? "Verwende das Web-Interface 'Wecker' und 'Konfiguration' Tabs." : "Use the 'Alarms' and 'Configuration' tabs above.") + "</p>";
-    html += "</div>";
     
     html += getFooterHtml(isDe, "help");
     
