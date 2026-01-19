@@ -222,7 +222,8 @@ The system uses specific WAV files in `/system/` for feedback:
 
 ## Future Options
 
-
+1. Voice menu with a dialable number to announce the next alarm.
+2. Option to directly delete alarms that have been set via rotary dial.
 
 ## Maintenance
 

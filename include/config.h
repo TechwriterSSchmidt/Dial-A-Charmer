@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#define FIRMWARE_VERSION "v0.7.2-beta"
+
 // --- Hardware Pins ---
 
 // 1. Audio Output (Via PCM5100A DAC)
