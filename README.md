@@ -183,7 +183,8 @@ The system uses specific WAV files in `/system/` for feedback:
     *   **Personalize:** Add your own MP3 music/compliments to the `persona_XX` folders.
 3.  **Flash Firmware:**
     *   Open project in VS Code with PlatformIO.
-    *   Connect Wemos D32 Pro via USB.
+    *   **Select Environment:** Click the environment icon in the bottom status bar (e.g., `env:lolin_d32_pro` or `env:esp32_audio_kit`) to match your board.
+    *   Connect your ESP32 board via USB.
     *   **Upload Filesystem Image**: This is **REQUIRED** for the new Web UI. Run `PlatformIO: Upload Filesystem Image`.
     *   **Upload Firmware**: Run `The standard PlatformIO Upload` task.
 4.  **Configure:**
