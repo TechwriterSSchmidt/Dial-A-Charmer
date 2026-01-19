@@ -933,8 +933,13 @@ String WebManager::getHelpHtml() {
     html += "<ul>";
     html += "<li><b>Timer (Kurzzeitmesser):</b> " + String(isDe ? "H&ouml;rer AUFGELEGT lassen -> Zahl w&auml;hlen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
     html += "<li><b>" + String(isDe ? "Wecker stellen:" : "Set Alarm:") + "</b> " + String(isDe ? "Extra-Taste HALTEN + 4 Ziffern w&auml;hlen (z.B. 0730 = 07:30 Uhr)." : "HOLD Extra Button + Dial 4 digits (e.g. 0730 = 07:30).") + "</li>";
+<<<<<<< HEAD
     html += "<li><b>Timer/Alarm beenden:</b> " + String(isDe ? "H&ouml;rer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
     html += "<li><b>Schlummermodus:</b> " + String(isDe ? "H&ouml;rer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
+=======
+    html += "<li><b>Timer/Alarm stoppen:</b> " + String(isDe ? "H&ouml;rer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
+    html += "<li><b>Snooze:</b> " + String(isDe ? "H&ouml;rer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
+>>>>>>> 389a839a980af4c206d8256f0d943ded61008ea4
     html += "</ul></div>";
     
     html += getFooterHtml(isDe, "help");
