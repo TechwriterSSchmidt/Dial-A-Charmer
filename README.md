@@ -71,6 +71,7 @@ Recommended for custom builds. Uses I2S DAC (PCM5100A) and I2S/Analog Mic (MAX98
 | **I2S Audio** | BCLK / LRC / DOUT | `26`, `25`, `27` | PCM5100A DAC |
 | **Audio In** | ADC Mic | `36` | MAX9814 (Analog) |
 | **Controls** | Pulse / Hook / Btn | `5`, `32`, `33` | Rotary Interface |
+| **Dial Mode** | State Contact | `34` | Closed = Dialing Active |
 | **Peripherals**| LED / Vibrate / I2C | `13`, `2`, `21`/`22` | WS2812, DRV2605, RTC |
 
 ### Option 2: All-in-One (Ai-Thinker Audio Kit v2.2)
@@ -81,6 +82,7 @@ Uses the onboard ES8388 Codec. Most peripherals connect via Header P2.
 | :--- | :--- | :--- | :--- |
 | **Audio** | Codec (I2S/I2C) | *Internal* | ES8388 (Stereo In/Out) |
 | **Controls** | Pulse / Hook / Btn | `5`, `19`, `18` | Connect to Header P2 |
+| **Dial Mode** | State Contact | `36` | Use Key 1 on Board |
 | **LED** | WS2812 Data | `23` | *Note: Disables Key 4* |
 | **I2C Ext.** | SDA / SCL | `21`, `22` | For RTC module |
 | **SD Card** | SPI | *Internal* | On-board Slot |

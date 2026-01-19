@@ -29,9 +29,9 @@
 
     // Rotary Dial & Inputs - Header P2
     #define CONF_PIN_DIAL_PULSE 5   
+    #define CONF_PIN_DIAL_MODE  36  // Key 1 (Sensor VP) - Dial State Contact
     #define CONF_PIN_HOOK       19  
     #define CONF_PIN_EXTRA_BTN  18  
-    #define CONF_PIN_DIAL_MODE  -1  // Disabled (Not needed)
     #define CONF_DIAL_MODE_ACTIVE_LOW true
 
     // Status LED (WS2812) - Header P2 (GPIO 23 used as Output, ignore Key 4)
@@ -64,9 +64,9 @@
 
     // Rotary Dial & Inputs
     #define CONF_PIN_DIAL_PULSE 5   
+    #define CONF_PIN_DIAL_MODE  34  // Input Only Pin
     #define CONF_PIN_HOOK       32
     #define CONF_PIN_EXTRA_BTN  33
-    #define CONF_PIN_DIAL_MODE  -1
     #define CONF_DIAL_MODE_ACTIVE_LOW true
 
     // Status LED (WS2812)
