@@ -93,6 +93,7 @@ void WebManager::begin() {
     // Try to connect if SSID is set
     if (ssid != "") {
         WiFi.mode(WIFI_STA);
+        WiFi.setHostname("dial-a-charmer");
         Serial.printf("Connecting to WiFi SSID: '%s'", ssid.c_str());
         
         WiFi.begin(ssid.c_str(), pass.c_str());
@@ -115,6 +116,9 @@ void WebManager::begin() {
             if (MDNS.begin("dial-a-charmer")) {
                 Serial.println("mDNS responder started. You can access it via http://dial-a-charmer.local");
                 MDNS.addService("http", "tcp", 80);
+                _mdnsStarted = true;
+            } else {
+                _mdnsStarted = false;
             }
         } else {
             Serial.println("WiFi Connection Failed.");
@@ -232,6 +236,19 @@ void WebManager::loop() {
         }
     }
     _server.handleClient();
+
+    // Keep mDNS alive / recover after WiFi reconnects
+    if (WiFi.status() == WL_CONNECTED) {
+        if (!_mdnsStarted) {
+            if (MDNS.begin("dial-a-charmer")) {
+                Serial.println("mDNS responder restarted.");
+                MDNS.addService("http", "tcp", 80);
+                _mdnsStarted = true;
+            }
+        }
+    } else {
+        _mdnsStarted = false;
+    }
     
     // --- WORKER LOOP ---
     if (_reindexTriggered) {

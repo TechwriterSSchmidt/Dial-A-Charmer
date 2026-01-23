@@ -25,6 +25,7 @@ private:
     
     const uint8_t _dnsPort = CONF_DNS_PORT;
     bool _apMode = false;
+    bool _mdnsStarted = false;
     unsigned long _apEndTime = 0; // Auto-off timer
 
     void handleRoot();

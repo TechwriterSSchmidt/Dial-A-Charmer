@@ -110,6 +110,66 @@ String getStoredIndexPath(int category) {
     return "/playlists/cat_" + String(category) + "_v3.idx";
 }
 
+void ensurePlaylistDir();
+
+int loadProgressFromSD(int category, size_t maxSize) {
+    if (!sdAvailable || maxSize == 0) return 0;
+    String idxPath = getStoredIndexPath(category);
+    if (!SD.exists(idxPath)) return 0;
+    File fIdx = SD.open(idxPath);
+    if (!fIdx) return 0;
+    String idxStr = fIdx.readStringUntil('\n');
+    fIdx.close();
+    int idx = idxStr.toInt();
+    if (idx < 0 || (size_t)idx >= maxSize) return 0;
+    return idx;
+}
+
+void saveVirtualPlaylistToSD(Playlist &pl) {
+    if (!sdAvailable) return;
+    ensurePlaylistDir();
+    String path = getStoredPlaylistPath(0);
+    SD.remove(path);
+    File f = SD.open(path, FILE_WRITE);
+    if (!f) return;
+    for (const auto &ref : pl.virtualTracks) {
+        f.print(ref.cat);
+        f.print(',');
+        f.println(ref.idx);
+    }
+    f.close();
+}
+
+bool loadVirtualPlaylistFromSD(Playlist &pl) {
+    if (!sdAvailable) return false;
+    String path = getStoredPlaylistPath(0);
+    if (!SD.exists(path)) return false;
+    File f = SD.open(path);
+    if (!f) return false;
+
+    pl.virtualTracks.clear();
+    bool invalid = false;
+    while (f.available()) {
+        String line = f.readStringUntil('\n');
+        line.trim();
+        if (line.length() == 0) continue;
+        int comma = line.indexOf(',');
+        if (comma < 0) { invalid = true; break; }
+        int cat = line.substring(0, comma).toInt();
+        int idx = line.substring(comma + 1).toInt();
+        if (cat < 1 || cat > 5 || categories.find(cat) == categories.end()) { invalid = true; break; }
+        if (idx < 0 || (size_t)idx >= categories[cat].tracks.size()) { invalid = true; break; }
+        pl.virtualTracks.push_back({(uint8_t)cat, (uint16_t)idx});
+    }
+    f.close();
+
+    if (invalid || pl.virtualTracks.empty()) {
+        pl.virtualTracks.clear();
+        return false;
+    }
+    return true;
+}
+
 void ensurePlaylistDir() {
     if (!sdAvailable) return;
     if (!SD.exists("/playlists")) SD.mkdir("/playlists");
@@ -339,20 +399,30 @@ void buildPlaylist() {
     mainPlaylist.index = 0;
     
     Serial.println("Building Main Playlist (Virtual)...");
-    
-    // Aggregate References
-    for (int i = 1; i <= 5; i++) {
-        for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
-            mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
+
+    bool loadedVirtual = loadVirtualPlaylistFromSD(mainPlaylist);
+    if (!loadedVirtual) {
+        // Aggregate References
+        for (int i = 1; i <= 5; i++) {
+            for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
+                mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
+            }
         }
-    }
-    
-    if (mainPlaylist.virtualTracks.empty()) {
-        Serial.println("Warning: No tracks found in any category!");
+
+        if (mainPlaylist.virtualTracks.empty()) {
+            Serial.println("Warning: No tracks found in any category!");
+        } else {
+            auto rng = std::default_random_engine(esp_random());
+            std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
+            saveVirtualPlaylistToSD(mainPlaylist);
+            Serial.printf("Built Main Playlist (Virtual Items: %d)\n", mainPlaylist.virtualTracks.size());
+        }
     } else {
-        auto rng = std::default_random_engine(esp_random());
-        std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
-        Serial.printf("Built Main Playlist (Virtual Items: %d)\n", mainPlaylist.virtualTracks.size());
+        Serial.printf("Loaded Main Playlist (Virtual Items: %d)\n", mainPlaylist.virtualTracks.size());
+    }
+
+    if (!mainPlaylist.virtualTracks.empty()) {
+        mainPlaylist.index = loadProgressFromSD(0, mainPlaylist.virtualTracks.size());
     }
 }
 
@@ -387,7 +457,8 @@ String getNextTrack(int category) {
             auto rng = std::default_random_engine(esp_random());
             std::shuffle(target->virtualTracks.begin(), target->virtualTracks.end(), rng);
             target->index = 0;
-            // No SD save for virtual playlist shuffle state currently supported/needed
+            saveVirtualPlaylistToSD(*target);
+            saveProgressToSD(0, 0);
         }
         
         Playlist::TrackRef ref = target->virtualTracks[target->index];
