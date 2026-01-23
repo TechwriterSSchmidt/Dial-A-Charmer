@@ -12,11 +12,12 @@ void PhonebookManager::begin() {
         addEntry("110", "Zeitauskunft", "FUNCTION", "ANNOUNCE_TIME");
         addEntry("0", "Gemini AI", "FUNCTION", "GEMINI_CHAT"); // Assuming ID 0 is generic chat
         
-        // --- Personas / Characters (1-4) ---
-        addEntry("1", "Persona 1 (Donald)", "FUNCTION", "COMPLIMENT_CAT", "1");
-        addEntry("2", "Persona 2 (Jaqueline)", "FUNCTION", "COMPLIMENT_CAT", "2");
-        addEntry("3", "Persona 3 (Yoda)", "FUNCTION", "COMPLIMENT_CAT", "3");
-        addEntry("4", "Persona 4 (Neutral)", "FUNCTION", "COMPLIMENT_CAT", "4");
+        // --- Personas / Characters (1-5) ---
+        addEntry("1", "Persona 1 (Default)", "FUNCTION", "COMPLIMENT_CAT", "1");
+        addEntry("2", "Persona 2 (Joke)", "FUNCTION", "COMPLIMENT_CAT", "2");
+        addEntry("3", "Persona 3 (SciFi)", "FUNCTION", "COMPLIMENT_CAT", "3");
+        addEntry("4", "Persona 4 (Captain)", "FUNCTION", "COMPLIMENT_CAT", "4");
+        addEntry("5", "Persona 5 (Fortune)", "FUNCTION", "COMPLIMENT_CAT", "5");
         
         // --- Admin / System ---
         addEntry("9", "Voice Admin Menu", "FUNCTION", "VOICE_MENU");

@@ -8,3 +8,7 @@ utils/ffmpeg.exe
 utils/ffmpeg.zip
 utils/compliments_split/
 /sd_card_template/
+utils/piper/
+utils/piper_voices/
+utils/*.txt
+*.txt

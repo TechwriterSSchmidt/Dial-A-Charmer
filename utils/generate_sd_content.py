@@ -28,7 +28,8 @@ REQUIRED_DIRS = [
     "persona_01",
     "persona_02",
     "persona_03",
-    "persona_04"
+    "persona_04",
+    "persona_05"
 ]
 
 # --- TTS CONFIGURATION (TEXTS) ---
@@ -116,10 +117,49 @@ def ensure_folder_structure():
             print(f"  + Created time/{lang}/")
 
 def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
-    """Downloads TTS audio from Google Translate."""
+    """
+    Generates TTS audio using local Piper TTS (if available) or Google Translate (fallback).
+    """
     target_path = os.path.join(SD_TEMPLATE_DIR, output_subdir, filename)
     
-    # Skip if exists? No, user requested "neu erzeugt" (re-generate)
+    # 1. Try Piper TTS Local
+    piper_bin = os.path.join(SCRIPT_DIR, "piper", "piper")
+    piper_model = None
+    
+    if lang == 'de':
+        # Thorsten (High Quality German)
+        piper_model = os.path.join(SCRIPT_DIR, "piper_voices", "de_DE-thorsten-medium.onnx")
+    elif lang == 'en':
+        piper_model = os.path.join(SCRIPT_DIR, "piper_voices", "en_US-lessac-medium.onnx")
+        
+    if os.path.exists(piper_bin) and piper_model and os.path.exists(piper_model):
+        try:
+            # Piper output is 16-bit mono WAV by default
+            cmd = [piper_bin, "--model", piper_model, "--output_file", target_path + ".wav"]
+            
+            # Pipe text to stdin
+            process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate(input=text.encode('utf-8'))
+            
+            if process.returncode == 0 and os.path.exists(target_path + ".wav"):
+                # Convert WAV to MP3 using ffmpeg
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", target_path + ".wav", 
+                    "-codec:a", "libmp3lame", "-qscale:a", "2", 
+                    target_path
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                
+                os.remove(target_path + ".wav") # Cleanup
+                print(f".", end="", flush=True)
+                return
+            else:
+                print(f"\n[Piper Error] {stderr.decode()}")
+                
+        except Exception as e:
+            print(f"\n[Piper Exception] {e}")
+
+
+    # 2. Fallback to Google TTS
     # print(f"  TTS ({lang}): '{text}' -> {filename}")
     
     base_url = "https://translate.google.com/translate_tts"
@@ -138,14 +178,15 @@ def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
         
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         
-        with urllib.request.urlopen(req, context=ctx) as response:
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
             data = response.read()
             with open(target_path, 'wb') as f:
                 f.write(data)
         
-        time.sleep(0.1) # Rate limit politeness
+        print(f".", end="", flush=True) # Progress indicator
+        time.sleep(0.5) # Rate limit politeness
     except Exception as e:
-        print(f"  [ERROR] TTS Failed for '{filename}': {e}")
+        print(f"\n  [ERROR] TTS Failed for '{filename}': {e}")
 
 def save_wav(filename, samples, output_subdir="system"):
     """Saves a list of samples/integers to a WAV file."""
@@ -497,17 +538,39 @@ def download_fonts():
         if not os.path.exists(path):
             print(f"  Downloading {fname}...")
             try:
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                
-                with urllib.request.urlopen(url, context=ctx) as r, open(path, 'wb') as f:
-                    f.write(r.read())
+                subprocess.run(["curl", "-L", "-o", path, url], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 print("    Done.")
             except Exception as e:
                 print(f"    [ERR] Failed to download font: {e}")
         else:
             print(f"  {fname} already exists.")
+
+def generate_fortune_mp3s():
+    """Reads fortune_examples.txt and generates 50 random MP3s for Persona 5"""
+    text_file = os.path.join(SCRIPT_DIR, "fortune_examples.txt")
+    output_dir = os.path.join(SD_TEMPLATE_DIR, "persona_05")
+    
+    if not os.path.exists(text_file):
+        print(f"Skipping Fortune Gen: {text_file} not found.")
+        return
+
+    print("Generating Fortune Cookies (MP3)...")
+    
+    with open(text_file, "r", encoding="utf-8") as f:
+        lines = [l.strip() for l in f if len(l.strip()) > 5]
+    
+    # Pick 50 random quotes to not overload the API/Folder
+    selected = random.sample(lines, min(50, len(lines)))
+    
+    for i, text in enumerate(selected):
+        filename = f"fortune_{i+1:03d}.mp3"
+        # We use German for Fortunes as requested
+        # Using generate_tts_mp3, specifying subdir relative to SD_TEMPLATE_DIR
+        generate_tts_mp3(text, filename, "de", "persona_05")
+    
+    # Also create name.txt for automatic phonebook naming
+    with open(os.path.join(output_dir, "name.txt"), "w") as f:
+        f.write("System: Fortune Cookie")
 
 # --- MAIN EXECUTION ---
 
@@ -526,6 +589,9 @@ if __name__ == "__main__":
     make_startup_music()   # Startup pad
     
     download_fonts()       # Added Fonts
+
+    generate_fortune_mp3s() # Added Fortune Cookies
     
     print("\n=== GENERATION COMPLETE ===")
     print(f"Copy the contents of '{SD_TEMPLATE_DIR}' to your SD Card.")
+

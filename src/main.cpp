@@ -222,7 +222,7 @@ void handlePersonaScan() {
     // Process a chunk of work
     // State 0: Open Dir if needed
     if (!bgScanDir) {
-            if (bgScanPersonaIndex > 4) {
+            if (bgScanPersonaIndex > 5) {
                 // FINISHED
                 bgScanActive = false;
                 if (bgScanPhonebookChanged) {
@@ -294,8 +294,8 @@ void buildPlaylist() {
     
     Serial.println("Initializing Playlists...");
     
-    // Categories 1-4
-    for (int i = 1; i <= 4; i++) {
+    // Categories 1-5 (5 is Fortune/Offline)
+    for (int i = 1; i <= 5; i++) {
         String subfolder = "persona_0" + String(i);
         
         bool loaded = loadPlaylistFromSD(i, categories[i]);
@@ -326,7 +326,7 @@ void buildPlaylist() {
     Serial.println("Building Main Playlist (Virtual)...");
     
     // Aggregate References
-    for (int i = 1; i <= 4; i++) {
+    for (int i = 1; i <= 5; i++) {
         for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
             mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
         }
@@ -649,10 +649,10 @@ void processTimeQueue() {
 }
 
 void speakCompliment(int number) {
-    // Check if AI is configured (Skip for 0 = Random Mix from SD)
+    // Check if AI is configured (Skip for 0 = Random Mix from SD, Skip 5 = Fortune Offline)
     String key = settings.getGeminiKey();
     
-    if (number != 0 && key.length() > 5) { // Assuming a valid key
+    if (number != 0 && number != 5 && key.length() > 5) { // Assuming a valid key
         // statusLed handled by loop/state
         Serial.println("AI Mode Active");
         
@@ -690,9 +690,9 @@ void speakCompliment(int number) {
     
     // Fallback if no Key or AI failed
     // New Logic: Play from randomized playlist based on number
-    // 0 = Mix, 1..4 = Specific Categories
-    // If number > 4, fallback to Mix (0)
-    int category = (number <= 4) ? number : 0;
+    // 0 = Mix, 1..5 = Specific Categories (5 is Fortune)
+    // If number > 5, fallback to Mix (0)
+    int category = (number <= 5) ? number : 0;
     
     String path = getNextTrack(category);
     

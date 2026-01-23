@@ -56,7 +56,7 @@ void Settings::loadCache() {
         ic.ssid = _prefs.getString("ssid", "");
         ic.pass = _prefs.getString("pass", "");
         ic.geminiKey = _prefs.getString("gemini_key", "");
-        ic.personaName = _prefs.getString("persona", "Sandra"); // Default
+        ic.personaName = _prefs.getString("persona", "Gast"); // Default unpersönlich
         ic.lang = _prefs.getString("lang", "de");
         ic.tzOffset = _prefs.getInt("tz_offset", CONF_DEFAULT_TZ);
         ic.vol = _prefs.getInt("vol", CONF_DEFAULT_VOL);

@@ -13,14 +13,17 @@ String AiManager::getCompliment(int number) {
     String lang = settings.getLanguage();
     String langPrompt = (lang == "de") ? " Deutsch." : " English.";
     String name = settings.getPersonaName();
+    
+    // Fallback if name is generic for better wording
+    String target = (name == "Gast" || name == "Guest") ? "mich" : name;
 
     switch(number) {
-        case 1: prompt = "Generiere ein kurzes, nerdiges Kompliment für " + name + ". Max 2 Sätze." + langPrompt; break;
+        case 1: prompt = "Generiere ein kurzes, nerdiges Kompliment für " + target + ". Max 2 Sätze." + langPrompt; break;
         case 2: prompt = "Erzähle einen kurzen Witz über Computer." + langPrompt; break;
         case 3: prompt = "Gib mir eine kurze, inspirierende Weisheit aus der Science Fiction Welt." + langPrompt; break;
-        case 4: prompt = "Beschreibe " + name + " als Kapitänin eines Raumschiffs in 2 Sätzen." + langPrompt; break;
-        case 5: prompt = "Generiere eine kurze Entschuldigung dafür, dass ich (der Computer) noch keinen Kaffee hatte." + langPrompt; break;
-        default: prompt = "Sag etwas nettes zu " + name + ". Kurz." + langPrompt; break;
+        case 4: prompt = "Beschreibe " + target + " als Kapitänin eines Raumschiffs in 2 Sätzen." + langPrompt; break;
+        case 5: prompt = "Generiere einen kurzen, mystischen Glückskeks-Spruch." + langPrompt; break;
+        default: prompt = "Sag etwas nettes zu " + target + ". Kurz." + langPrompt; break;
     }
 
     return callGemini(prompt);
