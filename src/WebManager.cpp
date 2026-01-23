@@ -178,12 +178,17 @@ void WebManager::begin() {
     _server.on("/save", HTTP_POST, [this](){ handleSave(); });
     _server.onNotFound([this](){ handleNotFound(); });
 
-    // --- FONTS FROM SD CARD ---
+    // --- FONTS FROM SD CARD (With Caching) ---
     _server.on("/fonts/ZenTokyoZoo-Regular.ttf", [this](){
         if(SD.exists(Path::FONT_MAIN)){
+            _server.sendHeader("Cache-Control", "max-age=604800"); // Cache for 7 days
             File f = SD.open(Path::FONT_MAIN, "r");
-            _server.streamFile(f, "font/ttf");
-            f.close();
+            if (f) {
+                _server.streamFile(f, "font/ttf");
+                f.close();
+            } else {
+                _server.send(500, "text/plain", "File Open Error");
+            }
         } else {
             _server.send(404, "text/plain", "Font Missing");
         }
@@ -191,9 +196,14 @@ void WebManager::begin() {
 
     _server.on("/fonts/Pompiere-Regular.ttf", [this](){
         if(SD.exists(Path::FONT_SEC)){
+            _server.sendHeader("Cache-Control", "max-age=604800"); // Cache for 7 days
             File f = SD.open(Path::FONT_SEC, "r");
-            _server.streamFile(f, "font/ttf");
-            f.close();
+            if (f) {
+                _server.streamFile(f, "font/ttf");
+                f.close();
+            } else {
+                _server.send(500, "text/plain", "File Open Error");
+            }
         } else {
             _server.send(404, "text/plain", "Font Missing");
         }
