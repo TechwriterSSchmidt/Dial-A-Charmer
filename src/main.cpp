@@ -26,6 +26,13 @@
 #include "AiManager.h"   
 #include "PhonebookManager.h"
 
+#if HAS_ES8388_CODEC
+#include <es8388.h>
+es8388 codec;
+// Default Output: Headphone (L+R)
+es_dac_output_t currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT1 | DAC_OUTPUT_ROUT1); 
+#endif
+
 // --- Objects ---
 Audio *audio = nullptr; // Pointer managed object (initialized in Task)
 volatile bool isAudioBusy = false; // Thread-safe flag
@@ -36,7 +43,7 @@ LedManager ledManager(CONF_PIN_LED);
 // --- AUDIO MULTITHREADING SETUP ---
 QueueHandle_t audioQueue;
 
-enum AudioCmdType { CMD_PLAY, CMD_STOP, CMD_VOL, CMD_OUT, CMD_CONNECT_SPEECH, CMD_LOOP };
+enum AudioCmdType { CMD_PLAY, CMD_STOP, CMD_VOL, CMD_OUT, CMD_CONNECT_SPEECH };
 struct AudioCmd {
     AudioCmdType type;
     char path[128]; // Filename or URL
@@ -280,8 +287,6 @@ void handlePersonaScan() {
 }
 
 void buildPlaylist() {
-    // Initial Scan for Names - REMOVED (Moved to Background Task)
-    // updatePersonaNamesFromSD();
 
     categories.clear();
     mainPlaylist.tracks.clear();
@@ -434,11 +439,32 @@ void audioTaskCode(void * parameter) {
                     break;
                 case CMD_VOL:
                     audio->setVolume(cmd.value);
+                    #if HAS_ES8388_CODEC
+                        // Update Codec Volume (Map 0-21 internal gain to 0-100 hardware gain)
+                        {
+                            int hwVol = ::map(cmd.value, 0, 21, 0, 100);
+                            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, hwVol);
+                        }
+                    #endif
                     break;
-                case CMD_LOOP:
-                    audio->setFileLoop(cmd.value > 0);
-                    break;
+
                 case CMD_OUT:
+                    #if HAS_ES8388_CODEC
+                        // ES8388 Hardware Routing
+                        if (cmd.value == 2) { 
+                            // Speaker Mode
+                            currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT2);
+                            int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 100);
+                            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
+                        } else {
+                            // Handset Mode
+                            currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT1 | DAC_OUTPUT_ROUT1);
+                            int vol = ::map(settings.getVolume(), 0, 42, 0, 100);
+                            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
+                        }
+                    #endif
+
+                    // Software Balance / Gain (Legacy support & Fine tuning)
                     if (cmd.value == 2) { 
                         audio->setBalance(16); // Right (Speaker)
                         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
@@ -484,11 +510,6 @@ void playSound(String filename, bool useSpeaker = false) {
 }
 
 #include <driver/adc.h> // Include Legacy ADC driver
-
-// Check Battery Voltage (Lolin D32 Pro: Divider 100k/100k on IO35)
-bool checkBattery() {
-    return true; // DISABLED due to I2S ADC Conflict
-}
 
 // --- Time Speaking Logic ---
 enum TimeSpeakState { 
@@ -720,7 +741,6 @@ void startAlarm(bool isTimer) {
 void stopAlarm() {
     isAlarmRinging = false;
     isTimerRinging = false;
-    digitalWrite(CONF_PIN_VIB_MOTOR, LOW); 
     
     // Clear Queue to prevent "ghost words" after alarm stops
     clearSpeechQueue();
@@ -757,9 +777,7 @@ void handleAlarmLogic() {
     if (!isAlarmRinging) return;
     
     unsigned long duration = millis() - ringingStartTime;
-    // Vibration Pattern
-    bool vibOn = (duration % 1000) < 500;
-    digitalWrite(CONF_PIN_VIB_MOTOR, vibOn ? HIGH : LOW);
+    // Vibration Pattern Removed
     
     // Volume Ramp
     int maxVol = settings.getBaseVolume();
@@ -1132,19 +1150,10 @@ void onHook(bool offHook) {
              return; 
         }
         
-        // --- Battery Check ---
-        if (!checkBattery()) {
-            Serial.println("Warn: Battery Low!");
-            playSound("/system/battery_crit.mp3", false);
-            return; 
-        }
-        
         // NEW Standard Behavior: Play Dial Tone
         Serial.println("OFF HOOK -> Playing Dial Tone");
         playDialTone();
 
-        // Automatic Surprise Mix on Pickup - REMOVED for Realism
-        // speakCompliment(0); 
     } else {
         // ON HOOK (Hung Up)
         
@@ -1153,7 +1162,6 @@ void onHook(bool offHook) {
         
         // Reset Busy State and Stop Loop
         isLineBusy = false;
-        sendAudioCmd(CMD_LOOP, NULL, 0);
 
         // Ensure Tone is stopped
         stopDialTone();
@@ -1247,9 +1255,6 @@ void playDialTone() {
 
     Serial.println("Starting Dial Tone: " + dt);
     
-    // Ensure loop mode is ON for dial tone
-    sendAudioCmd(CMD_LOOP, NULL, 1);
-    
     setAudioOutput(OUT_HANDSET);
     playSound(dt, false); // false = Handset
     isDialTonePlaying = true;
@@ -1261,7 +1266,6 @@ void playDialTone() {
 void stopDialTone() {
     if (isDialTonePlaying) {
         sendAudioCmd(CMD_STOP, NULL, 0);
-        sendAudioCmd(CMD_LOOP, NULL, 0);
         isDialTonePlaying = false;
         Serial.println("Dial Tone Stopped.");
     }
@@ -1308,8 +1312,27 @@ void setup() {
     
     // --- Hardware Init ---
     
+    #if HAS_ES8388_CODEC
+        Serial.println("Initializing ES8388 Codec...");
+        Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
+        if(!codec.begin(&Wire)){
+            Serial.println("ES8388 Init Failed!");
+        } else {
+            Serial.println("ES8388 Init Success");
+            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, 50);
+        }
+    #endif
+
     // 1. Init SD 
-    if(!SD.begin(CONF_PIN_SD_CS)){
+    #ifdef BOARD_AI_THINKER_AUDIO_KIT
+        // Correct SPI setup for Audio Kit v2.2 (HSPI)
+        // SCK=14, MISO=2, MOSI=15, CS=13
+        SPI.begin(14, 2, 15, 13); 
+        if(!SD.begin(13)){
+    #else
+        // Standard VSPI (Lolin D32 Pro default)
+        if(!SD.begin(CONF_PIN_SD_CS)){
+    #endif
         Serial.println("SD Card Mount Failed (No Card?)");
         ledManager.setMode(LedManager::SOS);
         sdAvailable = false;
@@ -1358,10 +1381,6 @@ void setup() {
     
     Serial.println("Dial-A-Charmer Started (PCM5100A + MAX9814)");
     
-    // Init Motor
-    pinMode(CONF_PIN_VIB_MOTOR, OUTPUT);
-    digitalWrite(CONF_PIN_VIB_MOTOR, LOW);
-    
     // Initial Beep
     setAudioOutput(OUT_HANDSET);
     playSound("/system/beep.wav", false); // Speaker
@@ -1373,14 +1392,6 @@ void setup() {
 void loop() {
     // Reset Watchdog
     esp_task_wdt_reset();
-
-    /* 
-    static unsigned long lastLoopDebug = 0;
-    if(millis() - lastLoopDebug > 5000) {
-        lastLoopDebug = millis();
-        // Serial.printf("[LOOP] running... AudioRun: %d, FreeHeap: %u\n", (audio?audio->isRunning():0), ESP.getFreeHeap());
-    }
-    */
 
     // if(audio) audio->loop(); // Handled by AudioTask
     webManager.loop();
@@ -1409,7 +1420,6 @@ void loop() {
                      // Play Busy Signal Loop
                      setAudioOutput(OUT_HANDSET);
                      playSound("/system/busy_tone.wav", false);
-                     sendAudioCmd(CMD_LOOP, NULL, 1);
                  }
              }
         }

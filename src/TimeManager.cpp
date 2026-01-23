@@ -8,7 +8,17 @@ const char* ntpServer = "pool.ntp.org";
 
 void TimeManager::begin() {
     // 1. Init External RTC
+#ifdef CONF_RTC_USE_WIRE1
+    // Use Secondary I2C Bus (Wire1) for RTC to avoid conflict with Internal Codec (Wire)
+    Wire1.begin(CONF_I2C_SDA, CONF_I2C_SCL);
+    bool rtcFound = rtc.begin(&Wire1);
+#else
+    // Use Default I2C Bus (Wire)
+    // Ensure pins are correct (though 21/22 is default for ESP32, explicit init is safer if main didn't do it)
+    Wire.begin(CONF_I2C_SDA, CONF_I2C_SCL);
     bool rtcFound = rtc.begin();
+#endif
+
     if (!rtcFound) {
         Serial.println("[Time] RTC DS3231 not found. Using internal only.");
     } else {

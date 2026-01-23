@@ -1,5 +1,14 @@
 # Release Notes - Dial-A-Charmer
 
+## v0.7.2-beta (2026-01-19) - "The Golden Master Update"
+- **Hardware Support**:
+    - **Ai-Thinker Audio Kit v2.2**: Full support added including pin mappings for onboard peripherals (ES8388 Codec, SD Slot, Keys).
+- **Core Improvements**:
+    - **Robust Dialing Logic**: Switched rotary input handling to use the secondary "State Contact" (Mode Pin). This eliminates timing-based errors and allows indefinitely pausing while winding the dial.
+    - **Code Cleanup**: Removed deprecated `CMD_LOOP` logic, inactive battery checks, and vibration motor code to streamline the codebase.
+    - **Documentation**: Comprehensive update to README with dual-board pinout tables and simplified feature overview.
+
+
 ## v0.8.0-beta (2026-01-18) - "The Polish & Privacy Update"
 - **Status**: **BETA** (Awaiting Hardware Validation)
 - **Busy Tone Feature**:

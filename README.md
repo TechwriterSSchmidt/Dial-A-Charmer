@@ -27,97 +27,67 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 *   [Release Notes](RELEASE_NOTES.txt)
 *   [License](#license)
 
-## Features
+## Functionality Overview
 
-| Category | Feature | Description |
+### User Interactions
+
+| Function | Action / Trigger | Description |
 | :--- | :--- | :--- |
-| **Timekeeping** | **Atomic Precision** | Syncs time exclusively via **NTP (Internet Time)** over Wi-Fi. |
-| | **Dual Alarm System** | **Single Alarm** (via Rotary Dial) for one-off use + **Repeating Alarm** (via Web) for schedules. |
-| | **Smart Skip** | Dial `91` to skip just the *next* recurring alarm (sleep in!) without canceling the schedule. |
-| | **Kitchen Timer** | Set a countdown using the rotary dial (e.g., dial '12' for a perfect 12 minutes Pizza timer). |
-| **Interaction** | **Compliment Dispenser** | Dial specific numbers to hear compliments from different "personas". |
-| | **AI Assistant** | Integrated **Gemini AI** allows the phone to tell jokes or answer prompts via the Phonebook. |
-| | **Multi-Language** | Supports **German** and **English** for Voice, System prompts, and Web Interface. |
-| | **Half-Duplex Audio** | Intelligent echo-cancellation ensures AI prompts aren't interrupted by their own output. |
-| | **Refined Logic** | **Interrupt-friendly**: Hang up or press the button at any time to instantly stop current speech or music playback. |
-| **System** | **Zero-Install Web App** | Modern **Single-Page-Application (SPA)** served directly from the device (requires SPIFFS). |
-| | **System Watchdog** | Integrated Hardware Watchdog auto-resets the device if it freezes (>20s). |
-| | **Smart Deep Sleep** | Device sleeps when idle and wakes up automatically for the next alarm (or when the receiver is lifted). |
-| | **Audio Engine V2** | **Multithreaded** audio core for stutter-free playback even during heavy WiFi traffic. |
-| | **Reliability** | **RTC & NVS Support** ensures alarms survive reboots and power outages. Fallback Tones for missing SD files. |
-| | **OTA Updates** | Update firmware wirelessly via the Web Interface. |
-| | **Captive Portal** | Wi-Fi hotspot 'DialACharmer' for simple initial setup. |
+| **Kitchen Timer** | **Receiver On Hook** → Dial `1`-`120` | Sets a countdown timer in minutes. Phone rings when time expires. |
+| **Set One-Time Alarm** | **Receiver On Hook** → Hold Button + Dial `HHMM` | Sets a single priority alarm (e.g., dial `0730` for 7:30 AM). |
+| **Delete Alarm** | **Receiver On Hook** → Hold Button + Lift Receiver | Deletes the manual alarm or cancels a running timer. |
+| **Access Point** | **Receiver On Hook** → Hold Button (10s) | Activates configuration hotspot `Dial-A-Charmer` (Password: none). |
+| **Play Personnel** | **Receiver Lifted** → Dial `1`-`4` | Plays audio content from specific categories (Personas). |
+| **Surprise Mix** | **Receiver Lifted** → Dial `0` | Plays a random track from your collection or AI-generated content. |
+| **System Status** | **Receiver Lifted** → Dial `8` | Announces IP address and WiFi signal strength. |
+| **Voice Menu** | **Receiver Lifted** → Dial `9` | Plays spoken instructions for system codes. |
+| **Toggle Alarms** | **Receiver Lifted** → Dial `90` | Enables or disables all alarms globally. |
+| **Skip Next Alarm** | **Receiver Lifted** → Dial `91` | Skips only the next scheduled recurring alarm. |
+| **Stop Ringing** | **Ringing** → Lift Receiver, then Hang Up | Stops the alarm or timer alert. |
+| **Snooze** | **Ringing** → Lift Receiver (Keep Off Hook) | Snoozes the alarm for the configured duration (default: 9 min). |
+| **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
 
-## Operational Logic
+### System Capabilities
 
-The device differentiates between two main usage modes based on the handset state:
-
-### 1. Idle Mode (Handset On-Hook)
-*   **State:** The phone is waiting on the cradle.
-*   **Action (Dialing):** Rotating the dial sets the **Kitchen Timer**.
-    *   Dial `5` -> Sets 5 minute timer.
-    *   Lift the handset shortly off the cradle or dial another number to reset.
-*   **Action (Set Single Alarm):** Hold the extra button down while dialing 4 digits.
-    *   Dial `0730` (while holding button) -> Sets alarm for 07:30.
-    *   This alarm has **Priority** and rings once, then clears itself.
-*   **Action (Cancel Single Alarm):** Press and **Hold** the extra button, then **Lift** the handset.
-    *   Voice confirmation ("Alarm deleted") confirms the deletion of the manual alarm.
-
-### 2. Active Mode (Handset Lifted)
-*   **Trigger:** Lift the handset (Off-Hook).
-    *   **Special Trigger:** If a **Timer** is running, lifting the handset immediately cancels it (confirmed via Base Speaker).
-*   **Behavior:** The phone "wakes up" with a **Dial Tone**.
-*   **Timeout / Busy Signal:** Use the dial within **5 seconds**. If no action is taken, the system assumes an error and plays a **Busy Tone**. You must hang up and lift again to reset. (Exception: In Snooze mode, the line remains silent).
-*   **Action (Dialing):** Input numbers to request content (numbers be changed via webinterface):
-    *   **Dial `1`-`4`**: Switch to specific Persona Playlist.
-    *   **Dial `0`**: Play next random track.
-    *   **Dial `8`**: Speak System IP & Status.
-    *   **Dial `9`**: Voice Menu Instructions.
-    *   **Dial `90`**: Toggle **ALL** Alarms (On/Off).
-    *   **Dial `91`**: Toggle **Skip Next Repeating Alarm**.
-
-### 3. Ringing Mode (Alarm/Timer)
-*   **Trigger:** Countdown expires or Alarm time is reached.
-*   **Behavior:** Ringtones play, Vibration motor activates, LED flashes.
-*   **Stop:** Lift the handset and hang up again to stop the ringing.
-*   **Snooze:** Lift the handset but **do not** hang up. The alarm snoozes for the configured duration (0-20 min).
-
-### 4. LED Signaling (Visual Interface)
-The device communicates distinct states via the integrated WS2812 LED using organic, vintage-style animations:
-
-*   **Boot / Connecting:** Breathing Slow (Blue/Teal & Gold Mix).
-*   **Idle / Ready:** Vintage Filament Glow (Flickering Warm Orange/Gold).
-*   **Alarm Clock (Ringing):** Pulsing Warm White.
-*   **Timer (Alert):** Fast Pulsing Red (Panic Mode).
-*   **Snooze Mode:** Solid Warm White (Steady Glow).
-*   **Error / Missing SD:** SOS Pattern (Red).
+| Capability | Description |
+| :--- | :--- |
+| **Timekeeping** | Syncs exclusively via **NTP (Internet Time)** for atomic precision. |
+| **Smart Deep Sleep** | Automatically sleeps when idle and wakes for alarms or receiver activity. |
+| **Watchdog** | Hardware watchdog guards against freezes (>20s). |
+| **Audio Engine** | Multithreaded core supports stutter-free playback and half-duplex echo cancellation. |
+| **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
+| **OTA Updates** | Firmware can be updated wirelessly via the Web Interface. |
 
 ## Hardware Support & Pinout
 
-**Target Board:** Wemos Lolin D32 Pro (ESP32)
+The project supports two primary hardware configurations:
 
-**Audio Architecture (v2):**
-*   **DAC:** PCM5100A (I2S) - Shared Stereo Output.
-    *   **Left Channel:** Handset Earpiece (Low Power).
-    *   **Right Channel:** Base Speaker (Amplified/Loud).
-*   **ADC:** MAX9814 (Analog) - Electret Microphone with Auto Gain Control.
+### Option 1: DIY Standard (Lolin D32 Pro)
+Recommended for custom builds. Uses I2S DAC (PCM5100A) and I2S/Analog Mic (MAX9814).
 
-| Component | Pin Function | GPIO | Notes |
+**Pinout:**
+| Component | Function | GPIO | Notes |
 | :--- | :--- | :--- | :--- |
-| **I2S Audio Out** | BCLK | `GPIO 26` | PCM5100A I2S Bit Clock |
-| (PCM5100A)   | LRC (WS) | `GPIO 25` | PCM5100A Word Select |
-|              | DOUT | `GPIO 27` | ESP32 DOUT -> PCM5100A DIN |
-|              | MCLK | N/A | Generated internally by PCM5100A |
-| **Audio Input**  | ADC | `GPIO 36` | MAX9814 Out -> ESP32 VP/ADC1_CH0 |
-| **I2C Bus**  | SDA | `GPIO 21` | Sensors / Port Expanders (Optional) |
-|              | SCL | `GPIO 22` | |
-| **Controls** | Dial Pulse | `GPIO 5` | Rotary Dial Pulse (Active Low) |
-| | Dial Mode | `GPIO 36` | Detects when dial assumes active position |
-| | Hook Switch | `GPIO 32` | |
-| | Extra Button | `GPIO 33` | |
-| **Output** | Vibration | `GPIO 2` | Haptic Feedback |
-| | LED Data | `GPIO 13` | WS2812B |
-| **Storage** | SD CS | `GPIO 4` | On-board SD Slot |
+| **I2S Audio** | BCLK / LRC / DOUT | `26`, `25`, `27` | PCM5100A DAC |
+| **Audio In** | ADC Mic | `36` | MAX9814 (Analog) |
+| **Controls** | Pulse / Hook / Btn | `5`, `32`, `33` | Rotary Interface |
+| **Dial Mode** | State Contact | `34` | Closed = Dialing Active |
+| **Peripherals**| LED / Vibrate / I2C | `13`, `2`, `21`/`22` | WS2812, DRV2605, RTC |
+
+### Option 2: All-in-One (Ai-Thinker Audio Kit v2.2)
+Uses the onboard ES8388 Codec. Most peripherals connect via Header P2.
+
+**Pinout (Header P2):**
+| Component | Function | GPIO | Notes |
+| :--- | :--- | :--- | :--- |
+| **Audio** | Codec (I2S/I2C) | *Internal* | ES8388 (Stereo In/Out) |
+| **Controls** | Pulse / Hook / Btn | `5`, `19`, `18` | Connect to Header P2 |
+| **Dial Mode** | State Contact | `36` | Use Key 1 on Board |
+| **LED** | WS2812 Data | `23` | *Note: Disables Key 4* |
+| **I2C Ext.** | SDA / SCL | `21`, `22` | For RTC module |
+| **SD Card** | SPI | *Internal* | On-board Slot |
+
+*Note: Ensure you select the correct environment (`lolin_d32_pro` or `esp32_audio_kit`) in PlatformIO before flashing.*
 
 ## Accessing the Configuration
 
@@ -213,7 +183,8 @@ The system uses specific WAV files in `/system/` for feedback:
     *   **Personalize:** Add your own MP3 music/compliments to the `persona_XX` folders.
 3.  **Flash Firmware:**
     *   Open project in VS Code with PlatformIO.
-    *   Connect Wemos D32 Pro via USB.
+    *   **Select Environment:** Click the environment icon in the bottom status bar (e.g., `env:lolin_d32_pro` or `env:esp32_audio_kit`) to match your board.
+    *   Connect your ESP32 board via USB.
     *   **Upload Filesystem Image**: This is **REQUIRED** for the new Web UI. Run `PlatformIO: Upload Filesystem Image`.
     *   **Upload Firmware**: Run `The standard PlatformIO Upload` task.
 4.  **Configure:**

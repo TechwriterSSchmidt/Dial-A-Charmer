@@ -43,10 +43,24 @@ void RotaryDial::loop() {
     // 1. Dial Logic
     // If Mode Pin is defined, we use it to determine "Finished" instead of Timeout
     if (_modePin >= 0) {
-        bool modeActive = (digitalRead(_modePin) == (CONF_DIAL_MODE_ACTIVE_LOW ? LOW : HIGH));
+        bool rawMode = (digitalRead(_modePin) == (CONF_DIAL_MODE_ACTIVE_LOW ? LOW : HIGH));
+        
+        // Debounce Mode Pin
+        static bool lastRawMode = false;
+        static bool stableModeActive = false;
+        static unsigned long modeChangeTime = 0;
+
+        if (rawMode != lastRawMode) {
+             modeChangeTime = now;
+             lastRawMode = rawMode;
+        }
+        
+        if ((now - modeChangeTime) > 20) { // 20ms Debounce
+             stableModeActive = rawMode;
+        }
         
         // State Machine via Pin
-        if (modeActive) {
+        if (stableModeActive) {
             _dialing = true;
             // We are dialing, just collect pulses (via ISR)
             // Reset timeout timer just in case we fallback
@@ -70,7 +84,6 @@ void RotaryDial::loop() {
     } else {
         // Fallback: Timeout Logic
         if (_dialing && (now - _lastPulseTime > CONF_DIAL_TIMEOUT)) {
-            // ... (Original Logic)
             _dialing = false;
             int digit = _pulseCount;
             if (digit > 9) digit = 0; 
