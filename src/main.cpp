@@ -257,6 +257,12 @@ void handlePersonaScan() {
         if (!file.isDirectory() && fname.endsWith(".txt") && !fname.startsWith(".") && fname.indexOf("._") == -1) {
             // Found TXT! Update and Move on
             String name = fname.substring(0, fname.length() - 4);
+            
+            // Special handling for fortune.txt to capitalize it
+            if (name.equalsIgnoreCase("fortune")) {
+                name = "Fortune";
+            }
+
             Serial.printf("[BG] Found Name: %s\n", name.c_str());
             
             // Note: findKeyByValueAndParam might be slow if phonebook is huge but it's usually small

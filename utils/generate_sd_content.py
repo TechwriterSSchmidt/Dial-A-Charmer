@@ -569,8 +569,8 @@ def generate_fortune_mp3s():
         # Using generate_tts_mp3, specifying subdir relative to SD_TEMPLATE_DIR
         generate_tts_mp3(text, filename, "de", "persona_05")
     
-    # Also create name.txt for automatic phonebook naming
-    with open(os.path.join(output_dir, "name.txt"), "w") as f:
+    # Also create fortune.txt for automatic phonebook naming (Triggers "Fortune" name in firmware)
+    with open(os.path.join(output_dir, "fortune.txt"), "w") as f:
         f.write("System: Fortune Cookie")
 
 # --- MAIN EXECUTION ---

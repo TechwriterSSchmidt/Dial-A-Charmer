@@ -23,11 +23,11 @@ void PhonebookManager::begin() {
             changed = true;
         } 
         // Migration: Rename old "Persona 5" to "Persona 5 (Fortune)"
-        else if (num == "5" && _entries[num].name == "Persona 5") {
-             Serial.println("Migrating name for Persona 5...");
-             _entries[num].name = name;
-             changed = true;
-        }
+        // else if (num == "5" && _entries[num].name == "Persona 5") {
+        //      Serial.println("Migrating name for Persona 5...");
+        //      _entries[num].name = name;
+        //      changed = true;
+        // }
     };
 
     // --- Core Functions ---
@@ -39,7 +39,7 @@ void PhonebookManager::begin() {
     ensure("2", "Persona 2 (Joke)", "FUNCTION", "COMPLIMENT_CAT", "2");
     ensure("3", "Persona 3 (SciFi)", "FUNCTION", "COMPLIMENT_CAT", "3");
     ensure("4", "Persona 4 (Captain)", "FUNCTION", "COMPLIMENT_CAT", "4");
-    ensure("5", "Persona 5 (Fortune)", "FUNCTION", "COMPLIMENT_CAT", "5");
+    ensure("5", "Persona 5", "FUNCTION", "COMPLIMENT_CAT", "5");
     
     // --- Admin / System ---
     ensure("9", "Voice Admin Menu", "FUNCTION", "VOICE_MENU");
