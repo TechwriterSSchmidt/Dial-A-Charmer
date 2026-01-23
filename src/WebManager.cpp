@@ -728,7 +728,7 @@ void WebManager::handlePhonebook() {
 void WebManager::handlePhonebookApi() {
     if (_server.method() == HTTP_GET) {
         // Return JSON
-        File f = SPIFFS.open(Path::PHONEBOOK, "r");
+        File f = LittleFS.open(Path::PHONEBOOK, "r");
         if (!f) {
             _server.send(500, "application/json", "{\"error\":\"File not found\"}");
             return;

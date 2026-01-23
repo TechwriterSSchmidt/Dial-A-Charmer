@@ -559,8 +559,9 @@ def generate_fortune_mp3s():
     with open(text_file, "r", encoding="utf-8") as f:
         lines = [l.strip() for l in f if len(l.strip()) > 5]
     
-    # Pick 50 random quotes to not overload the API/Folder
-    selected = random.sample(lines, min(50, len(lines)))
+    # Use ALL quotes as requested
+    selected = lines
+    print(f"Generating {len(selected)} Fortune Cookies...")
     
     for i, text in enumerate(selected):
         filename = f"fortune_{i+1:03d}.mp3"
@@ -580,15 +581,15 @@ if __name__ == "__main__":
     
     ensure_folder_structure()
     
-    make_ui_sounds()       # Beeps, Blips
-    make_telephony_tones() # Dial, Busy
+    # make_ui_sounds()       # Beeps, Blips
+    # make_telephony_tones() # Dial, Busy
     
     print("--- Expect ~30-60s for TTS downloads ---")
-    make_all_tts()         # System & Time
+    # make_all_tts()         # System & Time
     
-    make_startup_music()   # Startup pad
+    # make_startup_music()   # Startup pad
     
-    download_fonts()       # Added Fonts
+    # download_fonts()       # Added Fonts
 
     generate_fortune_mp3s() # Added Fortune Cookies
     
