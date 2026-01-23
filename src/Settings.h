@@ -32,6 +32,8 @@ public:
     // AI
     String getGeminiKey();
     void setGeminiKey(String key);
+    String getPersonaName(); // New: Configurable Name
+    void setPersonaName(String name);
     
     // Audio
     int getVolume();

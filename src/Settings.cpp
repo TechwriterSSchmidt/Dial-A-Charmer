@@ -11,6 +11,7 @@ struct InternalCache {
     String ssid;
     String pass;
     String geminiKey;
+    String personaName; // New
     String lang;
     int tzOffset;
     int vol;
@@ -55,6 +56,7 @@ void Settings::loadCache() {
         ic.ssid = _prefs.getString("ssid", "");
         ic.pass = _prefs.getString("pass", "");
         ic.geminiKey = _prefs.getString("gemini_key", "");
+        ic.personaName = _prefs.getString("persona", "Sandra"); // Default
         ic.lang = _prefs.getString("lang", "de");
         ic.tzOffset = _prefs.getInt("tz_offset", CONF_DEFAULT_TZ);
         ic.vol = _prefs.getInt("vol", CONF_DEFAULT_VOL);
@@ -303,4 +305,14 @@ void Settings::clear() {
     _prefs.clear();
     ic.loaded = false;
     _cacheLoaded = false;
+}
+
+String Settings::getPersonaName() {
+    if(!ic.loaded) loadCache();
+    return ic.personaName;
+}
+
+void Settings::setPersonaName(String name) {
+    ic.personaName = name;
+    _prefs.putString("persona", name);
 }

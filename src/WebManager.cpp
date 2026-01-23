@@ -7,7 +7,7 @@
 #include <Update.h>
 #include <SD.h>
 #include <FS.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <vector>
 #include <algorithm>
 
@@ -82,8 +82,8 @@ String getFooterHtml(bool isDe, String activePage) {
 
 void WebManager::begin() {
     // Init FileSystem for Web Assets
-    if(!SPIFFS.begin(true)){
-        Serial.println("SPIFFS Mount Failed");
+    if(!LittleFS.begin(true)){
+        Serial.println("LittleFS Mount Failed");
     }
 
     String ssid = settings.getWifiSSID();
@@ -208,9 +208,11 @@ void WebManager::begin() {
             _server.send(404, "text/plain", "Font Missing");
         }
     });
+
+    _server.on("/api/files", [this](){ handleFileListApi(); });
     
     // Serve Static Files (Last resort for assets like .css, .js)
-    _server.serveStatic("/", SPIFFS, "/");
+    _server.serveStatic("/", LittleFS, "/");
     
     _server.begin();
     
@@ -988,4 +990,49 @@ void WebManager::processReindex() {
     Serial.println("Reindex Logic Complete. Rebooting in 1s...");
     delay(1000);
     ESP.restart();
+}
+
+void WebManager::handleFileListApi() {
+    if(!_server.hasArg("path")) {
+        _server.send(400, "application/json", "{\"error\":\"Missing path argument\"}");
+        return;
+    }
+
+    String path = _server.arg("path");
+    if(!path.startsWith("/")) path = "/" + path;
+
+    if(!SD.exists(path)) {
+         _server.send(404, "application/json", "{\"error\":\"Directory not found\"}");
+         return;
+    }
+    
+    File dir = SD.open(path);
+    if(!dir.isDirectory()){
+         _server.send(400, "application/json", "{\"error\":\"Path is not a directory\"}");
+         return;
+    }
+
+    std::vector<String> fileList;
+    File file = dir.openNextFile();
+    while(file){
+        String fileName = String(file.name());
+        if(!fileName.startsWith(".")) { 
+            if(!file.isDirectory()) {
+                 fileList.push_back(fileName);
+            }
+        }
+        file = dir.openNextFile();
+    }
+    
+    std::sort(fileList.begin(), fileList.end());
+
+    JsonDocument doc;
+    JsonArray arr = doc.to<JsonArray>();
+    for(const auto& f : fileList) {
+        arr.add(f);
+    }
+
+    String response;
+    serializeJson(doc, response);
+    _server.send(200, "application/json", response);
 }

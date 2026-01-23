@@ -34,6 +34,7 @@ private:
     void handleHelp();
     void handlePhonebook();
     void handlePhonebookApi();
+    void handleFileListApi(); // New: JSON File Browser
     void handlePreviewApi();  
     void handleNotFound();
     

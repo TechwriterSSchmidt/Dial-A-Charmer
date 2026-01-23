@@ -5,7 +5,7 @@ PhonebookManager phonebook;
 PhonebookManager::PhonebookManager() {}
 
 void PhonebookManager::begin() {
-    if (!SPIFFS.exists(_filename)) {
+    if (!LittleFS.exists(_filename)) {
         Serial.println("Phonebook not found, creating default...");
         
         // --- Core Functions ---
@@ -31,7 +31,7 @@ void PhonebookManager::begin() {
 }
 
 void PhonebookManager::load() {
-    File file = SPIFFS.open(_filename, "r");
+    File file = LittleFS.open(_filename, "r");
     if (!file) {
         Serial.println("Failed to open phonebook file");
         return;
@@ -108,7 +108,7 @@ void PhonebookManager::save() {
         obj["parameter"] = entry.parameter;
     }
 
-    File file = SPIFFS.open(_filename, "w");
+    File file = LittleFS.open(_filename, "w");
     if (!file) {
         Serial.println("Failed to open phonebook file for writing");
         return;
@@ -147,7 +147,7 @@ void PhonebookManager::removeEntry(String number) {
 }
 
 String PhonebookManager::getJson() {
-    File file = SPIFFS.open(_filename, "r");
+    File file = LittleFS.open(_filename, "r");
     if (!file) return "{}";
     String json = file.readString();
     file.close();
@@ -155,7 +155,7 @@ String PhonebookManager::getJson() {
 }
 
 void PhonebookManager::saveFromJson(String jsonString) {
-    File file = SPIFFS.open(_filename, "w");
+    File file = LittleFS.open(_filename, "w");
     if (file) {
         file.print(jsonString);
         file.close();

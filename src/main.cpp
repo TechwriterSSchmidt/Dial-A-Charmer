@@ -3,7 +3,7 @@
 #include <SPI.h>
 #include <SD.h>
 #include <FS.h>
-#include <SPIFFS.h>
+#include <LittleFS.h>
 #include <esp_task_wdt.h> // Watchdog
 #include <vector>
 #include <algorithm>
@@ -1302,12 +1302,12 @@ void setup() {
     ledManager.begin();
     ledManager.setMode(LedManager::CONNECTING); // Start sequence
     
-    // Init SPIFFS for Phonebook
-    if(!SPIFFS.begin(true)){
-        Serial.println("SPIFFS Mount Failed");
+    // Init LittleFS for Phonebook
+    if(!LittleFS.begin(true)){
+        Serial.println("LittleFS Mount Failed");
     }
 
-    phonebook.begin(); // Load Phonebook from SPIFFS
+    phonebook.begin(); // Load Phonebook from LittleFS
     timeManager.begin(); // Added TimeManager
     
     // --- Hardware Init ---
