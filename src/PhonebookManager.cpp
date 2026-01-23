@@ -5,29 +5,46 @@ PhonebookManager phonebook;
 PhonebookManager::PhonebookManager() {}
 
 void PhonebookManager::begin() {
-    if (!LittleFS.exists(_filename)) {
-        Serial.println("Phonebook not found, creating default...");
-        
-        // --- Core Functions ---
-        addEntry("110", "Zeitauskunft", "FUNCTION", "ANNOUNCE_TIME");
-        addEntry("0", "Gemini AI", "FUNCTION", "GEMINI_CHAT"); // Assuming ID 0 is generic chat
-        
-        // --- Personas / Characters (1-5) ---
-        addEntry("1", "Persona 1 (Default)", "FUNCTION", "COMPLIMENT_CAT", "1");
-        addEntry("2", "Persona 2 (Joke)", "FUNCTION", "COMPLIMENT_CAT", "2");
-        addEntry("3", "Persona 3 (SciFi)", "FUNCTION", "COMPLIMENT_CAT", "3");
-        addEntry("4", "Persona 4 (Captain)", "FUNCTION", "COMPLIMENT_CAT", "4");
-        addEntry("5", "Persona 5 (Fortune)", "FUNCTION", "COMPLIMENT_CAT", "5");
-        
-        // --- Admin / System ---
-        addEntry("9", "Voice Admin Menu", "FUNCTION", "VOICE_MENU");
-        
-        // --- Control Commands ---
-        addEntry("90", "Toggle Alarms", "FUNCTION", "TOGGLE_ALARMS");
-        addEntry("91", "Skip Next Alarm", "FUNCTION", "SKIP_NEXT_ALARM");
-
-    } else {
+    if (LittleFS.exists(_filename)) {
+        Serial.println("Loading Phonebook...");
         load();
+    } else {
+        Serial.println("Phonebook not found, initializing empty...");
+    }
+
+    // --- Ensure Defaults Exist (Auto-Repair/Upgrade) ---
+    bool changed = false;
+
+    auto ensure = [&](String num, String name, String type, String val, String param="") {
+        if (!hasEntry(num)) {
+            Serial.println("Adding default: " + name);
+            // We use internal map update to avoid saving on every single entry
+            _entries[num] = {name, type, val, param};
+            changed = true;
+        }
+    };
+
+    // --- Core Functions ---
+    ensure("110", "Zeitauskunft", "FUNCTION", "ANNOUNCE_TIME");
+    ensure("0", "Gemini AI", "FUNCTION", "GEMINI_CHAT"); 
+    
+    // --- Personas / Characters (1-5) ---
+    ensure("1", "Persona 1 (Default)", "FUNCTION", "COMPLIMENT_CAT", "1");
+    ensure("2", "Persona 2 (Joke)", "FUNCTION", "COMPLIMENT_CAT", "2");
+    ensure("3", "Persona 3 (SciFi)", "FUNCTION", "COMPLIMENT_CAT", "3");
+    ensure("4", "Persona 4 (Captain)", "FUNCTION", "COMPLIMENT_CAT", "4");
+    ensure("5", "Persona 5 (Fortune)", "FUNCTION", "COMPLIMENT_CAT", "5");
+    
+    // --- Admin / System ---
+    ensure("9", "Voice Admin Menu", "FUNCTION", "VOICE_MENU");
+    
+    // --- Control Commands ---
+    ensure("90", "Toggle Alarms", "FUNCTION", "TOGGLE_ALARMS");
+    ensure("91", "Skip Next Alarm", "FUNCTION", "SKIP_NEXT_ALARM");
+
+    if (changed) {
+        save();
+        Serial.println("Phonebook updated with defaults.");
     }
 }
 
