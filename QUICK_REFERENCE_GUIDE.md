@@ -5,8 +5,9 @@
    - Lift the receiver. Wait for the **Dial Tone**.
    - **Important:** specific content must be dialed within **5 seconds**. 
    - *Behavior:* If no number is dialed, a **Busy Signal** plays. Hang up to reset.
-   - **Dial 0:** Random Surprise Track.
-   - **Dial 1-4:** Persona Playlists (Configurable).
+   - **Dial 0:** Gemini AI (if configured).
+   - **Dial 1-5:** Persona Playlists (Configurable).
+   - **Dial 6:** Random Mix (non-repeating until all tracks played).
 
 2. **Set a Kitchen Timer:**
    - Keep receiver **ON** the hook.
@@ -43,13 +44,15 @@ Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` scr
 ├── persona_02/             (Persona 2 - Dial 2)
 ├── persona_03/             (Persona 3 - Dial 3)
 ├── persona_04/             (Persona 4 - Dial 4)
+├── persona_05/             (Persona 5 - Dial 5, Fortune)
+│   └── fortune.txt         (Enables Fortune mode detection)
 ```
 *Note: Run `python utils/generate_sd_content.py` to generate system assets.*
 
 ## ⚙️ Web Configuration
 Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your local network IP to access settings.
 
-👉 **http://dial-a-charmer.local**
+👉 **http://dial-a-charmer.local** (Fallback: use the IP announced via Dial `8` if mDNS fails)
 
 **Basic Settings (Home Page):**
 - **Language**: German/English.

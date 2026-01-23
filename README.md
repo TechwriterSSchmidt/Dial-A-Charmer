@@ -37,15 +37,16 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Set One-Time Alarm** | **Receiver On Hook** → Hold Button + Dial `HHMM` | Sets a single priority alarm (e.g., dial `0730` for 7:30 AM). |
 | **Delete Alarm** | **Receiver On Hook** → Hold Button + Lift Receiver | Deletes the manual alarm or cancels a running timer. |
 | **Access Point** | **Receiver On Hook** → Hold Button (10s) | Activates configuration hotspot `Dial-A-Charmer` (Password: none). |
-| **Play Personnel** | **Receiver Lifted** → Dial `1`-`4` | Plays audio content from specific categories (Personas). |
-| **Surprise Mix** | **Receiver Lifted** → Dial `0` | Plays a random track from your collection or AI-generated content. |
+| **Play Personnel** | **Receiver Lifted** → Dial `1`-`5` | Plays audio content from specific categories (Personas). |
+| **Random Mix** | **Receiver Lifted** → Dial `6` | Plays a randomized, non-repeating mix from all Persona MP3s. |
+| **Gemini AI** | **Receiver Lifted** → Dial `0` | Starts the Gemini AI interaction (if configured). |
 | **System Status** | **Receiver Lifted** → Dial `8` | Announces IP address and WiFi signal strength. |
 | **Voice Menu** | **Receiver Lifted** → Dial `9` | Plays spoken instructions for system codes. |
 | **Toggle Alarms** | **Receiver Lifted** → Dial `90` | Enables or disables all alarms globally. |
 | **Skip Next Alarm** | **Receiver Lifted** → Dial `91` | Skips only the next scheduled recurring alarm. |
 | **Stop Ringing** | **Ringing** → Lift Receiver, then Hang Up | Stops the alarm or timer alert. |
 | **Snooze** | **Ringing** → Lift Receiver (Keep Off Hook) | Snoozes the alarm for the configured duration (default: 9 min). |
-| **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
+| **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. If mDNS is unavailable, use the device IP announced by Dial `8`. |
 
 ### System Capabilities
 
@@ -55,7 +56,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Smart Deep Sleep** | Automatically sleeps when idle and wakes for alarms or receiver activity. |
 | **Watchdog** | Hardware watchdog guards against freezes (>20s). |
 | **Audio Engine** | Multithreaded core supports stutter-free playback and half-duplex echo cancellation. |
-| **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
+| **Persistence** | Alarms and settings are saved to NVS and survive reboots. Random Mix order is stored on SD and resumes after reboot. |
 | **OTA Updates** | Firmware can be updated wirelessly via the Web Interface. |
 
 ## Hardware Support & Pinout
@@ -95,7 +96,7 @@ Once the device is connected to your WiFi network (or you are connected to its A
 
 👉 **http://dial-a-charmer.local**
 
-(Requires a modern browser on Android, iOS, Windows, or macOS. No IP address needed!)
+(Requires a modern browser on Android, iOS, Windows, or macOS. If mDNS fails, use the IP announced via Dial `8`.)
 
 ## Project Structure
 
@@ -117,6 +118,8 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 ├── persona_02/                (Persona 2 Compliments - Dial 2)
 ├── persona_03/                (Persona 3 Compliments - Dial 3)
 ├── persona_04/                (Persona 4 Compliments - Dial 4)
+├── persona_05/                (Persona 5 Fortune - Dial 5)
+│   └── fortune.txt            (Enables Fortune mode detection)
 ├── playlists/                 (System generated automatically)
 ├── ringtones/                 (Ringtones for Alarm/Ring)
 │   ├── 1.wav

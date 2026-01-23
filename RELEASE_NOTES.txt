@@ -1,5 +1,16 @@
 # Release Notes - Dial-A-Charmer
 
+## v0.8.1-beta (2026-01-23) - "Fortune & Mix Refinements"
+- **Phonebook Updates**:
+    - Persona 5 reserved for **Fortune Cookie** (Dial `5`).
+    - **Random Mix** moved to Dial `6` and always present.
+- **Random Mix Persistence**:
+    - Mix order and progress are now stored on SD to avoid repeats across reboots until all tracks have played.
+- **mDNS Reliability**:
+    - Hostname set explicitly and mDNS is reinitialized on reconnect to improve `dial-a-charmer.local` stability.
+- **Build Quality**:
+    - C++17 enabled to remove compiler warnings about structured bindings.
+
 ## v0.7.2-beta (2026-01-19) - "The Golden Master Update"
 - **Hardware Support**:
     - **Ai-Thinker Audio Kit v2.2**: Full support added including pin mappings for onboard peripherals (ES8388 Codec, SD Slot, Keys).
