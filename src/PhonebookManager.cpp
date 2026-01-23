@@ -21,6 +21,12 @@ void PhonebookManager::begin() {
             // We use internal map update to avoid saving on every single entry
             _entries[num] = {name, type, val, param};
             changed = true;
+        } 
+        // Migration: Rename old "Persona 5" to "Persona 5 (Fortune)"
+        else if (num == "5" && _entries[num].name == "Persona 5") {
+             Serial.println("Migrating name for Persona 5...");
+             _entries[num].name = name;
+             changed = true;
         }
     };
 
