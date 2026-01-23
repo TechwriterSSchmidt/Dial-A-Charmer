@@ -114,6 +114,7 @@ void WebManager::begin() {
             Serial.println(WiFi.localIP());
             if (MDNS.begin("dial-a-charmer")) {
                 Serial.println("mDNS responder started. You can access it via http://dial-a-charmer.local");
+                MDNS.addService("http", "tcp", 80);
             }
         } else {
             Serial.println("WiFi Connection Failed.");
@@ -812,7 +813,8 @@ const systemItems = [
     { id:'p2', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'2', defName:'Persona 2 (Badran)', defNum:'2' },
     { id:'p3', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'3', defName:'Persona 3 (Yoda)', defNum:'3' },
     { id:'p4', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'4', defName:'Persona 4 (Neutral)', defNum:'4' },
-    { id:'p5', type:'FUNCTION', val:'COMPLIMENT_MIX', param:'0', defName:'Random Mix (Surprise)', defNum:'5' },
+    { id:'p5', type:'FUNCTION', val:'COMPLIMENT_CAT', param:'5', defName:'Persona 5 (Fortune)', defNum:'5' },
+    { id:'p6', type:'FUNCTION', val:'COMPLIMENT_MIX', param:'0', defName:'Random Mix (Surprise)', defNum:'6' },
     { id:'menu', type:'FUNCTION', val:'VOICE_MENU', param:'', defName:'Operator Menu', defNum:'9' },
     { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'', defName:'Toggle Alarms', defNum:'90' },
     { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' }
@@ -827,6 +829,7 @@ function render() {
         let currentName = item.defName;
         // Search for existing entry
         for (const [key, entry] of Object.entries(fullData)) {
+            // Standard Match
              if (entry.type === item.type && entry.value === item.val && entry.parameter === item.param) {
                  currentKey = key;
                  if (entry.name && entry.name !== "Unknown") currentName = entry.name;
@@ -863,15 +866,17 @@ async function save() {
         const newKey = input.value.trim();
         if (newKey && newKey.length > 0) {
             let name = item.defName;
-            // check if we have a renamed entry in fullData for this system item?
-            // current render logic pulls name from fullData.
-            // If we save, we want to preserve that name?
-            // Currently UI does not allow renaming the Name, only the Key.
-            // So we must preserve existing Name if found.
+            let type = item.type;
+            let val = item.val;
+            let param = item.param;
+
+            // Preserve existing config if present
             for (const [k, e] of Object.entries(fullData)) {
-                 if (e.type === item.type && e.value === item.val && e.parameter === item.param) { name = e.name; break; }
+                if (e.type === item.type && e.value === item.val && e.parameter === item.param) { 
+                    name = e.name; break; 
+                }
             }
-            newData[newKey] = { name: name, type: item.type, value: item.val, parameter: item.param };
+            newData[newKey] = { name: name, type: type, value: val, parameter: param };
         }
     });
     await fetch('/api/phonebook', { method:'POST', body:JSON.stringify(newData) });
@@ -939,8 +944,9 @@ String WebManager::getHelpHtml() {
     // SECTION 2: CODES & SHORTCUTS (Dynamic based on logic, but defaults listed)
     html += "<div class='card'><h3>2. " + String(isDe ? "Nummern & Codes" : "Numbers & Codes") + "</h3>";
     html += "<ul>";
-    html += "<li><b>0:</b> " + String(isDe ? "Zufalls-Mix (&Uuml;berraschung)" : "Random Surprise Mix") + "</li>";
-    html += "<li><b>1 - 4:</b> " + String(isDe ? "Playlists (&uuml;ber Telefonbuch &auml;nderbar)" : "Playlists (Editable via Phonebook)") + "</li>";
+    html += "<li><b>0:</b> " + String(isDe ? "Gemini AI" : "Gemini AI") + "</li>";
+    html += "<li><b>1 - 5:</b> " + String(isDe ? "Personas / Charaktere" : "Personas / Characters") + "</li>";
+    html += "<li><b>6:</b> " + String(isDe ? "Zufalls-Mix (&Uuml;berraschung)" : "Random Surprise Mix") + "</li>";
     html += "<li><b>8:</b> " + String(isDe ? "System Status (IP-Adresse)" : "System Status (IP Address)") + "</li>";
     html += "<li><b>9:</b> " + String(isDe ? "Sprach-Men&uuml;" : "Voice Menu") + "</li>";
     html += "<li><b>90:</b> " + String(isDe ? "Alle Wecker: AN / AUS" : "Toggle All Alarms: ON / OFF") + "</li>";

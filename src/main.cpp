@@ -208,6 +208,15 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
 void startPersonaScan() {
     if (!sdAvailable) return;
     Serial.println("[BG] Starting Background Persona Scan...");
+    
+    // --- Instant "Fortune" Detection ---
+    if (SD.exists("/persona_05/fortune.txt")) {
+        Serial.println("[BG] Detected Fortune Cookie Mode!");
+        // Force Switch to Category Mode
+        phonebook.addEntry("5", "Fortune Cookie", "FUNCTION", "COMPLIMENT_CAT", "5");
+    } 
+    // Removed duplicate fallback logic for Mix on 5. Mix is now on 6.
+    
     bgScanPersonaIndex = 1;
     bgScanActive = true;
     bgScanPhonebookChanged = false;

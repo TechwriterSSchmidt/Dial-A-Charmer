@@ -40,6 +40,7 @@ void PhonebookManager::begin() {
     ensure("3", "Persona 3 (SciFi)", "FUNCTION", "COMPLIMENT_CAT", "3");
     ensure("4", "Persona 4 (Captain)", "FUNCTION", "COMPLIMENT_CAT", "4");
     ensure("5", "Persona 5", "FUNCTION", "COMPLIMENT_CAT", "5");
+    ensure("6", "Random Mix (Surprise)", "FUNCTION", "COMPLIMENT_MIX", "0");
     
     // --- Admin / System ---
     ensure("9", "Voice Admin Menu", "FUNCTION", "VOICE_MENU");
