@@ -33,6 +33,7 @@
     #define CONF_PIN_HOOK       19  
     #define CONF_PIN_EXTRA_BTN  18  
     #define CONF_DIAL_MODE_ACTIVE_LOW true
+    #define CONF_HOOK_ACTIVE_LOW  true // Floating = HIGH = On Hook (Idle). Low = Off Hook (Active)
 
     // Status LED (WS2812) - Header P2 (GPIO 23 used as Output, ignore Key 4)
     #define CONF_PIN_LED        23  

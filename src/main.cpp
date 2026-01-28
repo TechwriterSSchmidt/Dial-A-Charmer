@@ -287,6 +287,9 @@ void startPersonaScan() {
 
 void handlePersonaScan() {
     if (!bgScanActive || !sdAvailable) return;
+    
+    // Safety: Reset WDT during heavy SD operations
+    esp_task_wdt_reset();
 
     // Process a chunk of work
     // State 0: Open Dir if needed
@@ -552,11 +555,13 @@ void audioTaskCode(void * parameter) {
                             currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT2);
                             int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 100);
                             codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
+                            codec.volume(vol); // Ensure volume is set
                         } else {
-                            // Handset Mode
+                            // Handset Mode (Headset)
                             currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT1 | DAC_OUTPUT_ROUT1);
                             int vol = ::map(settings.getVolume(), 0, 42, 0, 100);
                             codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
+                            codec.volume(vol); // Ensure volume is set
                         }
                     #endif
 
@@ -1408,6 +1413,30 @@ void setup() {
     
     // --- Hardware Init ---
     
+    // 0. Init Audio Task FIRST (Secure DMA RAM!)
+    audioQueue = xQueueCreate(20, sizeof(AudioCmd));
+    xTaskCreatePinnedToCore(
+        audioTaskCode,   /* Function */
+        "AudioTask",     /* Name */
+        8192,            /* Stack size (High for I2S/MP3) */
+        NULL,            /* Param */
+        2,               /* Priority (Higher than Main) */
+        NULL,            /* Handle */
+        0                /* Core 0 */
+    );
+    
+    // BUG FIX: Wait for Audio Object Creation before consuming more RAM
+    Serial.print("Waiting for Audio Engine...");
+    unsigned long startWait = millis();
+    while (audio == nullptr) {
+        delay(10);
+        if (millis() - startWait > 3000) {
+            Serial.println("ERROR: Audio Task failed to start!");
+            break;
+        }
+    }
+    Serial.println("Ready.");
+
     #if HAS_ES8388_CODEC
         Serial.println("Initializing ES8388 Codec...");
         Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
@@ -1424,7 +1453,8 @@ void setup() {
         // Correct SPI setup for Audio Kit v2.2 (HSPI)
         // SCK=14, MISO=2, MOSI=15, CS=13
         SPI.begin(14, 2, 15, 13); 
-        if(!SD.begin(13)){
+        // Reduced speed (1MHz) for stability
+        if(!SD.begin(13, SPI, 1000000)){
     #else
         // Standard VSPI (Lolin D32 Pro default)
         if(!SD.begin(CONF_PIN_SD_CS)){
@@ -1438,7 +1468,7 @@ void setup() {
         // buildPlaylist(); // MOVED DOWN
     }
 
-    // Init WiFi EARLIER to reserve Internal RAM
+    // Init WiFi (after Audio secured DMA)
     webManager.begin();
     
     // NOW Build Playlists (uses remaining RAM/PSRAM)
@@ -1446,30 +1476,7 @@ void setup() {
         buildPlaylist();
     }
     
-    // 2. Init Audio Task (Multithreading)
-    audioQueue = xQueueCreate(20, sizeof(AudioCmd));
-    xTaskCreatePinnedToCore(
-        audioTaskCode,   /* Function */
-        "AudioTask",     /* Name */
-        8192,            /* Stack size (High for I2S/MP3) */
-        NULL,            /* Param */
-        2,               /* Priority (Higher than Main) */
-        NULL,            /* Handle */
-        0                /* Core 0 */
-    );
-    
-    // BUG FIX: Wait for Audio Object Creation
-    // Prevent loop() from crashing if task starts slowly
-    Serial.print("Waiting for Audio Engine...");
-    unsigned long startWait = millis();
-    while (audio == nullptr) {
-        delay(10);
-        if (millis() - startWait > 3000) {
-            Serial.println("ERROR: Audio Task failed to start!");
-            break;
-        }
-    }
-    Serial.println("Ready.");
+    // 2. Init Audio Task (Multithreading) - Moved to TOP
     
     // Start with Handset
     setAudioOutput(OUT_HANDSET);

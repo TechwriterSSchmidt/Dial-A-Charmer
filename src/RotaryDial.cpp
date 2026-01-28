@@ -107,9 +107,13 @@ void RotaryDial::loop() {
     
     if ((now - hookChangeTime) > CONF_HOOK_DEBOUNCE) {
         bool stableHook = rawHook;
-        // Hook Pin Logic: HIGH (Open) = Off Hook? or LOW?
-        // Let's assume HIGH = Off Hook (Switch Open)
-        bool isPickedUp = (stableHook == HIGH); 
+        
+        #ifdef CONF_HOOK_ACTIVE_LOW
+          bool isPickedUp = (stableHook == LOW);
+        #else
+          // Default: HIGH = Off Hook
+          bool isPickedUp = (stableHook == HIGH); 
+        #endif
         
         if (isPickedUp != _offHook) {
             _offHook = isPickedUp;
