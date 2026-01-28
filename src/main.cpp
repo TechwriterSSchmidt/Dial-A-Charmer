@@ -1548,7 +1548,9 @@ void setup() {
     Serial.println("Initial Beep played on SPEAKER (Output 2)");
 
     // Start Background Scan for updated Persona Names
-    startPersonaScan();
+    // Disabled to prevent WDT resets during SD/web access
+    bgScanActive = false;
+    // startPersonaScan();
 }
 
 void loop() {
@@ -1630,7 +1632,7 @@ void loop() {
     }
 
     timeManager.loop();
-    handlePersonaScan(); // Run BG Task
+    // handlePersonaScan(); // Run BG Task - Disabled to prevent WDT crash during SD contention
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {

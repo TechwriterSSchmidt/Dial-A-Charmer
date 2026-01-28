@@ -24,11 +24,16 @@ String getSdFileOptions(String folder, int currentSelection) {
 
     std::vector<String> files;
     File file = dir.openNextFile();
+    size_t wdtTick = 0;
     while(file){
         if(!file.isDirectory()) {
             String name = file.name();
             if (name.startsWith(".")) { file = dir.openNextFile(); continue; } // skip hidden
             files.push_back(name);
+        }
+        if ((++wdtTick % 25) == 0) {
+            esp_task_wdt_reset();
+            delay(0);
         }
         file = dir.openNextFile();
     }
@@ -47,6 +52,10 @@ String getSdFileOptions(String folder, int currentSelection) {
         if (dotIndex > 0) displayName = displayName.substring(0, dotIndex);
         
         options += "<option value='" + String(id) + "'" + sel + ">" + displayName + "</option>";
+        if ((i % 50) == 0) {
+            esp_task_wdt_reset();
+            delay(0);
+        }
     }
     return options;
 }
@@ -997,11 +1006,16 @@ void WebManager::processReindex() {
         File root = SD.open(Path::PLAYLISTS);
         if (root && root.isDirectory()) {
              File file = root.openNextFile();
+             size_t wdtTick = 0;
              while(file){
                 String path = String(Path::PLAYLISTS) + "/" + String(file.name());
                 if(!file.isDirectory()) {
                     SD.remove(path);
                     Serial.printf("Deleted: %s\n", path.c_str());
+                }
+                if ((++wdtTick % 10) == 0) {
+                    esp_task_wdt_reset();
+                    delay(0);
                 }
                 file = root.openNextFile();
              }
@@ -1037,12 +1051,17 @@ void WebManager::handleFileListApi() {
 
     std::vector<String> fileList;
     File file = dir.openNextFile();
+    size_t wdtTick = 0;
     while(file){
         String fileName = String(file.name());
         if(!fileName.startsWith(".")) { 
             if(!file.isDirectory()) {
                  fileList.push_back(fileName);
             }
+        }
+        if ((++wdtTick % 25) == 0) {
+            esp_task_wdt_reset();
+            delay(0);
         }
         file = dir.openNextFile();
     }
@@ -1051,8 +1070,13 @@ void WebManager::handleFileListApi() {
 
     JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
+    size_t jsonTick = 0;
     for(const auto& f : fileList) {
         arr.add(f);
+        if ((++jsonTick % 50) == 0) {
+            esp_task_wdt_reset();
+            delay(0);
+        }
     }
 
     String response;
