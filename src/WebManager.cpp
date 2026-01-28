@@ -126,8 +126,10 @@ void WebManager::begin() {
                 Serial.println("mDNS responder started. You can access it via http://dial-a-charmer.local");
                 MDNS.addService("http", "tcp", 80);
                 _mdnsStarted = true;
+                _mdnsLastAttempt = millis();
             } else {
                 _mdnsStarted = false;
+                _mdnsLastAttempt = millis();
             }
         } else {
             Serial.println("WiFi Connection Failed.");
@@ -248,14 +250,20 @@ void WebManager::loop() {
 
     // Keep mDNS alive / recover after WiFi reconnects
     if (WiFi.status() == WL_CONNECTED) {
-        if (!_mdnsStarted) {
+        if (!_mdnsStarted && (millis() - _mdnsLastAttempt > _mdnsRetryMs)) {
+            _mdnsLastAttempt = millis();
             if (MDNS.begin("dial-a-charmer")) {
                 Serial.println("mDNS responder restarted.");
                 MDNS.addService("http", "tcp", 80);
                 _mdnsStarted = true;
+            } else {
+                Serial.println("mDNS start failed, will retry later.");
             }
         }
     } else {
+        if (_mdnsStarted) {
+            MDNS.end();
+        }
         _mdnsStarted = false;
     }
     
