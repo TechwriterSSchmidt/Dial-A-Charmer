@@ -13,14 +13,26 @@
 
 // Extern from main.cpp
 extern void playSound(String filename, bool useSpeaker);
+extern SemaphoreHandle_t sdMutex; // SD card mutex
 
 WebManager webManager;
 
 // Helper to list files for dropdown
 String getSdFileOptions(String folder, int currentSelection) {
+    esp_task_wdt_reset(); // Reset before SD access
+    
+    // Take SD mutex (wait up to 5 seconds)
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+        return "<option>SD Busy</option>";
+    }
+    
     String options = "";
     File dir = SD.open(folder);
-    if(!dir || !dir.isDirectory()) return "<option>No Folder " + folder + "</option>";
+    if(!dir || !dir.isDirectory()) {
+        xSemaphoreGive(sdMutex); // Release mutex
+        return "<option>No Folder " + folder + "</option>";
+    }
+    esp_task_wdt_reset(); // Reset after SD open
 
     std::vector<String> files;
     File file = dir.openNextFile();
@@ -57,6 +69,8 @@ String getSdFileOptions(String folder, int currentSelection) {
             delay(0);
         }
     }
+    
+    xSemaphoreGive(sdMutex); // Release SD mutex
     return options;
 }
 

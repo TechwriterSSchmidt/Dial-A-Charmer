@@ -42,6 +42,7 @@ LedManager ledManager(CONF_PIN_LED);
 
 // --- AUDIO MULTITHREADING SETUP ---
 QueueHandle_t audioQueue;
+SemaphoreHandle_t sdMutex = NULL; // Mutex for SD card access
 
 enum AudioCmdType { CMD_PLAY, CMD_STOP, CMD_VOL, CMD_OUT, CMD_CONNECT_SPEECH };
 struct AudioCmd {
@@ -528,13 +529,19 @@ void audioTaskCode(void * parameter) {
         if(xQueueReceive(audioQueue, &cmd, 0) == pdTRUE) {
             switch(cmd.type) {
                 case CMD_PLAY:
-                    if (SD.exists(cmd.path)) {
-                        audio->connecttoFS(SD, cmd.path);
-                    } else {
-                        Serial.printf("[Audio] File missing: %s\n", cmd.path);
-                        if (SD.exists("/system/fallback_alarm.wav")) {
-                             audio->connecttoFS(SD, "/system/fallback_alarm.wav");
+                    // Take SD mutex (wait up to 10 seconds for playback)
+                    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
+                        if (SD.exists(cmd.path)) {
+                            audio->connecttoFS(SD, cmd.path);
+                        } else {
+                            Serial.printf("[Audio] File missing: %s\n", cmd.path);
+                            if (SD.exists("/system/fallback_alarm.wav")) {
+                                 audio->connecttoFS(SD, "/system/fallback_alarm.wav");
+                            }
                         }
+                        xSemaphoreGive(sdMutex); // Release after file is opened
+                    } else {
+                        Serial.println("[Audio] SD Mutex timeout, skipping playback");
                     }
                     break;
                 case CMD_CONNECT_SPEECH:
@@ -1452,7 +1459,10 @@ void setup() {
     
     // --- Hardware Init ---
     
-    // 0. Init Audio Task FIRST (Secure DMA RAM!)
+    // 0. Create SD Mutex (before any SD access)
+    sdMutex = xSemaphoreCreateMutex();
+    
+    // 1. Init Audio Task FIRST (Secure DMA RAM!)
     audioQueue = xQueueCreate(20, sizeof(AudioCmd));
     xTaskCreatePinnedToCore(
         audioTaskCode,   /* Function */
