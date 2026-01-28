@@ -196,6 +196,7 @@ void WebManager::begin() {
 
     // --- FONTS FROM SD CARD (With Caching) ---
     _server.on("/fonts/ZenTokyoZoo-Regular.ttf", [this](){
+        esp_task_wdt_reset();
         if(SD.exists(Path::FONT_MAIN)){
             _server.sendHeader("Cache-Control", "max-age=604800"); // Cache for 7 days
             File f = SD.open(Path::FONT_MAIN, "r");
@@ -211,6 +212,7 @@ void WebManager::begin() {
     });
 
     _server.on("/fonts/Pompiere-Regular.ttf", [this](){
+        esp_task_wdt_reset();
         if(SD.exists(Path::FONT_SEC)){
             _server.sendHeader("Cache-Control", "max-age=604800"); // Cache for 7 days
             File f = SD.open(Path::FONT_SEC, "r");
@@ -302,6 +304,7 @@ void WebManager::resetApTimer() {
 }
 
 void WebManager::handleRoot() {
+    esp_task_wdt_reset();
     resetApTimer();
     if (_apMode) {
         _server.send(200, "text/html", getApSetupHtml());
@@ -358,12 +361,14 @@ void WebManager::handleRoot() {
 }
 
 void WebManager::handleSettings() {
+    esp_task_wdt_reset();
     resetApTimer();
     if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
     _server.send(200, "text/html", getSettingsHtml());
 }
 
 void WebManager::handleAdvanced() {
+    esp_task_wdt_reset();
     resetApTimer();
     if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
     _server.send(200, "text/html", getAdvancedHtml());
@@ -384,6 +389,7 @@ void WebManager::handlePreviewApi() {
 }
 
 void WebManager::handleSave() {
+    esp_task_wdt_reset();
     resetApTimer();
     bool wifiChanged = false;
 
@@ -755,6 +761,7 @@ String WebManager::getAdvancedHtml() {
 }
 
 void WebManager::handlePhonebook() {
+    esp_task_wdt_reset();
     resetApTimer();
     if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
     _server.send(200, "text/html", getPhonebookHtml());
