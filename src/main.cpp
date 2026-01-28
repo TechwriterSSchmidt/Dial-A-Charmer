@@ -70,7 +70,7 @@ unsigned long offHookTime = 0;
 
 // --- Background Scan Globals ---
 int bgScanPersonaIndex = 1;
-File bgScanDir;
+static File bgScanDir;
 bool bgScanActive = false;
 bool bgScanPhonebookChanged = false;
 
@@ -497,7 +497,17 @@ void audioTaskCode(void * parameter) {
     
     // Create Audio Object Here (Local to Core 0)
     audio = new Audio();
-    audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+    // audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT); // Disable manual pinout for Audio Kit, let library handle defaults or autodetect
+    #ifdef BOARD_AI_THINKER_AUDIO_KIT
+        // Audio Kit uses ES8388 which is managed by I2C, but data still needs I2S pins.
+        // However, the library ESP32-audioI2S might have default mappings or conflicts.
+        // Try setting explicit master clock or different config if needed.
+        // For now, let's keep it but ensure pins are correct: 27, 25, 26.
+        audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+        audio->setI2SCommFMT_LSB(true); // Attempt to fix "I2S not ready" / noise by matching codec format?
+    #else
+        audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
+    #endif
     audio->forceMono(true); 
     
     for(;;) {
@@ -1425,6 +1435,14 @@ void setup() {
     } else {
         Serial.println("SD Card Mounted");
         sdAvailable = true;
+        // buildPlaylist(); // MOVED DOWN
+    }
+
+    // Init WiFi EARLIER to reserve Internal RAM
+    webManager.begin();
+    
+    // NOW Build Playlists (uses remaining RAM/PSRAM)
+    if (sdAvailable) {
         buildPlaylist();
     }
     
@@ -1461,7 +1479,7 @@ void setup() {
     dial.onButtonPress(onButton);
     dial.begin();
     
-    webManager.begin();
+    // webManager.begin(); // Moved up
     
 
     
