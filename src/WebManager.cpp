@@ -492,6 +492,7 @@ void WebManager::handleNotFound() {
 }
 
 String WebManager::getSettingsHtml() {
+    esp_task_wdt_reset();
     String lang = settings.getLanguage();
     bool isDe = (lang == "de");
 
@@ -537,6 +538,7 @@ String WebManager::getSettingsHtml() {
     String dNamesDe[] = { "Mo", "Di", "Mi", "Do", "Fr", "Sa", "So" };
     String dNamesEn[] = { "Mo", "Tu", "We", "Th", "Fr", "Sa", "Su" };
     
+    esp_task_wdt_reset();
     for(int i=0; i<7; i++) {
         bool en = settings.isAlarmEnabled(i);
         String dayName = isDe ? dNamesDe[i] : dNamesEn[i];
@@ -618,6 +620,7 @@ String WebManager::getApSetupHtml() {
 }
 
 String WebManager::getAdvancedHtml() {
+    esp_task_wdt_reset();
     String lang = settings.getLanguage();
     bool isDe = (lang == "de");
 
@@ -656,12 +659,14 @@ String WebManager::getAdvancedHtml() {
     String t_reindex_desc = isDe ? "L&ouml;scht alle Playlists und scannt die SD-Karte erneut. (Neustart)" : "Clears all playlists and rescans the SD card. (Reboot)";
 
     // Scan for networks
+    esp_task_wdt_reset();
     int n = WiFi.scanNetworks();
     String ssidOptions = "";
     for (int i = 0; i < n; ++i) {
         ssidOptions += "<option value='" + WiFi.SSID(i) + "'>";
     }
 
+    esp_task_wdt_reset();
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += COMMON_CSS; // Use Shared Resource
     html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>";
@@ -696,6 +701,7 @@ String WebManager::getAdvancedHtml() {
     html += "</div>";
 
     // --- GROUP 2: AUDIO CONFIG ---
+    esp_task_wdt_reset();
     html += "<div class='card'><h3>Audio Configuration</h3>";
     html += "<label>" + t_h_vol + " (0-42) <output>" + String(settings.getVolume()) + "</output></label>";
     html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
@@ -801,6 +807,7 @@ void WebManager::handlePhonebookApi() {
 }
 
 String WebManager::getPhonebookHtml() {
+    esp_task_wdt_reset();
     String lang = settings.getLanguage();
     bool isDe = (lang == "de");
     // Translations...
@@ -811,6 +818,7 @@ String WebManager::getPhonebookHtml() {
     String t_title = isDe ? "Telefonbuch" : "Phonebook";
     String t_save_title = isDe ? "Speichern" : "Save Entries";
 
+    esp_task_wdt_reset();
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     
     // Gatsby Style (Global) included, but we override for "Lined Paper" mode
