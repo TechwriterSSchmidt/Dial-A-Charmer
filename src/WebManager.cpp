@@ -17,61 +17,60 @@ extern SemaphoreHandle_t sdMutex; // SD card mutex
 
 WebManager webManager;
 
-// Helper to list files for dropdown
-String getSdFileOptions(String folder, int currentSelection) {
-    esp_task_wdt_reset(); // Reset before SD access
-    
-    // Take SD mutex (wait up to 5 seconds)
+// Cached SD file lists to avoid SD contention during web requests
+static std::vector<String> cachedRingtones;
+static std::vector<String> cachedSystem;
+
+static void cacheSdFileList(const String& folder, std::vector<String>& out) {
+    out.clear();
+    esp_task_wdt_reset();
     if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
-        return "<option>SD Busy</option>";
+        Serial.println("[Web] SD mutex timeout while caching" + folder);
+        return;
     }
-    
-    String options = "";
     File dir = SD.open(folder);
     if(!dir || !dir.isDirectory()) {
-        xSemaphoreGive(sdMutex); // Release mutex
-        return "<option>No Folder " + folder + "</option>";
+        Serial.println("[Web] Missing folder: " + folder);
+        xSemaphoreGive(sdMutex);
+        return;
     }
-    esp_task_wdt_reset(); // Reset after SD open
-
-    std::vector<String> files;
-    File file = dir.openNextFile();
     size_t wdtTick = 0;
+    File file = dir.openNextFile();
     while(file){
         if(!file.isDirectory()) {
             String name = file.name();
-            if (name.startsWith(".")) { file = dir.openNextFile(); continue; } // skip hidden
-            files.push_back(name);
+            if (!name.startsWith(".")) {
+                out.push_back(name);
+            }
         }
-        if ((++wdtTick % 25) == 0) {
-            esp_task_wdt_reset();
-            delay(0);
-        }
+        if ((++wdtTick % 50) == 0) esp_task_wdt_reset();
         file = dir.openNextFile();
     }
-    
-    // Sort Alphabetically to ensure consistent Indexing
-    std::sort(files.begin(), files.end());
-    
+    std::sort(out.begin(), out.end());
+    xSemaphoreGive(sdMutex);
+}
+
+static String buildOptions(const std::vector<String>& files, int currentSelection) {
+    String options;
     for(size_t i=0; i<files.size(); i++) {
-        // IDs start at 1 usually in this system
-        int id = i + 1;
+        int id = static_cast<int>(i) + 1;
         String sel = (id == currentSelection) ? " selected" : "";
-        
-        // Remove extension for display
         String displayName = files[i];
         int dotIndex = displayName.lastIndexOf('.');
         if (dotIndex > 0) displayName = displayName.substring(0, dotIndex);
-        
         options += "<option value='" + String(id) + "'" + sel + ">" + displayName + "</option>";
-        if ((i % 50) == 0) {
-            esp_task_wdt_reset();
-            delay(0);
-        }
+        if ((i % 50) == 0) esp_task_wdt_reset();
     }
-    
-    xSemaphoreGive(sdMutex); // Release SD mutex
+    if (files.empty()) options = "<option>No files</option>";
     return options;
+}
+
+// Helper to list files for dropdown (uses cached lists, no SD access during request)
+String getSdFileOptions(String folder, int currentSelection) {
+    esp_task_wdt_reset();
+    if (folder == Path::RINGTONES) return buildOptions(cachedRingtones, currentSelection);
+    if (folder == Path::SYSTEM)    return buildOptions(cachedSystem, currentSelection);
+    return "<option>Unknown folder</option>";
 }
 
 String getFooterHtml(bool isDe, String activePage) {
@@ -161,6 +160,10 @@ void WebManager::begin() {
         Serial.print("AP IP: ");
         Serial.println(WiFi.softAPIP());
     }
+
+    // Cache SD file lists once to avoid SD contention during web requests
+    cacheSdFileList(Path::RINGTONES, cachedRingtones);
+    cacheSdFileList(Path::SYSTEM,    cachedSystem);
 
     _server.on("/", [this](){ handleRoot(); }); 
     _server.on("/phonebook", [this](){ handlePhonebook(); });
