@@ -568,6 +568,7 @@ String WebManager::getSettingsHtml() {
         html += "<div style='flex-grow:1; margin-left:15px;'>";
         html += "<select name='alm_t_" + String(i) + "' style='width:100%;'>";
         html += getSdFileOptions(Path::RINGTONES, settings.getAlarmTone(i));
+        esp_task_wdt_reset();
         html += "</select>";
         html += "</div>";
         
@@ -579,6 +580,7 @@ String WebManager::getSettingsHtml() {
     html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
     
+    esp_task_wdt_reset();
     html += getFooterHtml(isDe, "settings");
     
     html += "</body></html>";
@@ -713,7 +715,9 @@ String WebManager::getAdvancedHtml() {
     // Tones
     html += "<div style='display:flex; gap:10px; margin-top:15px;'>";
     html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>" + getSdFileOptions(Path::RINGTONES, settings.getRingtone()) + "</select></div>";
+    esp_task_wdt_reset();
     html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>" + getSdFileOptions(Path::SYSTEM, settings.getDialTone()) + "</select></div>";
+    esp_task_wdt_reset();
     html += "</div>";
     
     // AEC Switch
@@ -738,6 +742,7 @@ String WebManager::getAdvancedHtml() {
     html += "</div>";
 
     // --- GROUP 4: INTELLIGENCE (AI) ---
+    esp_task_wdt_reset();
     html += "<div class='card'><h3>" + t_ai + "</h3>";
     html += "<label>" + t_key + "</label><input type='password' name='gemini' value='" + settings.getGeminiKey() + "'>";
     html += "<small style='color:#666;'>Leave empty to disable AI features.</small>";
@@ -753,6 +758,7 @@ String WebManager::getAdvancedHtml() {
     html += "</div>";
 
     // OTA Update Form
+    esp_task_wdt_reset();
     html += "<div class='card'><h3>Firmware Update</h3>";
     html += "<p style='margin-bottom:15px;'><a href='https://github.com/TechwriterSSchmidt/Dial-A-Charmer/releases/latest/download/firmware.bin' target='_blank' style='color:#d4af37; text-decoration:underline;'>Download latest firmware.bin</a></p>";
     html += "<form method='POST' action='/update' enctype='multipart/form-data'>";
@@ -760,6 +766,7 @@ String WebManager::getAdvancedHtml() {
     html += "<button type='submit' style='background-color:#444; margin-top:10px;'>Start Update</button>";
     html += "</form></div>";
     
+    esp_task_wdt_reset();
     html += getFooterHtml(isDe, "advanced");
     
     html += "</body></html>";
@@ -957,6 +964,7 @@ async function save() {
     html += "<div style='max-width:550px; margin:0 auto;'>";
     html += "<button onclick='save()' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     
+    esp_task_wdt_reset();
     html += getFooterHtml(isDe, "phonebook");
 
     html += "</div>";
