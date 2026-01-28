@@ -23,9 +23,10 @@
     
     // External I2C (RTC) - Header P2
     // Note: IO 21 is also "PA Enable" on some revisions. Check for conflicts if Amp is muted.
-    #define CONF_I2C_SDA        21 
-    #define CONF_I2C_SCL        22 
-    #define CONF_RTC_USE_WIRE1  true  // Move RTC to Wire1 to avoid conflict with Codec on Wire(0)
+    // DISABLED I2C1 to prevent buzzing on Amp Enable Line
+    #define CONF_I2C_SDA        -1 
+    #define CONF_I2C_SCL        -1 
+    #define CONF_RTC_USE_WIRE1  false 
 
     // Rotary Dial & Inputs - Header P2
     #define CONF_PIN_DIAL_PULSE 5   
@@ -41,6 +42,7 @@
     
     // Features Disabled/Changed
     #define CONF_PIN_BATTERY    -1  // Disabled
+    #define CONF_PIN_PA_ENABLE  21  // Enable Power Amplifier
     
     // SD Card (Onboard Slot - HSPI)
     #define CONF_PIN_SD_CS      13  

@@ -507,11 +507,18 @@ void audioTaskCode(void * parameter) {
         // Try setting explicit master clock or different config if needed.
         // For now, let's keep it but ensure pins are correct: 27, 25, 26.
         audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
-        audio->setI2SCommFMT_LSB(true); // Attempt to fix "I2S not ready" / noise by matching codec format?
+        // audio->setI2SCommFMT_LSB(true); // DISABLED: Often causes static noise if Codec expects I2S Standard
+        
+        // ENABLE MCLK on GPIO 0
+        // Allows ES8388 to work in Master Mode or Sync correctly
+        PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO0_U, FUNC_GPIO0_CLK_OUT1);
+        WRITE_PERI_REG(PIN_CTRL, READ_PERI_REG(PIN_CTRL) & 0xFFFFFFE0);
+        Serial.println("MCLK Output Enabled on GPIO 0");
+
     #else
         audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
     #endif
-    audio->forceMono(true); 
+    audio->forceMono(false); // Stereo required for Audio Kit to work properly? 
     
     for(;;) {
         audio->loop();
@@ -555,13 +562,13 @@ void audioTaskCode(void * parameter) {
                             currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT2);
                             int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 100);
                             codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
-                            codec.volume(vol); // Ensure volume is set
+                            // codec.volume(vol); // Removed invalid call
                         } else {
                             // Handset Mode (Headset)
                             currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT1 | DAC_OUTPUT_ROUT1);
                             int vol = ::map(settings.getVolume(), 0, 42, 0, 100);
                             codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
-                            codec.volume(vol); // Ensure volume is set
+                            // codec.volume(vol); // Removed invalid call
                         }
                     #endif
 
@@ -1354,9 +1361,19 @@ void playDialTone() {
         dt = "/system/dialtone_1.wav";
     }
 
+    // Force usage of beep for now if dialtone fails persistently to prove audio works
+    // Or users can rename beep.wav to dialtone_1.wav on SD
+    // Verify file header/size? No.
+    if (!SD.exists(dt)) {
+         Serial.println("Error: Dial Tone file missing: " + dt);
+         dt = "/system/beep.wav"; // Critical Fallback
+    }
+
     Serial.println("Starting Dial Tone: " + dt);
     
     setAudioOutput(OUT_HANDSET);
+    // Use true=Speaker if OFF HOOK logic is inverted or user wants to test
+    // But logically Handset (Headphone) is correct for OFF HOOK.
     playSound(dt, false); // false = Handset
     isDialTonePlaying = true;
     
@@ -1372,6 +1389,8 @@ void stopDialTone() {
     }
 }
 // --- END HELPER ---
+
+#include <nvs_flash.h> // Ensure we can init NVS
 
 void setup() {
     Serial.begin(CONF_SERIAL_BAUD);
@@ -1398,6 +1417,15 @@ void setup() {
     } else {
         Serial.println("Power On / Reset");
     }
+
+    // Init NVS Partition (Vital for Preferences)
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        Serial.println("NVS Erasing...");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
 
     settings.begin();
     ledManager.begin();
@@ -1438,6 +1466,13 @@ void setup() {
     Serial.println("Ready.");
 
     #if HAS_ES8388_CODEC
+        // Enable Power Amplifier (GPIO 21 on Audio Kit v2.2)
+        #ifdef CONF_PIN_PA_ENABLE
+            pinMode(CONF_PIN_PA_ENABLE, OUTPUT);
+            digitalWrite(CONF_PIN_PA_ENABLE, HIGH);
+            Serial.printf("PA Enable Pin %d set HIGH\n", CONF_PIN_PA_ENABLE);
+        #endif
+
         Serial.println("Initializing ES8388 Codec...");
         Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
         if(!codec.begin(&Wire)){
@@ -1492,9 +1527,14 @@ void setup() {
     
     Serial.println("Dial-A-Charmer Started (PCM5100A + MAX9814)");
     
-    // Initial Beep
-    setAudioOutput(OUT_HANDSET);
-    playSound("/system/beep.wav", false); // Speaker
+    // Initial Beep - Test Speaker Output
+    Serial.println("Wait for Hook State to settle...");
+    delay(500); // Wait for hook debounce
+    Serial.printf("Current Hook State: %s\n", dial.isOffHook() ? "OFF HOOK" : "ON HOOK");
+
+    setAudioOutput(OUT_SPEAKER);
+    playSound("/system/beep.wav", true); // Speaker
+    Serial.println("Initial Beep played on SPEAKER (Output 2)");
 
     // Start Background Scan for updated Persona Names
     startPersonaScan();
@@ -1503,6 +1543,14 @@ void setup() {
 void loop() {
     // Reset Watchdog
     esp_task_wdt_reset();
+
+    // Verify Hook State Log
+    static bool lastHookState = false; 
+    bool actualHook = dial.isOffHook();
+    if(actualHook != lastHookState) {
+        lastHookState = actualHook;
+        Serial.printf("[DEBUG] Hook State Changed: %s\n", actualHook ? "OFF HOOK (Handset Lifted)" : "ON HOOK (Hung Up)");
+    }
 
     // if(audio) audio->loop(); // Handled by AudioTask
     webManager.loop();
