@@ -1595,7 +1595,6 @@ void loop() {
         Serial.printf("[DEBUG] Hook State Changed: %s\n", actualHook ? "OFF HOOK (Handset Lifted)" : "ON HOOK (Hung Up)");
     }
 
-    webManager.loop();
     dial.loop();
     
     // --- TIMEOUT / BUSY LOGIC ---

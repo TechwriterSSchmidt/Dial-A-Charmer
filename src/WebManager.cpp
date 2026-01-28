@@ -256,6 +256,7 @@ void WebManager::begin() {
 }
 
 void WebManager::loop() {
+    esp_task_wdt_reset();
     if (_apMode) {
         _dnsServer.processNextRequest();
         
@@ -291,6 +292,9 @@ void WebManager::loop() {
         processReindex(); 
         _reindexTriggered = false; 
     }
+
+    // Yield a bit to avoid starving other tasks
+    delay(1);
 }
 
 void WebManager::startAp() {
