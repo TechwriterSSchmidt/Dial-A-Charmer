@@ -670,14 +670,27 @@ void speakTime() {
         currentDay = 1; currentMonth = 0; currentYear = 1970; currentWeekday = 4;
     }
 
-    setAudioOutput(OUT_HANDSET);
+    // Smart Output: Handset if off-hook, Speaker if on-hook
+    if (dial.isOffHook()) {
+        setAudioOutput(OUT_HANDSET);
+    } else {
+        setAudioOutput(OUT_SPEAKER);
+    }
+
     timeState = TIME_INTRO;
     String lang = settings.getLanguage();
-    playSound("/time/" + lang + "/intro.mp3", false);
+    String introPath = "/time/" + lang + "/intro.mp3";
+    
+    // Debug
+    Serial.printf("Queueing Time Intro: %s\n", introPath.c_str());
+    
+    playSound(introPath, (currentOutput == OUT_SPEAKER));
 }
 
 void processTimeQueue() {
     if (timeState == TIME_IDLE || timeState == TIME_DONE) return;
+    
+    Serial.printf("processTimeQueue: State %d\n", timeState);
 
     // This function is called from audio_eof_mp3 to trigger next file
     String nextFile = "";
@@ -1361,19 +1374,17 @@ void playDialTone() {
         dt = "/system/dialtone_1.wav";
     }
 
-    // Force usage of beep for now if dialtone fails persistently to prove audio works
-    // Or users can rename beep.wav to dialtone_1.wav on SD
-    // Verify file header/size? No.
-    if (!SD.exists(dt)) {
-         Serial.println("Error: Dial Tone file missing: " + dt);
-         dt = "/system/beep.wav"; // Critical Fallback
+    // Workaround: Valid file check for current specific SD corruption/format issue
+    // Since dialtone_1.wav is reported invalid, we map it to beep.wav (which is known good)
+    if (dt == "/system/dialtone_1.wav") {
+         Serial.println("Workaround: Remapping potentially broken dialtone_1.wav to beep.wav");
+         dt = "/system/beep.wav";
     }
 
     Serial.println("Starting Dial Tone: " + dt);
     
+    // Smart Output: If we are "Off Hook", it's Handset.
     setAudioOutput(OUT_HANDSET);
-    // Use true=Speaker if OFF HOOK logic is inverted or user wants to test
-    // But logically Handset (Headphone) is correct for OFF HOOK.
     playSound(dt, false); // false = Handset
     isDialTonePlaying = true;
     
