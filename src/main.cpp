@@ -42,6 +42,7 @@ LedManager ledManager(CONF_PIN_LED);
 
 // --- AUDIO MULTITHREADING SETUP ---
 QueueHandle_t audioQueue;
+TaskHandle_t webServerTaskHandle = NULL; // Web Server Task
 
 enum AudioCmdType { CMD_PLAY, CMD_STOP, CMD_VOL, CMD_OUT, CMD_CONNECT_SPEECH };
 struct AudioCmd {
@@ -52,6 +53,7 @@ struct AudioCmd {
 
 // Forward Declaration needed for task
 void audioTaskCode(void * parameter);
+void webServerTaskCode(void * parameter); // Web Server Task
 void playSequence(std::vector<String> files, bool useSpeaker);
 void clearSpeechQueue();
 
@@ -596,6 +598,20 @@ void sendAudioCmd(AudioCmdType type, const char* path, int val) {
     else cmd.path[0] = '\0';
     cmd.value = val;
     xQueueSend(audioQueue, &cmd, 0);
+}
+
+// Web Server Task - Runs independently on Core 1
+void webServerTaskCode(void * parameter) {
+    Serial.print("[WebServerTask] Started on Core "); Serial.println(xPortGetCoreID());
+    
+    // Register this task with WDT (20s timeout)
+    esp_task_wdt_add(NULL);
+    
+    for(;;) {
+        esp_task_wdt_reset(); // Reset watchdog every iteration
+        webManager.loop();     // Handle web requests
+        vTaskDelay(5 / portTICK_PERIOD_MS); // Small delay to yield CPU
+    }
 }
 
 // --- Helper Functions ---
@@ -1534,7 +1550,16 @@ void setup() {
     
     // webManager.begin(); // Moved up
     
-
+    // Start Web Server Task on Core 1 (Separate from Audio on Core 0)
+    xTaskCreatePinnedToCore(
+        webServerTaskCode,  /* Function */
+        "WebServerTask",    /* Name */
+        8192,               /* Stack size */
+        NULL,               /* Param */
+        1,                  /* Priority (Lower than Audio) */
+        &webServerTaskHandle, /* Handle */
+        1                   /* Core 1 (Same as loop) */
+    );
     
     Serial.println("Dial-A-Charmer Started (PCM5100A + MAX9814)");
     
@@ -1565,8 +1590,7 @@ void loop() {
         Serial.printf("[DEBUG] Hook State Changed: %s\n", actualHook ? "OFF HOOK (Handset Lifted)" : "ON HOOK (Hung Up)");
     }
 
-    // if(audio) audio->loop(); // Handled by AudioTask
-    webManager.loop();
+    // webManager.loop() moved to separate task
     dial.loop();
     
     // --- TIMEOUT / BUSY LOGIC ---
