@@ -43,6 +43,7 @@ LedManager ledManager(CONF_PIN_LED);
 // --- AUDIO MULTITHREADING SETUP ---
 QueueHandle_t audioQueue;
 SemaphoreHandle_t sdMutex = NULL; // Mutex for SD card access
+TaskHandle_t webServerTaskHandle = NULL; // Web Server Task
 
 enum AudioCmdType { CMD_PLAY, CMD_STOP, CMD_VOL, CMD_OUT, CMD_CONNECT_SPEECH };
 struct AudioCmd {
@@ -53,6 +54,7 @@ struct AudioCmd {
 
 // Forward Declaration needed for task
 void audioTaskCode(void * parameter);
+void webServerTaskCode(void * parameter);
 void playSequence(std::vector<String> files, bool useSpeaker);
 void clearSpeechQueue();
 
@@ -603,6 +605,17 @@ void sendAudioCmd(AudioCmdType type, const char* path, int val) {
     else cmd.path[0] = '\0';
     cmd.value = val;
     xQueueSend(audioQueue, &cmd, 0);
+}
+
+// Web Server Task - runs on Core 1 with its own WDT resets
+void webServerTaskCode(void * parameter) {
+    Serial.print("[WebServerTask] Started on Core "); Serial.println(xPortGetCoreID());
+    esp_task_wdt_add(NULL); // register this task
+    for(;;) {
+        esp_task_wdt_reset();
+        webManager.loop();
+        vTaskDelay(5 / portTICK_PERIOD_MS); // yield CPU
+    }
 }
 
 // --- Helper Functions ---
@@ -1541,6 +1554,17 @@ void setup() {
     dial.onHookChange(onHook);
     dial.onButtonPress(onButton);
     dial.begin();
+    
+    // Start Web Server Task on Core 1 (separate from loop WDT)
+    xTaskCreatePinnedToCore(
+        webServerTaskCode,  /* Function */
+        "WebServerTask",    /* Name */
+        8192,               /* Stack size */
+        NULL,               /* Param */
+        1,                  /* Priority */
+        &webServerTaskHandle, /* Handle */
+        1                   /* Core 1 */
+    );
     
     Serial.println("Dial-A-Charmer Started (PCM5100A + MAX9814)");
     
