@@ -51,15 +51,15 @@ static void cacheSdFileList(const String& folder, std::vector<String>& out) {
     xSemaphoreGive(sdMutex);
 }
 
-static String buildOptions(const std::vector<String>& files, int currentSelection) {
+static String buildOptions(const std::vector<String>& files, String currentSelection) {
     String options;
     for(size_t i=0; i<files.size(); i++) {
-        int id = static_cast<int>(i) + 1;
-        String sel = (id == currentSelection) ? " selected" : "";
-        String displayName = files[i];
+        String fileName = files[i];
+        String sel = (fileName == currentSelection) ? " selected" : "";
+        String displayName = fileName;
         int dotIndex = displayName.lastIndexOf('.');
         if (dotIndex > 0) displayName = displayName.substring(0, dotIndex);
-        options += "<option value='" + String(id) + "'" + sel + ">" + displayName + "</option>";
+        options += "<option value='" + fileName + "'" + sel + ">" + displayName + "</option>";
         if ((i % 50) == 0) esp_task_wdt_reset();
     }
     if (files.empty()) options = "<option>No files</option>";
@@ -67,7 +67,7 @@ static String buildOptions(const std::vector<String>& files, int currentSelectio
 }
 
 // Helper to list files for dropdown (uses cached lists, no SD access during request)
-String getSdFileOptions(String folder, int currentSelection) {
+String getSdFileOptions(String folder, String currentSelection) {
     esp_task_wdt_reset();
     if (folder == Path::RINGTONES) return buildOptions(cachedRingtones, currentSelection);
     if (folder == Path::SYSTEM)    return buildOptions(cachedSystem, currentSelection);
@@ -400,12 +400,12 @@ void WebManager::handleAdvanced(AsyncWebServerRequest* request) {
     request->send(200, "text/html", getAdvancedHtml());
 }
 
-extern void playPreviewSound(String type, int index); // Defined in main.cpp
+extern void playPreviewSound(String type, String filename); // Defined in main.cpp
 
 void WebManager::handlePreviewApi(AsyncWebServerRequest* request) {
     if (request->hasArg("type") && request->hasArg("id")) {
         String type = request->arg("type");
-        int id = request->arg("id").toInt();
+        String id = request->arg("id");
         resetApTimer();
         playPreviewSound(type, id);
         request->send(200, "text/plain", "OK");
@@ -444,8 +444,8 @@ void WebManager::handleSave(AsyncWebServerRequest* request) {
     if (request->hasArg("vol")) settings.setVolume(request->arg("vol").toInt());
     if (request->hasArg("base_vol")) settings.setBaseVolume(request->arg("base_vol").toInt());
     if (request->hasArg("snooze")) settings.setSnoozeMinutes(request->arg("snooze").toInt()); // Added
-    if (request->hasArg("ring")) settings.setRingtone(request->arg("ring").toInt());
-    if (request->hasArg("dt")) settings.setDialTone(request->arg("dt").toInt());
+    if (request->hasArg("ring")) settings.setRingtone(request->arg("ring"));
+    if (request->hasArg("dt")) settings.setDialTone(request->arg("dt"));
     
     // Checkbox handling (Browser sends nothing if unchecked)
     // Only update if we are in the form that has this checkbox
@@ -460,7 +460,7 @@ void WebManager::handleSave(AsyncWebServerRequest* request) {
              String s = String(i);
              if(request->hasArg("alm_h_"+s)) settings.setAlarmHour(i, request->arg("alm_h_"+s).toInt());
              if(request->hasArg("alm_m_"+s)) settings.setAlarmMinute(i, request->arg("alm_m_"+s).toInt());
-             if(request->hasArg("alm_t_"+s)) settings.setAlarmTone(i, request->arg("alm_t_"+s).toInt());
+             if(request->hasArg("alm_t_"+s)) settings.setAlarmTone(i, request->arg("alm_t_"+s));
              settings.setAlarmEnabled(i, request->hasArg("alm_en_"+s));
         }
     }
@@ -725,23 +725,27 @@ String WebManager::getAdvancedHtml() {
     html += "</select>";
 
     // WiFi Signal Strength
-    long rssi = WiFi.RSSI();
-    int bars = 0;
-    if (rssi > -55) bars = 5;
-    else if (rssi > -65) bars = 4;
-    else if (rssi > -75) bars = 3;
-    else if (rssi > -85) bars = 2;
-    else if (rssi > -95) bars = 1;
-    
-    html += "<div style='margin-top:20px; display:flex; align-items:flex-end; gap:10px;'>";
-    html += "<div style='flex:1; color:#aaa; font-size:0.9rem;'>Signal: " + String(rssi) + " dBm</div>";
-    html += "<div style='display:flex; gap:3px; align-items:flex-end;'>";
-    for(int i=0; i<5; i++) {
-        String color = (i < bars) ? "#d4af37" : "#333";
-        int h = 12 + (i * 6); // 12, 18, 24, 30, 36
-        html += "<div style='width:6px; height:" + String(h) + "px; background-color:" + color + "; border-radius:1px;'></div>";
+    if (!_apMode) {
+        long rssi = WiFi.RSSI();
+        int bars = 0;
+        if (rssi != 0) {
+            if (rssi > -55) bars = 5;
+            else if (rssi > -65) bars = 4;
+            else if (rssi > -75) bars = 3;
+            else if (rssi > -85) bars = 2;
+            else if (rssi > -95) bars = 1;
+        }
+        
+        html += "<div style='margin-top:20px; display:flex; align-items:flex-end; gap:10px;'>";
+        html += "<div style='flex:1; color:#aaa; font-size:0.9rem;'>Signal: " + String(rssi) + " dBm</div>";
+        html += "<div style='display:flex; gap:3px; align-items:flex-end;'>";
+        for(int i=0; i<5; i++) {
+            String color = (i < bars) ? "#d4af37" : "#333";
+            int h = 12 + (i * 6); // 12, 18, 24, 30, 36
+            html += "<div style='width:6px; height:" + String(h) + "px; background-color:" + color + "; border-radius:1px;'></div>";
+        }
+        html += "</div></div>";
     }
-    html += "</div></div>";
 
     html += "</div>";
 

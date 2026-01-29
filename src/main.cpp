@@ -863,7 +863,7 @@ void speakCompliment(int number) {
     playSound(path, false);
 }
 
-void playPreviewSound(String type, int index) {
+void playPreviewSound(String type, String filename) {
     if (audio->isRunning()) audio->stopSong();
     
     // Play on Speaker if On-Hook, Handset if Off-Hook
@@ -872,13 +872,9 @@ void playPreviewSound(String type, int index) {
     
     String path = "";
     if (type == "ring") {
-        // Fix: Use correct filename used by Settings::setRingtone (String)
-        path = "/ringtones/" + index; 
-        if (!path.endsWith(".wav") && !path.endsWith(".mp3")) path += ".wav";
+        path = String(Path::RINGTONES) + "/" + filename; 
     } else if (type == "dt") {
-        // Fix: Use correct filename for dialtones
-        path = "/system/" + index;
-         if (!path.endsWith(".wav") && !path.endsWith(".mp3")) path += ".wav";
+        path = String(Path::SYSTEM) + "/" + filename;
     }
     
     if (path.length() > 0) {
@@ -1403,18 +1399,18 @@ void playDialTone() {
     // Stop any speech holding the audio
     if (audio->isRunning()) audio->stopSong();
 
-    int toneIndex = settings.getDialTone();
-    String dt = getSystemFileByIndex(toneIndex);
+    String dtName = settings.getDialTone();
+    String dt = String(Path::SYSTEM) + "/" + dtName;
     
     // SAFETY CHECK: Dial Tone must not be a system announcement!
     if (dt.indexOf("alarm_active") >= 0 || dt.indexOf("timer_") >= 0 || dt.indexOf("menu_") >= 0) {
         Serial.println("Warning: Invalid DialTone config detected (" + dt + "). Reverting to default.");
         dt = "/system/dialtone_1.wav";
-        // Auto-fix settings (Don't reset index blindly, just use safe file temporarily)
-        // settings.setDialTone(2); 
     }
 
-    if (dt == "" || !SD.exists(dt)) {
+    if (dtName == "" || !SD.exists(dt)) {
+         // Fallback if not scheduled or file missing
+         // Try checking 1.wav legacy? No, just use standard default
         dt = "/system/dialtone_1.wav";
     }
 
