@@ -872,9 +872,13 @@ void playPreviewSound(String type, int index) {
     
     String path = "";
     if (type == "ring") {
-        path = "/ringtones/" + String(index) + ".wav";
+        // Fix: Use correct filename used by Settings::setRingtone (String)
+        path = "/ringtones/" + index; 
+        if (!path.endsWith(".wav") && !path.endsWith(".mp3")) path += ".wav";
     } else if (type == "dt") {
-        path = "/system/dialtone_" + String(index) + ".wav";
+        // Fix: Use correct filename for dialtones
+        path = "/system/" + index;
+         if (!path.endsWith(".wav") && !path.endsWith(".mp3")) path += ".wav";
     }
     
     if (path.length() > 0) {
@@ -893,7 +897,10 @@ void startAlarm(bool isTimer) {
     setAudioOutput(OUT_SPEAKER);
     audio->setVolume(::map(currentAlarmVol, 0, 42, 0, 21)); 
     
-    playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
+    // Fix: Use stored ringtone filename directly
+    String rt = settings.getRingtone();
+    if(rt == "") rt = "tone01.wav"; // Safe Default
+    playSound("/ringtones/" + rt, true);
 }
 
 void stopAlarm() {
@@ -1858,7 +1865,9 @@ void audio_eof_mp3(const char *info){
     
     if (isAlarmRinging) {
          // Loop Alarm Sound
-         playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
+         String rt = settings.getRingtone();
+         if(rt == "") rt = "tone01.wav"; 
+         playSound("/ringtones/" + rt, true);
          
          // Note: setVolume might be reset by playSound internal logic if we called setAudioOutput again?
          // Our modified playSound calls setAudioOutput. 
