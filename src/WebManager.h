@@ -2,7 +2,8 @@
 #define WEB_MANAGER_H
 
 #include <WiFi.h>
-#include <WebServer.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
 #include <DNSServer.h>
 #include "Settings.h"
 #include "config.h"
@@ -16,7 +17,7 @@ public:
     void stopAp();
 
 private:
-    WebServer _server;
+    AsyncWebServer _server{80};
     DNSServer _dnsServer;
     
     // --- Async Reindex Flags ---
@@ -30,16 +31,17 @@ private:
     const unsigned long _mdnsRetryMs = 10000;
     unsigned long _apEndTime = 0; // Auto-off timer
 
-    void handleRoot();
-    void handleSettings(); // New: Dedicated Settings/Alarm Page
-    void handleAdvanced(); // New
-    void handleSave();
-    void handleHelp();
-    void handlePhonebook();
-    void handlePhonebookApi();
-    void handleFileListApi(); // New: JSON File Browser
-    void handlePreviewApi();  
-    void handleNotFound();
+    void handleRoot(AsyncWebServerRequest* request);
+    void handleSettings(AsyncWebServerRequest* request); // New: Dedicated Settings/Alarm Page
+    void handleAdvanced(AsyncWebServerRequest* request); // New
+    void handleSave(AsyncWebServerRequest* request);
+    void handleHelp(AsyncWebServerRequest* request);
+    void handlePhonebook(AsyncWebServerRequest* request);
+    void handlePhonebookGet(AsyncWebServerRequest* request);
+    void handlePhonebookPost(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total);
+    void handleFileListApi(AsyncWebServerRequest* request); // New: JSON File Browser
+    void handlePreviewApi(AsyncWebServerRequest* request);  
+    void handleNotFound(AsyncWebServerRequest* request);
     
     // Helpers
     void resetApTimer();

@@ -247,6 +247,7 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
     Serial.printf("Scanning dir: %s for Cat %d\n", path.c_str(), categoryId);
 
     File file = dir.openNextFile();
+    int fileCount = 0;
     while(file) {
         esp_task_wdt_reset(); // Prevent WDT Reset during long directory scans
         if(!file.isDirectory()) {
@@ -258,14 +259,17 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
                 if(fname.startsWith("/")) fname = fname.substring(1); 
                 fullPath += fname;
                 
-                // Serial.printf("  Found: %s\n", fullPath.c_str()); // Debug verbose
+                // Debug every 10 files
+                if (fileCount % 10 == 0) Serial.printf("."); 
 
                 // Add to specific category ONLY
                 categories[categoryId].tracks.push_back(fullPath);
+                fileCount++;
             }
         }
         file = dir.openNextFile();
     }
+    Serial.printf("\nDone scanning. Found %d files.\n", fileCount);
 }
 
 void startPersonaScan() {
@@ -290,34 +294,37 @@ void startPersonaScan() {
 
 void handlePersonaScan() {
     if (!bgScanActive || !sdAvailable) return;
-    
-    // Safety: Reset WDT during heavy SD operations
+
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(20)) != pdTRUE) return; // try later if busy
+
+    // Safety: Reset WDT during SD operations
     esp_task_wdt_reset();
 
     // Process a chunk of work
     // State 0: Open Dir if needed
     if (!bgScanDir) {
-            if (bgScanPersonaIndex > 5) {
-                // FINISHED
-                bgScanActive = false;
-                if (bgScanPhonebookChanged) {
-                    Serial.println("[BG] Saving updated Phonebook names...");
-                    phonebook.saveChanges();
-                } else {
-                    Serial.println("[BG] Scan finished. No changes.");
-                }
-                return;
+        if (bgScanPersonaIndex > 5) {
+            // FINISHED
+            bgScanActive = false;
+            if (bgScanPhonebookChanged) {
+                Serial.println("[BG] Saving updated Phonebook names...");
+                phonebook.saveChanges();
+            } else {
+                Serial.println("[BG] Scan finished. No changes.");
             }
-            
-            String path = "/persona_0" + String(bgScanPersonaIndex);
-            bgScanDir = SD.open(path);
-            if (!bgScanDir || !bgScanDir.isDirectory()) {
-                // Serial.printf("[BG] Skipping missing/file %s\n", path.c_str());
-                if(bgScanDir) bgScanDir.close();
-                bgScanPersonaIndex++;
-                return; // Next loop will handle next index
-            }
-            Serial.printf("[BG] Scanning %s...\n", path.c_str());
+            xSemaphoreGive(sdMutex);
+            return;
+        }
+        
+        String path = "/persona_0" + String(bgScanPersonaIndex);
+        bgScanDir = SD.open(path);
+        if (!bgScanDir || !bgScanDir.isDirectory()) {
+            if(bgScanDir) bgScanDir.close();
+            bgScanPersonaIndex++;
+            xSemaphoreGive(sdMutex);
+            return; // Next loop will handle next index
+        }
+        Serial.printf("[BG] Scanning %s...\n", path.c_str());
     }
 
     // State 1: Read ONE file
@@ -340,7 +347,6 @@ void handlePersonaScan() {
 
             Serial.printf("[BG] Found Name: %s\n", name.c_str());
             
-            // Note: findKeyByValueAndParam might be slow if phonebook is huge but it's usually small
             String key = phonebook.findKeyByValueAndParam("COMPLIMENT_CAT", String(bgScanPersonaIndex));
             
             if (key != "") {
@@ -358,13 +364,13 @@ void handlePersonaScan() {
             bgScanDir.close(); 
             bgScanPersonaIndex++;
         }
-        // file object is destroyed here, handle is closed? 
-        // SD lib usually closes when object is destroyed.
     } else {
         // End of Directory
         bgScanDir.close();
         bgScanPersonaIndex++;
     }
+
+    xSemaphoreGive(sdMutex);
 }
 
 void buildPlaylist() {
@@ -766,7 +772,16 @@ void processTimeQueue() {
 
         case TIME_MONTH:
             timeState = TIME_YEAR;
-            nextFile = basePath + "year_" + String(currentYear) + ".mp3";
+            if (currentYear <= 1970) {
+                // Skip speaking year 1970 (Default/Invalid Time)
+                Serial.println("Skipping Year 1970 (Time Invalid)");
+                // Also skip DST as it is irrelevant without valid date
+                timeState = TIME_DONE;
+                Serial.println("Time & Date Speak Done");
+                nextFile = "";
+            } else {
+                nextFile = basePath + "year_" + String(currentYear) + ".mp3";
+            }
             break;
 
         case TIME_YEAR:
@@ -785,7 +800,9 @@ void processTimeQueue() {
     
     if (nextFile.length() > 0) {
         Serial.print("Next Time File: "); Serial.println(nextFile);
-        playSound(nextFile, false);
+        // Smart Output: Keep sync with hook state (User might lift/hang up during speech)
+        bool useSpeaker = !dial.isOffHook();
+        playSound(nextFile, useSpeaker);
     }
 }
 
@@ -846,7 +863,7 @@ void speakCompliment(int number) {
     playSound(path, false);
 }
 
-void playPreviewSound(String type, int index) {
+void playPreviewSound(String type, String filename) {
     if (audio->isRunning()) audio->stopSong();
     
     // Play on Speaker if On-Hook, Handset if Off-Hook
@@ -855,9 +872,9 @@ void playPreviewSound(String type, int index) {
     
     String path = "";
     if (type == "ring") {
-        path = "/ringtones/" + String(index) + ".wav";
+        path = String(Path::RINGTONES) + "/" + filename; 
     } else if (type == "dt") {
-        path = "/system/dialtone_" + String(index) + ".wav";
+        path = String(Path::SYSTEM) + "/" + filename;
     }
     
     if (path.length() > 0) {
@@ -876,7 +893,10 @@ void startAlarm(bool isTimer) {
     setAudioOutput(OUT_SPEAKER);
     audio->setVolume(::map(currentAlarmVol, 0, 42, 0, 21)); 
     
-    playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
+    // Fix: Use stored ringtone filename directly
+    String rt = settings.getRingtone();
+    if(rt == "") rt = "tone01.wav"; // Safe Default
+    playSound("/ringtones/" + rt, true);
 }
 
 void stopAlarm() {
@@ -1379,18 +1399,18 @@ void playDialTone() {
     // Stop any speech holding the audio
     if (audio->isRunning()) audio->stopSong();
 
-    int toneIndex = settings.getDialTone();
-    String dt = getSystemFileByIndex(toneIndex);
+    String dtName = settings.getDialTone();
+    String dt = String(Path::SYSTEM) + "/" + dtName;
     
     // SAFETY CHECK: Dial Tone must not be a system announcement!
     if (dt.indexOf("alarm_active") >= 0 || dt.indexOf("timer_") >= 0 || dt.indexOf("menu_") >= 0) {
         Serial.println("Warning: Invalid DialTone config detected (" + dt + "). Reverting to default.");
         dt = "/system/dialtone_1.wav";
-        // Auto-fix settings (Don't reset index blindly, just use safe file temporarily)
-        // settings.setDialTone(2); 
     }
 
-    if (dt == "" || !SD.exists(dt)) {
+    if (dtName == "" || !SD.exists(dt)) {
+         // Fallback if not scheduled or file missing
+         // Try checking 1.wav legacy? No, just use standard default
         dt = "/system/dialtone_1.wav";
     }
 
@@ -1470,6 +1490,9 @@ void setup() {
     phonebook.begin(); // Load Phonebook from LittleFS
     timeManager.begin(); // Added TimeManager
     
+    // Init I2C Common
+    Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
+
     // --- Hardware Init ---
     
     // 0. Create SD Mutex (before any SD access)
@@ -1508,7 +1531,8 @@ void setup() {
         #endif
 
         Serial.println("Initializing ES8388 Codec...");
-        Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
+        // Ensure Wire is not already started or use proper check
+        // Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL); // Moved to setup() common area or checked
         if(!codec.begin(&Wire)){
             Serial.println("ES8388 Init Failed!");
         } else {
@@ -1517,21 +1541,16 @@ void setup() {
         }
     #endif
 
-    // 1. Init SD 
-    #ifdef BOARD_AI_THINKER_AUDIO_KIT
-        // Correct SPI setup for Audio Kit v2.2 (HSPI)
-        // SCK=14, MISO=2, MOSI=15, CS=13
-        SPI.begin(14, 2, 15, 13); 
-        // Reduced speed (1MHz) for stability
-        if(!SD.begin(13, SPI, 1000000)){
-    #else
-        // Standard VSPI (Lolin D32 Pro default)
-        if(!SD.begin(CONF_PIN_SD_CS)){
-    #endif
+    // 1. Init SD (Audio Kit HSPI)
+    // SCK=14, MISO=2, MOSI=15, CS=13
+    SPI.begin(14, 2, 15, 13); 
+    // Reduced speed to 5MHz for maximum compatibility with erratic cards (SanDisk etc)
+    if(!SD.begin(13, SPI, 5000000)){
         Serial.println("SD Card Mount Failed (No Card?)");
         ledManager.setMode(LedManager::SOS);
         sdAvailable = false;
     } else {
+
         Serial.println("SD Card Mounted");
         sdAvailable = true;
         // buildPlaylist(); // MOVED DOWN
@@ -1578,9 +1597,7 @@ void setup() {
     Serial.println("Initial Beep played on SPEAKER (Output 2)");
 
     // Start Background Scan for updated Persona Names
-    // Disabled to prevent WDT resets during SD/web access
-    bgScanActive = false;
-    // startPersonaScan();
+    startPersonaScan();
 }
 
 void loop() {
@@ -1660,7 +1677,7 @@ void loop() {
     }
 
     timeManager.loop();
-    // handlePersonaScan(); // Run BG Task - Disabled to prevent WDT crash during SD contention
+    handlePersonaScan(); // Run BG Task (now mutex-guarded)
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {
@@ -1844,7 +1861,9 @@ void audio_eof_mp3(const char *info){
     
     if (isAlarmRinging) {
          // Loop Alarm Sound
-         playSound("/ringtones/" + String(settings.getRingtone()) + ".wav", true);
+         String rt = settings.getRingtone();
+         if(rt == "") rt = "tone01.wav"; 
+         playSound("/ringtones/" + rt, true);
          
          // Note: setVolume might be reset by playSound internal logic if we called setAudioOutput again?
          // Our modified playSound calls setAudioOutput. 
