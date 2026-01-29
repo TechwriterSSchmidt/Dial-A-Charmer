@@ -772,7 +772,16 @@ void processTimeQueue() {
 
         case TIME_MONTH:
             timeState = TIME_YEAR;
-            nextFile = basePath + "year_" + String(currentYear) + ".mp3";
+            if (currentYear <= 1970) {
+                // Skip speaking year 1970 (Default/Invalid Time)
+                Serial.println("Skipping Year 1970 (Time Invalid)");
+                // Also skip DST as it is irrelevant without valid date
+                timeState = TIME_DONE;
+                Serial.println("Time & Date Speak Done");
+                nextFile = "";
+            } else {
+                nextFile = basePath + "year_" + String(currentYear) + ".mp3";
+            }
             break;
 
         case TIME_YEAR:
@@ -791,7 +800,9 @@ void processTimeQueue() {
     
     if (nextFile.length() > 0) {
         Serial.print("Next Time File: "); Serial.println(nextFile);
-        playSound(nextFile, false);
+        // Smart Output: Keep sync with hook state (User might lift/hang up during speech)
+        bool useSpeaker = !dial.isOffHook();
+        playSound(nextFile, useSpeaker);
     }
 }
 
@@ -1476,6 +1487,9 @@ void setup() {
     phonebook.begin(); // Load Phonebook from LittleFS
     timeManager.begin(); // Added TimeManager
     
+    // Init I2C Common
+    Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
+
     // --- Hardware Init ---
     
     // 0. Create SD Mutex (before any SD access)
@@ -1514,7 +1528,8 @@ void setup() {
         #endif
 
         Serial.println("Initializing ES8388 Codec...");
-        Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
+        // Ensure Wire is not already started or use proper check
+        // Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL); // Moved to setup() common area or checked
         if(!codec.begin(&Wire)){
             Serial.println("ES8388 Init Failed!");
         } else {
@@ -1526,12 +1541,13 @@ void setup() {
     // 1. Init SD (Audio Kit HSPI)
     // SCK=14, MISO=2, MOSI=15, CS=13
     SPI.begin(14, 2, 15, 13); 
-    // Reduced speed (1MHz) for stability
-    if(!SD.begin(13, SPI, 1000000)){
+    // Reduced speed to 5MHz for maximum compatibility with erratic cards (SanDisk etc)
+    if(!SD.begin(13, SPI, 5000000)){
         Serial.println("SD Card Mount Failed (No Card?)");
         ledManager.setMode(LedManager::SOS);
         sdAvailable = false;
     } else {
+
         Serial.println("SD Card Mounted");
         sdAvailable = true;
         // buildPlaylist(); // MOVED DOWN

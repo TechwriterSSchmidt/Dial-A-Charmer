@@ -251,6 +251,11 @@ void WebManager::begin() {
 
     _server.on("/api/files", HTTP_GET, [this](AsyncWebServerRequest* request){ handleFileListApi(request); });
     
+    // Prevent 404 logs for favicon
+    _server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){
+        request->send(204);
+    });
+
     // Serve Static Files (Last resort for assets like .css, .js)
     _server.serveStatic("/", LittleFS, "/");
     
@@ -718,6 +723,26 @@ String WebManager::getAdvancedHtml() {
         html += ">" + String(labels[i]) + "</option>";
     }
     html += "</select>";
+
+    // WiFi Signal Strength
+    long rssi = WiFi.RSSI();
+    int bars = 0;
+    if (rssi > -55) bars = 5;
+    else if (rssi > -65) bars = 4;
+    else if (rssi > -75) bars = 3;
+    else if (rssi > -85) bars = 2;
+    else if (rssi > -95) bars = 1;
+    
+    html += "<div style='margin-top:20px; display:flex; align-items:flex-end; gap:10px;'>";
+    html += "<div style='flex:1; color:#aaa; font-size:0.9rem;'>Signal: " + String(rssi) + " dBm</div>";
+    html += "<div style='display:flex; gap:3px; align-items:flex-end;'>";
+    for(int i=0; i<5; i++) {
+        String color = (i < bars) ? "#d4af37" : "#333";
+        int h = 12 + (i * 6); // 12, 18, 24, 30, 36
+        html += "<div style='width:6px; height:" + String(h) + "px; background-color:" + color + "; border-radius:1px;'></div>";
+    }
+    html += "</div></div>";
+
     html += "</div>";
 
     // --- GROUP 2: AUDIO CONFIG ---
