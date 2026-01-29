@@ -290,34 +290,37 @@ void startPersonaScan() {
 
 void handlePersonaScan() {
     if (!bgScanActive || !sdAvailable) return;
-    
-    // Safety: Reset WDT during heavy SD operations
+
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(20)) != pdTRUE) return; // try later if busy
+
+    // Safety: Reset WDT during SD operations
     esp_task_wdt_reset();
 
     // Process a chunk of work
     // State 0: Open Dir if needed
     if (!bgScanDir) {
-            if (bgScanPersonaIndex > 5) {
-                // FINISHED
-                bgScanActive = false;
-                if (bgScanPhonebookChanged) {
-                    Serial.println("[BG] Saving updated Phonebook names...");
-                    phonebook.saveChanges();
-                } else {
-                    Serial.println("[BG] Scan finished. No changes.");
-                }
-                return;
+        if (bgScanPersonaIndex > 5) {
+            // FINISHED
+            bgScanActive = false;
+            if (bgScanPhonebookChanged) {
+                Serial.println("[BG] Saving updated Phonebook names...");
+                phonebook.saveChanges();
+            } else {
+                Serial.println("[BG] Scan finished. No changes.");
             }
-            
-            String path = "/persona_0" + String(bgScanPersonaIndex);
-            bgScanDir = SD.open(path);
-            if (!bgScanDir || !bgScanDir.isDirectory()) {
-                // Serial.printf("[BG] Skipping missing/file %s\n", path.c_str());
-                if(bgScanDir) bgScanDir.close();
-                bgScanPersonaIndex++;
-                return; // Next loop will handle next index
-            }
-            Serial.printf("[BG] Scanning %s...\n", path.c_str());
+            xSemaphoreGive(sdMutex);
+            return;
+        }
+        
+        String path = "/persona_0" + String(bgScanPersonaIndex);
+        bgScanDir = SD.open(path);
+        if (!bgScanDir || !bgScanDir.isDirectory()) {
+            if(bgScanDir) bgScanDir.close();
+            bgScanPersonaIndex++;
+            xSemaphoreGive(sdMutex);
+            return; // Next loop will handle next index
+        }
+        Serial.printf("[BG] Scanning %s...\n", path.c_str());
     }
 
     // State 1: Read ONE file
@@ -340,7 +343,6 @@ void handlePersonaScan() {
 
             Serial.printf("[BG] Found Name: %s\n", name.c_str());
             
-            // Note: findKeyByValueAndParam might be slow if phonebook is huge but it's usually small
             String key = phonebook.findKeyByValueAndParam("COMPLIMENT_CAT", String(bgScanPersonaIndex));
             
             if (key != "") {
@@ -358,13 +360,13 @@ void handlePersonaScan() {
             bgScanDir.close(); 
             bgScanPersonaIndex++;
         }
-        // file object is destroyed here, handle is closed? 
-        // SD lib usually closes when object is destroyed.
     } else {
         // End of Directory
         bgScanDir.close();
         bgScanPersonaIndex++;
     }
+
+    xSemaphoreGive(sdMutex);
 }
 
 void buildPlaylist() {
@@ -1578,9 +1580,7 @@ void setup() {
     Serial.println("Initial Beep played on SPEAKER (Output 2)");
 
     // Start Background Scan for updated Persona Names
-    // Disabled to prevent WDT resets during SD/web access
-    bgScanActive = false;
-    // startPersonaScan();
+    startPersonaScan();
 }
 
 void loop() {
@@ -1660,7 +1660,7 @@ void loop() {
     }
 
     timeManager.loop();
-    // handlePersonaScan(); // Run BG Task - Disabled to prevent WDT crash during SD contention
+    handlePersonaScan(); // Run BG Task (now mutex-guarded)
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {

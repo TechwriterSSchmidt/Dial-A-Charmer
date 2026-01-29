@@ -3,6 +3,7 @@
 #include "LedManager.h"
 #include "PhonebookManager.h"
 #include "WebResources.h" // Setup Styles
+#include <ArduinoJson.h>
 #include <ESPmDNS.h>
 #include <Update.h>
 #include <SD.h>
@@ -165,86 +166,90 @@ void WebManager::begin() {
     cacheSdFileList(Path::RINGTONES, cachedRingtones);
     cacheSdFileList(Path::SYSTEM,    cachedSystem);
 
-    _server.on("/", [this](){ handleRoot(); }); 
-    _server.on("/phonebook", [this](){ handlePhonebook(); });
-    _server.on("/settings", [this](){ handleSettings(); }); 
-    _server.on("/advanced", [this](){ handleAdvanced(); });
-    _server.on("/api/phonebook", [this](){ handlePhonebookApi(); });
-    _server.on("/api/preview", [this](){ handlePreviewApi(); });
-    _server.on("/help", [this](){ handleHelp(); });
+    auto sendSdFile = [](AsyncWebServerRequest* request, const char* path, const char* contentType){
+        esp_task_wdt_reset();
+        if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+            request->send(503, "text/plain", "SD busy");
+            return;
+        }
+        if (!SD.exists(path)) {
+            xSemaphoreGive(sdMutex);
+            request->send(404, "text/plain", "Not Found");
+            return;
+        }
+        AsyncWebServerResponse* response = request->beginResponse(SD, path, contentType);
+        response->addHeader("Cache-Control", "max-age=604800");
+        request->send(response);
+        xSemaphoreGive(sdMutex);
+    };
+
+    _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* request){ handleRoot(request); }); 
+    _server.on("/phonebook", HTTP_GET, [this](AsyncWebServerRequest* request){ handlePhonebook(request); });
+    _server.on("/settings", HTTP_GET, [this](AsyncWebServerRequest* request){ handleSettings(request); }); 
+    _server.on("/advanced", HTTP_GET, [this](AsyncWebServerRequest* request){ handleAdvanced(request); });
+    _server.on("/api/phonebook", HTTP_GET, [this](AsyncWebServerRequest* request){ handlePhonebookGet(request); });
+    _server.on("/api/phonebook", HTTP_POST,
+        [this](AsyncWebServerRequest* request){ /* response sent in body handler */ },
+        nullptr,
+        [this](AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total){ handlePhonebookPost(request, data, len, index, total); }
+    );
+    _server.on("/api/preview", HTTP_GET, [this](AsyncWebServerRequest* request){ handlePreviewApi(request); });
+    _server.on("/help", HTTP_GET, [this](AsyncWebServerRequest* request){ handleHelp(request); });
 
     // Reindex Storage
-    _server.on("/api/reindex", [this](){
+    _server.on("/api/reindex", HTTP_ANY, [this](AsyncWebServerRequest* request){
         Serial.println("WebCMD: Reindex requested.");
         _reindexTriggered = true; // Set Flag
-        _server.send(200, "text/plain", "ACCEPTED"); // Immediate Response
+        request->send(202, "text/plain", "ACCEPTED"); // Immediate Response
     });
 
-    _server.on("/update", HTTP_POST, [this](){
-            _server.sendHeader("Connection", "close");
+    _server.on("/update", HTTP_POST,
+        [this](AsyncWebServerRequest* request){
+            AsyncWebServerResponse* response;
             if (Update.hasError()) {
-                _server.send(500, "text/plain", "FAIL");
+                response = request->beginResponse(500, "text/plain", "FAIL");
             } else {
-                _server.send(200, "text/html", "<html><head><meta http-equiv='refresh' content='10;url=/'><style>body{background:#111;color:#d4af37;font-family:sans-serif;text-align:center;padding:50px;}</style></head><body><h2>Update Successful</h2><p>Rebooting... Please wait.</p></body></html>");
+                response = request->beginResponse(200, "text/html", "<html><head><meta http-equiv='refresh' content='10;url=/'><style>body{background:#111;color:#d4af37;font-family:sans-serif;text-align:center;padding:50px;}</style></head><body><h2>Update Successful</h2><p>Rebooting... Please wait.</p></body></html>");
             }
-            ESP.restart();
-        }, [this](){
-            HTTPUpload& upload = _server.upload();
-            if (upload.status == UPLOAD_FILE_START) {
-                Serial.printf("Update: %s\n", upload.filename.c_str());
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { 
+            response->addHeader("Connection", "close");
+            request->send(response);
+            request->onDisconnect([](){ ESP.restart(); });
+        },
+        [this](AsyncWebServerRequest* request, const String& filename, size_t index, uint8_t* data, size_t len, bool final){
+            if (index == 0) {
+                Serial.printf("Update: %s\n", filename.c_str());
+                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
                     Update.printError(Serial);
                 }
-            } else if (upload.status == UPLOAD_FILE_WRITE) {
-                if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+            }
+            if (!Update.hasError()) {
+                if (Update.write(data, len) != len) {
                     Update.printError(Serial);
                 }
-            } else if (upload.status == UPLOAD_FILE_END) {
-                if (Update.end(true)) { 
-                    Serial.printf("Update Success: %uB\n", upload.totalSize);
+            }
+            if (final) {
+                if (Update.end(true)) {
+                    Serial.printf("Update Success: %uB\n", index + len);
                 } else {
                     Update.printError(Serial);
                 }
             }
-        });
+        }
+    );
 
-    _server.on("/save", HTTP_POST, [this](){ handleSave(); });
-    _server.onNotFound([this](){ handleNotFound(); });
+    _server.on("/save", HTTP_POST, [this](AsyncWebServerRequest* request){ handleSave(request); });
+    _server.onNotFound([this](AsyncWebServerRequest* request){ handleNotFound(request); });
 
     // --- FONTS FROM SD CARD (With Caching) ---
-    _server.on("/fonts/ZenTokyoZoo-Regular.ttf", [this](){
-        esp_task_wdt_reset();
-        if(SD.exists(Path::FONT_MAIN)){
-            _server.sendHeader("Cache-Control", "max-age=604800"); // Cache for 7 days
-            File f = SD.open(Path::FONT_MAIN, "r");
-            if (f) {
-                _server.streamFile(f, "font/ttf");
-                f.close();
-            } else {
-                _server.send(500, "text/plain", "File Open Error");
-            }
-        } else {
-            _server.send(404, "text/plain", "Font Missing");
-        }
+    _server.on("/fonts/ZenTokyoZoo-Regular.ttf", HTTP_GET, [sendSdFile](AsyncWebServerRequest* request){
+        sendSdFile(request, Path::FONT_MAIN, "font/ttf");
     });
 
-    _server.on("/fonts/Pompiere-Regular.ttf", [this](){
-        esp_task_wdt_reset();
-        if(SD.exists(Path::FONT_SEC)){
-            _server.sendHeader("Cache-Control", "max-age=604800"); // Cache for 7 days
-            File f = SD.open(Path::FONT_SEC, "r");
-            if (f) {
-                _server.streamFile(f, "font/ttf");
-                f.close();
-            } else {
-                _server.send(500, "text/plain", "File Open Error");
-            }
-        } else {
-            _server.send(404, "text/plain", "Font Missing");
-        }
+    _server.on("/fonts/Pompiere-Regular.ttf", HTTP_GET, [sendSdFile](AsyncWebServerRequest* request){
+        sendSdFile(request, Path::FONT_SEC, "font/ttf");
     });
 
-    _server.on("/api/files", [this](){ handleFileListApi(); });
+    _server.on("/api/files", HTTP_GET, [this](AsyncWebServerRequest* request){ handleFileListApi(request); });
     
     // Serve Static Files (Last resort for assets like .css, .js)
     _server.serveStatic("/", LittleFS, "/");
@@ -266,8 +271,6 @@ void WebManager::loop() {
              stopAp();
         }
     }
-    _server.handleClient();
-
     // Keep mDNS alive / recover after WiFi reconnects
     if (WiFi.status() == WL_CONNECTED) {
         if (!_mdnsStarted && (millis() - _mdnsLastAttempt > _mdnsRetryMs)) {
@@ -292,9 +295,6 @@ void WebManager::loop() {
         processReindex(); 
         _reindexTriggered = false; 
     }
-
-    // Yield a bit to avoid starving other tasks
-    delay(1);
 }
 
 void WebManager::startAp() {
@@ -324,11 +324,11 @@ void WebManager::resetApTimer() {
     _apEndTime = millis() + 600000; 
 }
 
-void WebManager::handleRoot() {
+void WebManager::handleRoot(AsyncWebServerRequest* request) {
     esp_task_wdt_reset();
     resetApTimer();
     if (_apMode) {
-        _server.send(200, "text/html", getApSetupHtml());
+        request->send(200, "text/html", getApSetupHtml());
     } else {
         // --- DASHBOARD (HOME) ---
         String lang = settings.getLanguage();
@@ -377,53 +377,53 @@ void WebManager::handleRoot() {
         html += "<div style='text-align:center; padding-top:20px; color:#444; font-size:0.8rem;'>" + String(FIRMWARE_VERSION) + "</div>";
         html += "</body></html>";
 
-        _server.send(200, "text/html", html);
+        request->send(200, "text/html", html);
     }
 }
 
-void WebManager::handleSettings() {
+void WebManager::handleSettings(AsyncWebServerRequest* request) {
     esp_task_wdt_reset();
     resetApTimer();
-    if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
-    _server.send(200, "text/html", getSettingsHtml());
+    if (_apMode) { request->redirect("/"); return; }
+    request->send(200, "text/html", getSettingsHtml());
 }
 
-void WebManager::handleAdvanced() {
+void WebManager::handleAdvanced(AsyncWebServerRequest* request) {
     esp_task_wdt_reset();
     resetApTimer();
-    if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
-    _server.send(200, "text/html", getAdvancedHtml());
+    if (_apMode) { request->redirect("/"); return; }
+    request->send(200, "text/html", getAdvancedHtml());
 }
 
 extern void playPreviewSound(String type, int index); // Defined in main.cpp
 
-void WebManager::handlePreviewApi() {
-    if (_server.hasArg("type") && _server.hasArg("id")) {
-        String type = _server.arg("type");
-        int id = _server.arg("id").toInt();
+void WebManager::handlePreviewApi(AsyncWebServerRequest* request) {
+    if (request->hasArg("type") && request->hasArg("id")) {
+        String type = request->arg("type");
+        int id = request->arg("id").toInt();
         resetApTimer();
         playPreviewSound(type, id);
-        _server.send(200, "text/plain", "OK");
+        request->send(200, "text/plain", "OK");
     } else {
-        _server.send(400, "text/plain", "Missing Args");
+        request->send(400, "text/plain", "Missing Args");
     }
 }
 
-void WebManager::handleSave() {
+void WebManager::handleSave(AsyncWebServerRequest* request) {
     esp_task_wdt_reset();
     resetApTimer();
     bool wifiChanged = false;
 
-    if (_server.hasArg("ssid")) {
-        String newSSID = _server.arg("ssid");
+    if (request->hasArg("ssid")) {
+        String newSSID = request->arg("ssid");
         // Only update if changed
         if (newSSID != settings.getWifiSSID()) {
             settings.setWifiSSID(newSSID);
             wifiChanged = true;
         }
     }
-    if (_server.hasArg("pass")) {
-        String newPass = _server.arg("pass");
+    if (request->hasArg("pass")) {
+        String newPass = request->arg("pass");
         if (newPass != settings.getWifiPass()) {
              settings.setWifiPass(newPass);
              wifiChanged = true;
@@ -431,46 +431,46 @@ void WebManager::handleSave() {
     }
     
     // System Settings
-    if (_server.hasArg("lang")) settings.setLanguage(_server.arg("lang"));
-    if (_server.hasArg("tz")) settings.setTimezoneOffset(_server.arg("tz").toInt());
-    if (_server.hasArg("gemini")) settings.setGeminiKey(_server.arg("gemini"));
+    if (request->hasArg("lang")) settings.setLanguage(request->arg("lang"));
+    if (request->hasArg("tz")) settings.setTimezoneOffset(request->arg("tz").toInt());
+    if (request->hasArg("gemini")) settings.setGeminiKey(request->arg("gemini"));
     
     // Audio Settings
-    if (_server.hasArg("vol")) settings.setVolume(_server.arg("vol").toInt());
-    if (_server.hasArg("base_vol")) settings.setBaseVolume(_server.arg("base_vol").toInt());
-    if (_server.hasArg("snooze")) settings.setSnoozeMinutes(_server.arg("snooze").toInt()); // Added
-    if (_server.hasArg("ring")) settings.setRingtone(_server.arg("ring").toInt());
-    if (_server.hasArg("dt")) settings.setDialTone(_server.arg("dt").toInt());
+    if (request->hasArg("vol")) settings.setVolume(request->arg("vol").toInt());
+    if (request->hasArg("base_vol")) settings.setBaseVolume(request->arg("base_vol").toInt());
+    if (request->hasArg("snooze")) settings.setSnoozeMinutes(request->arg("snooze").toInt()); // Added
+    if (request->hasArg("ring")) settings.setRingtone(request->arg("ring").toInt());
+    if (request->hasArg("dt")) settings.setDialTone(request->arg("dt").toInt());
     
     // Checkbox handling (Browser sends nothing if unchecked)
     // Only update if we are in the form that has this checkbox
-    if (_server.arg("form_id") == "advanced") {
-        bool hd = _server.hasArg("hd"); 
+    if (request->arg("form_id") == "advanced") {
+        bool hd = request->hasArg("hd"); 
         settings.setHalfDuplex(hd);
     }
     
-    if (_server.arg("form_id") == "basic") {
+    if (request->arg("form_id") == "basic") {
         // Save 7 Alarms
         for(int i=0; i<7; i++) {
              String s = String(i);
-             if(_server.hasArg("alm_h_"+s)) settings.setAlarmHour(i, _server.arg("alm_h_"+s).toInt());
-             if(_server.hasArg("alm_m_"+s)) settings.setAlarmMinute(i, _server.arg("alm_m_"+s).toInt());
-             if(_server.hasArg("alm_t_"+s)) settings.setAlarmTone(i, _server.arg("alm_t_"+s).toInt());
-             settings.setAlarmEnabled(i, _server.hasArg("alm_en_"+s));
+             if(request->hasArg("alm_h_"+s)) settings.setAlarmHour(i, request->arg("alm_h_"+s).toInt());
+             if(request->hasArg("alm_m_"+s)) settings.setAlarmMinute(i, request->arg("alm_m_"+s).toInt());
+             if(request->hasArg("alm_t_"+s)) settings.setAlarmTone(i, request->arg("alm_t_"+s).toInt());
+             settings.setAlarmEnabled(i, request->hasArg("alm_en_"+s));
         }
     }
 
     // LED Settings
-    if (_server.hasArg("led_day")) {
-        int val = _server.arg("led_day").toInt();
+    if (request->hasArg("led_day")) {
+        int val = request->arg("led_day").toInt();
         settings.setLedDayBright(map(val, 0, 42, 0, 255));
     }
-    if (_server.hasArg("led_night")) {
-        int val = _server.arg("led_night").toInt();
+    if (request->hasArg("led_night")) {
+        int val = request->arg("led_night").toInt();
         settings.setLedNightBright(map(val, 0, 42, 0, 255));
     }
-    if (_server.hasArg("night_start")) settings.setNightStartHour(_server.arg("night_start").toInt());
-    if (_server.hasArg("night_end")) settings.setNightEndHour(_server.arg("night_end").toInt());
+    if (request->hasArg("night_start")) settings.setNightStartHour(request->arg("night_start").toInt());
+    if (request->hasArg("night_end")) settings.setNightEndHour(request->arg("night_end").toInt());
 
     ledManager.reloadSettings(); // Apply new LED settings immediately
 
@@ -481,34 +481,31 @@ void WebManager::handleSave() {
         html += "<p>Please close this window, connect to your WiFi, and visit:</p>";
         html += "<h3><a href='http://dial-a-charmer.local' style='color:#fff;'>http://dial-a-charmer.local</a></h3>";
         html += "</body></html>";
-        _server.send(200, "text/html", html);
+        request->send(200, "text/html", html);
         delay(2000); // Give time to send response
         ESP.restart();
     } else {
         // Redirect back
         String loc = "/";
-        if (_server.hasArg("redirect")) loc = _server.arg("redirect");
+        if (request->hasArg("redirect")) loc = request->arg("redirect");
         
         // Append ?saved=1
         if (loc.indexOf('?') == -1) loc += "?saved=1";
         else loc += "&saved=1";
-
-        _server.sendHeader("Location", loc, true);
-        _server.send(302, "text/plain", "");
+        request->redirect(loc);
     }
 }
 
-void WebManager::handleHelp() {
-    _server.send(200, "text/html", getHelpHtml());
+void WebManager::handleHelp(AsyncWebServerRequest* request) {
+    request->send(200, "text/html", getHelpHtml());
 }
 
-void WebManager::handleNotFound() {
+void WebManager::handleNotFound(AsyncWebServerRequest* request) {
     if (_apMode) {
         // Redirect to captive portal
-        _server.sendHeader("Location", "http://192.168.4.1/", true);
-        _server.send(302, "text/plain", "");
+        request->redirect("http://192.168.4.1/");
     } else {
-        _server.send(404, "text/plain", "Not Found");
+        request->send(404, "text/plain", "Not Found");
     }
 }
 
@@ -794,44 +791,48 @@ String WebManager::getAdvancedHtml() {
     return html;
 }
 
-void WebManager::handlePhonebook() {
+void WebManager::handlePhonebook(AsyncWebServerRequest* request) {
     esp_task_wdt_reset();
     resetApTimer();
-    if (_apMode) { _server.sendHeader("Location", "/", true); _server.send(302, "text/plain", ""); return; }
-    _server.send(200, "text/html", getPhonebookHtml());
+    if (_apMode) { request->redirect("/"); return; }
+    request->send(200, "text/html", getPhonebookHtml());
 }
 
-void WebManager::handlePhonebookApi() {
-    if (_server.method() == HTTP_GET) {
-        // Return JSON
-        File f = LittleFS.open(Path::PHONEBOOK, "r");
-        if (!f) {
-            _server.send(500, "application/json", "{\"error\":\"File not found\"}");
-            return;
-        }
-        _server.streamFile(f, "application/json");
-        f.close();
-    } 
-    else if (_server.method() == HTTP_POST) {
-        if (_server.hasArg("plain")) {
-            String body = _server.arg("plain");
-            // Validate JSON
-            JsonDocument doc;
-            DeserializationError error = deserializeJson(doc, body);
-            if (error) {
-                _server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
-                return;
-            }
-            // Save via Manager
-            phonebook.saveAll(doc.as<JsonObject>());
-            _server.send(200, "application/json", "{\"status\":\"saved\"}");
-        } else {
-             _server.send(400, "application/json", "{\"error\":\"No Body\"}");
-        }
+void WebManager::handlePhonebookGet(AsyncWebServerRequest* request) {
+    // Return JSON
+    if (!LittleFS.exists(Path::PHONEBOOK)) {
+        request->send(500, "application/json", "{\"error\":\"File not found\"}");
+        return;
     }
-    else {
-        _server.send(405, "text/plain", "Method Not Allowed");
+    AsyncWebServerResponse* response = request->beginResponse(LittleFS, Path::PHONEBOOK, "application/json");
+    request->send(response);
+}
+
+void WebManager::handlePhonebookPost(AsyncWebServerRequest* request, uint8_t* data, size_t len, size_t index, size_t total) {
+    // Accumulate body in _tempObject
+    String* body = reinterpret_cast<String*>(request->_tempObject);
+    if (!body) {
+        body = new String();
+        body->reserve(total);
+        request->_tempObject = body;
     }
+    body->concat(reinterpret_cast<const char*>(data), len);
+
+    if (index + len < total) return; // wait for full body
+
+    // Final chunk: parse and respond
+    DynamicJsonDocument doc(4096);
+    DeserializationError error = deserializeJson(doc, *body);
+    if (error) {
+        request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        delete body;
+        request->_tempObject = nullptr;
+        return;
+    }
+    phonebook.saveAll(doc.as<JsonObject>());
+    request->send(200, "application/json", "{\"status\":\"saved\"}");
+    delete body;
+    request->_tempObject = nullptr;
 }
 
 String WebManager::getPhonebookHtml() {
@@ -1053,27 +1054,32 @@ void WebManager::processReindex() {
     ledManager.setMode(LedManager::CONNECTING);
     ledManager.update();
 
-    // 1. Delete Playlists
-    if(SD.exists(Path::PLAYLISTS)) {
-        File root = SD.open(Path::PLAYLISTS);
-        if (root && root.isDirectory()) {
-             File file = root.openNextFile();
-             size_t wdtTick = 0;
-             while(file){
-                String path = String(Path::PLAYLISTS) + "/" + String(file.name());
-                if(!file.isDirectory()) {
-                    SD.remove(path);
-                    Serial.printf("Deleted: %s\n", path.c_str());
-                }
-                if ((++wdtTick % 10) == 0) {
-                    esp_task_wdt_reset();
-                    delay(0);
-                }
-                file = root.openNextFile();
-             }
-             root.close();
-             SD.rmdir(Path::PLAYLISTS);
+    // 1. Delete Playlists (guarded)
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(5000)) == pdTRUE) {
+        if(SD.exists(Path::PLAYLISTS)) {
+            File root = SD.open(Path::PLAYLISTS);
+            if (root && root.isDirectory()) {
+                 File file = root.openNextFile();
+                 size_t wdtTick = 0;
+                 while(file){
+                    String path = String(Path::PLAYLISTS) + "/" + String(file.name());
+                    if(!file.isDirectory()) {
+                        SD.remove(path);
+                        Serial.printf("Deleted: %s\n", path.c_str());
+                    }
+                    if ((++wdtTick % 10) == 0) {
+                        esp_task_wdt_reset();
+                        delay(0);
+                    }
+                    file = root.openNextFile();
+                 }
+                 root.close();
+                 SD.rmdir(Path::PLAYLISTS);
+            }
         }
+        xSemaphoreGive(sdMutex);
+    } else {
+        Serial.println("Reindex skipped: SD mutex busy");
     }
 
     Serial.println("Reindex Logic Complete. Rebooting in 1s...");
@@ -1081,23 +1087,30 @@ void WebManager::processReindex() {
     ESP.restart();
 }
 
-void WebManager::handleFileListApi() {
-    if(!_server.hasArg("path")) {
-        _server.send(400, "application/json", "{\"error\":\"Missing path argument\"}");
+void WebManager::handleFileListApi(AsyncWebServerRequest* request) {
+    if(!request->hasArg("path")) {
+        request->send(400, "application/json", "{\"error\":\"Missing path argument\"}");
         return;
     }
 
-    String path = _server.arg("path");
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(5000)) != pdTRUE) {
+        request->send(503, "application/json", "{\"error\":\"SD busy\"}");
+        return;
+    }
+
+    String path = request->arg("path");
     if(!path.startsWith("/")) path = "/" + path;
 
     if(!SD.exists(path)) {
-         _server.send(404, "application/json", "{\"error\":\"Directory not found\"}");
+         xSemaphoreGive(sdMutex);
+         request->send(404, "application/json", "{\"error\":\"Directory not found\"}");
          return;
     }
     
     File dir = SD.open(path);
     if(!dir.isDirectory()){
-         _server.send(400, "application/json", "{\"error\":\"Path is not a directory\"}");
+         xSemaphoreGive(sdMutex);
+         request->send(400, "application/json", "{\"error\":\"Path is not a directory\"}");
          return;
     }
 
@@ -1120,7 +1133,7 @@ void WebManager::handleFileListApi() {
     
     std::sort(fileList.begin(), fileList.end());
 
-    JsonDocument doc;
+    DynamicJsonDocument doc(4096);
     JsonArray arr = doc.to<JsonArray>();
     size_t jsonTick = 0;
     for(const auto& f : fileList) {
@@ -1133,5 +1146,6 @@ void WebManager::handleFileListApi() {
 
     String response;
     serializeJson(doc, response);
-    _server.send(200, "application/json", response);
+    xSemaphoreGive(sdMutex);
+    request->send(200, "application/json", response);
 }
