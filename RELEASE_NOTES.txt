@@ -101,7 +101,7 @@
 - **Core System Architecture**:
     - **Hardware Conflict Resolution**: Migrated to `Adafruit_NeoPixel` to resolve FastLED/I2S timing conflicts. 
     - **Partitioning**: Upgraded to `huge_app.csv` to support larger OTA binaries.
-    - **Pin Mapping**: Optimized pinout for Lolin D32 Pro (I2S DOUT moved to GPIO 27, Dial Mode Pin added on GPIO 36).
+    - **Pin Mapping**: Optimized pinout for Ai-Thinker ESP32 Audio Kit v2.2 (ES8388 codec, dial mode on GPIO 36).
     - **Project Renaming**: Officially renamed to "Dial-A-Charmer".
 
 - **Audio & Content**:

@@ -1519,17 +1519,11 @@ void setup() {
         }
     #endif
 
-    // 1. Init SD 
-    #ifdef BOARD_AI_THINKER_AUDIO_KIT
-        // Correct SPI setup for Audio Kit v2.2 (HSPI)
-        // SCK=14, MISO=2, MOSI=15, CS=13
-        SPI.begin(14, 2, 15, 13); 
-        // Reduced speed (1MHz) for stability
-        if(!SD.begin(13, SPI, 1000000)){
-    #else
-        // Standard VSPI (Lolin D32 Pro default)
-        if(!SD.begin(CONF_PIN_SD_CS)){
-    #endif
+    // 1. Init SD (Audio Kit HSPI)
+    // SCK=14, MISO=2, MOSI=15, CS=13
+    SPI.begin(14, 2, 15, 13); 
+    // Reduced speed (1MHz) for stability
+    if(!SD.begin(13, SPI, 1000000)){
         Serial.println("SD Card Mount Failed (No Card?)");
         ledManager.setMode(LedManager::SOS);
         sdAvailable = false;

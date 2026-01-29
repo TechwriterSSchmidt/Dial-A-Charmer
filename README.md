@@ -61,22 +61,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 
 ## Hardware Support & Pinout
 
-The project supports two primary hardware configurations:
-
-### Option 1: DIY Standard (Lolin D32 Pro)
-Recommended for custom builds. Uses I2S DAC (PCM5100A) and I2S/Analog Mic (MAX9814).
-
-**Pinout:**
-| Component | Function | GPIO | Notes |
-| :--- | :--- | :--- | :--- |
-| **I2S Audio** | BCLK / LRC / DOUT | `26`, `25`, `27` | PCM5100A DAC |
-| **Audio In** | ADC Mic | `36` | MAX9814 (Analog) |
-| **Controls** | Pulse / Hook / Btn | `5`, `32`, `33` | Rotary Interface |
-| **Dial Mode** | State Contact | `34` | Closed = Dialing Active |
-| **Peripherals**| LED / Vibrate / I2C | `13`, `2`, `21`/`22` | WS2812, DRV2605, RTC |
-
-### Option 2: All-in-One (Ai-Thinker Audio Kit v2.2)
-Uses the onboard ES8388 Codec. Most peripherals connect via Header P2.
+Target hardware: **Ai-Thinker Audio Kit v2.2** (ES8388). Most peripherals connect via Header P2.
 
 **Pinout (Header P2):**
 | Component | Function | GPIO | Notes |
@@ -85,10 +70,10 @@ Uses the onboard ES8388 Codec. Most peripherals connect via Header P2.
 | **Controls** | Pulse / Hook / Btn | `5`, `19`, `18` | Connect to Header P2 |
 | **Dial Mode** | State Contact | `36` | Use Key 1 on Board |
 | **LED** | WS2812 Data | `23` | *Note: Disables Key 4* |
-| **I2C Ext.** | SDA / SCL | `21`, `22` | For RTC module |
+| **I2C Ext.** | SDA / SCL | `21`, `22` | For RTC module (disabled by default) |
 | **SD Card** | SPI | *Internal* | On-board Slot |
 
-*Note: Ensure you select the correct environment (`lolin_d32_pro` or `esp32_audio_kit`) in PlatformIO before flashing.*
+*Note: PlatformIO environment: `esp32_audio_kit`*
 
 ## Accessing the Configuration
 
@@ -186,7 +171,7 @@ The system uses specific WAV files in `/system/` for feedback:
     *   **Personalize:** Add your own MP3 music/compliments to the `persona_XX` folders.
 3.  **Flash Firmware:**
     *   Open project in VS Code with PlatformIO.
-    *   **Select Environment:** Click the environment icon in the bottom status bar (e.g., `env:lolin_d32_pro` or `env:esp32_audio_kit`) to match your board.
+    *   **Select Environment:** Use `env:esp32_audio_kit` in the bottom status bar.
     *   Connect your ESP32 board via USB.
     *   **Upload Filesystem Image**: This is **REQUIRED** for the new Web UI. Run `PlatformIO: Upload Filesystem Image`.
     *   **Upload Firmware**: Run `The standard PlatformIO Upload` task.
