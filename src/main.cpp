@@ -247,6 +247,7 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
     Serial.printf("Scanning dir: %s for Cat %d\n", path.c_str(), categoryId);
 
     File file = dir.openNextFile();
+    int fileCount = 0;
     while(file) {
         esp_task_wdt_reset(); // Prevent WDT Reset during long directory scans
         if(!file.isDirectory()) {
@@ -258,14 +259,17 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
                 if(fname.startsWith("/")) fname = fname.substring(1); 
                 fullPath += fname;
                 
-                // Serial.printf("  Found: %s\n", fullPath.c_str()); // Debug verbose
+                // Debug every 10 files
+                if (fileCount % 10 == 0) Serial.printf("."); 
 
                 // Add to specific category ONLY
                 categories[categoryId].tracks.push_back(fullPath);
+                fileCount++;
             }
         }
         file = dir.openNextFile();
     }
+    Serial.printf("\nDone scanning. Found %d files.\n", fileCount);
 }
 
 void startPersonaScan() {
