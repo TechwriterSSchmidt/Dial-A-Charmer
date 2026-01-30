@@ -9,7 +9,6 @@ import ssl
 import subprocess
 import shutil
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # --- CONFIGURATION ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -119,19 +118,50 @@ def ensure_folder_structure():
 
 def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
     """
-    Generates TTS audio, Thread-Safe wrapper.
+    Generates TTS audio using local Piper TTS (if available) or Google Translate (fallback).
     """
     target_path = os.path.join(SD_TEMPLATE_DIR, output_subdir, filename)
     
-    # Check if exists (Simple Cache)
-    if os.path.exists(target_path) and os.path.getsize(target_path) > 100:
-        return # Skip if already there
+    # 1. Try Piper TTS Local
+    piper_bin = os.path.join(SCRIPT_DIR, "piper", "piper")
+    piper_model = None
+    
+    if lang == 'de':
+        # Thorsten (High Quality German)
+        piper_model = os.path.join(SCRIPT_DIR, "piper_voices", "de_DE-thorsten-medium.onnx")
+    elif lang == 'en':
+        piper_model = os.path.join(SCRIPT_DIR, "piper_voices", "en_US-lessac-medium.onnx")
+        
+    if os.path.exists(piper_bin) and piper_model and os.path.exists(piper_model):
+        try:
+            # Piper output is 16-bit mono WAV by default
+            cmd = [piper_bin, "--model", piper_model, "--output_file", target_path + ".wav"]
+            
+            # Pipe text to stdin
+            process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            stdout, stderr = process.communicate(input=text.encode('utf-8'))
+            
+            if process.returncode == 0 and os.path.exists(target_path + ".wav"):
+                # Convert WAV to MP3 using ffmpeg
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", target_path + ".wav", 
+                    "-codec:a", "libmp3lame", "-qscale:a", "2", 
+                    target_path
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                
+                os.remove(target_path + ".wav") # Cleanup
+                print(f".", end="", flush=True)
+                return
+            else:
+                print(f"\n[Piper Error] {stderr.decode()}")
+                
+        except Exception as e:
+            print(f"\n[Piper Exception] {e}")
 
-    # 1. Try Piper TTS Local - NOT THREAD SAFE usually, skip for parallel
-    # pipe logic removed for simplicity in threaded context to avoid fork issues
-    # Fallback directly to Google TTS for this script version
 
-    # 2. Google TTS
+    # 2. Fallback to Google TTS
+    # print(f"  TTS ({lang}): '{text}' -> {filename}")
+    
     base_url = "https://translate.google.com/translate_tts"
     params = {
         "ie": "UTF-8",
@@ -146,27 +176,17 @@ def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         
-        # Randomize User-Agent slightly to avoid sticky load balancer issues
-        user_agents = [
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-            'Mozilla/5.0 (X11; Linux x86_64)'
-        ]
-        ua = random.choice(user_agents)
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         
-        req = urllib.request.Request(url, headers={'User-Agent': ua})
-        
-        # Reduced timeout to 5s to fail fast (avoid hanging threads)
-        with urllib.request.urlopen(req, context=ctx, timeout=5) as response:
+        with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
             data = response.read()
             with open(target_path, 'wb') as f:
                 f.write(data)
         
-        # Progress indicator
-        print(f".", end="", flush=True) 
+        print(f".", end="", flush=True) # Progress indicator
+        time.sleep(0.5) # Rate limit politeness
     except Exception as e:
         print(f"\n  [ERROR] TTS Failed for '{filename}': {e}")
-
 
 def save_wav(filename, samples, output_subdir="system"):
     """Saves a list of samples/integers to a WAV file."""
@@ -358,62 +378,86 @@ def make_telephony_tones():
     generate_complex_tone("busy_tone.wav", [425], 10, 480, 480)
 
 def make_all_tts():
-    print("Generating System TTS (Parallel)...")
-    
-    tasks = [] # List of (text, filename, lang, subdir)
-
-    # 1. Collect all Tasks
-    
+    print("Generating System TTS...")
     # System Prompts
     for lang, prompts in TTS_PROMPTS.items():
+        print(f"  Processing {lang.upper()} prompts...")
         for text, fname in prompts:
-            tasks.append((text, fname, lang, "system"))
+            generate_tts_mp3(text, fname, lang, "system")
             
     # Time Prompts (DE & EN)
     for lang in ["de", "en"]:
+        print(f"Generating Time TTS ({lang.upper()})...")
         cfg = TIME_CONFIG[lang]
+        subdir = f"time\\{lang}" # Windows style path for printing, os.path.join used in function? No, subdir is passed.
+        # Function expects subdir relative to SD_TEMPLATE_DIR.
+        # Correct subdir is "time/de" or "time/en"
         subdir = os.path.join("time", lang)
         
-        # Intro & Divider
-        tasks.append((cfg["intro"], "intro.mp3", lang, subdir))
-        tasks.append((cfg["divider"], "uhr.mp3", lang, subdir))
+        # Intro
+        generate_tts_mp3(cfg["intro"], "intro.mp3", lang, subdir)
+        # Divider (Uhr/O'Clock)
+        generate_tts_mp3(cfg["divider"], "uhr.mp3", lang, subdir)
         
         # Hours 0-23
         for h in range(24):
             txt = str(h)
-            if h == 1: txt = cfg["h_one"]
-            tasks.append((txt, f"h_{h}.mp3", lang, subdir))
+            if h == 1: 
+                txt = cfg["h_one"]
+            generate_tts_mp3(txt, f"h_{h}.mp3", lang, subdir)
             
         # Minutes 00-59
         for m in range(60):
             txt = str(m)
-            if lang == "en" and m < 10 and m > 0: txt = f"Oh {m}"
+            # Formatting: 
+            # DE: "Null Fünf" or "Fünf"? Code says "m_05.mp3".
+            # EN: "Oh Five"? Or "Five"?
+            # Let's use simple numbers for now. "Five".
+            # If we want "Oh Five", we need logic.
+            # "It is Eight Oh Five" sounds better than "It is Eight Five".
+            if lang == "en" and m < 10 and m > 0:
+                txt = f"Oh {m}"
+                
             fname = f"m_{m}.mp3"
-            if m < 10: fname = f"m_0{m}.mp3"
-            tasks.append((txt, fname, lang, subdir))
-            
-    # Calendar TTS
+            if m < 10:
+                fname = f"m_0{m}.mp3"
+            generate_tts_mp3(txt, fname, lang, subdir)
+
+    # Generate Silence for English gap
+    save_wav("silence.wav", generate_silence(200), "time") # Shared silence
+
+    # Calendar TTS (Weekdays, Days, Months, Years, DST)
     for lang in ["de", "en"]:
+        print(f"Generating Calendar TTS ({lang.upper()})...")
         c_cfg = CALENDAR_CONFIG[lang]
         subdir = os.path.join("time", lang)
         
-        tasks.append((c_cfg["date_intro"], "date_intro.mp3", lang, subdir))
-        tasks.append((c_cfg["dst"][0], "dst_winter.mp3", lang, subdir))
-        tasks.append((c_cfg["dst"][1], "dst_summer.mp3", lang, subdir))
+        # Intro
+        generate_tts_mp3(c_cfg["date_intro"], "date_intro.mp3", lang, subdir)
         
+        # DST
+        generate_tts_mp3(c_cfg["dst"][0], "dst_winter.mp3", lang, subdir)
+        generate_tts_mp3(c_cfg["dst"][1], "dst_summer.mp3", lang, subdir)
+        
+        # Weekdays
         for i, wd in enumerate(c_cfg["weekdays"]):
-            tasks.append((wd, f"wday_{i}.mp3", lang, subdir))
+            generate_tts_mp3(wd, f"wday_{i}.mp3", lang, subdir)
             
+        # Months
         for i, mon in enumerate(c_cfg["months"]):
-            tasks.append((mon, f"month_{i}.mp3", lang, subdir))
+            generate_tts_mp3(mon, f"month_{i}.mp3", lang, subdir)
             
+        # Years (2024-2035)
         for y in range(2024, 2036):
-            tasks.append((str(y), f"year_{y}.mp3", lang, subdir))
+            generate_tts_mp3(str(y), f"year_{y}.mp3", lang, subdir)
             
+        # Days (1-31)
         for d in range(1, 32):
             txt = str(d)
-            if lang == "de": txt = f"Der {d}." 
+            if lang == "de":
+                txt = f"Der {d}." # "Der Erste"
             else:
+                # English Ordinals
                 if 10 < d < 20: suffix = "th"
                 else:
                     last = d % 10
@@ -422,29 +466,8 @@ def make_all_tts():
                     elif last == 3: suffix = "rd"
                     else: suffix = "th"
                 txt = f"The {d}{suffix}"
-            tasks.append((txt, f"day_{d}.mp3", lang, subdir))
-
-    # 2. Execute Tasks in ThreadPool
-    total_tasks = len(tasks)
-    print(f"  Queued {total_tasks} TTS items. Processing with 16 threads...")
-    
-    # Increased threads to 16 for aggressive parallelization
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = []
-        for t in tasks:
-            futures.append(executor.submit(generate_tts_mp3, t[0], t[1], t[2], t[3]))
-        
-        # Wait for completion
-        completed = 0
-        for _ in as_completed(futures):
-            completed += 1
-            if completed % 20 == 0:
-                print(f" ({completed}/{total_tasks}) ", end="", flush=True)
-
-    # Generate Silence (Fast, no TTS)
-    save_wav("silence.wav", generate_silence(200), "time")
-
-
+            
+            generate_tts_mp3(txt, f"day_{d}.mp3", lang, subdir)
 
 def make_startup_music():
     print("Generating Startup Sound (Ambient Swell)...")
@@ -538,33 +561,13 @@ def generate_fortune_mp3s():
     
     # Use ALL quotes as requested
     selected = lines
-    print(f"Generating {len(selected)} Fortune Cookies with 16 threads...")
+    print(f"Generating {len(selected)} Fortune Cookies...")
     
-    tasks = []
-    for i, line in enumerate(selected):
-        # Default to German if no prefix
-        lang = "de"
-        text = line
-        
-        # Check for prefixes "DE|" or "EN|"
-        if "|" in line:
-            parts = line.split("|", 1)
-            if len(parts) == 2:
-                prefix = parts[0].strip().lower()
-                if prefix in ["de", "en"]:
-                    lang = prefix
-                    text = parts[1].strip()
-        
+    for i, text in enumerate(selected):
         filename = f"fortune_{i+1:03d}.mp3"
-        tasks.append((text, filename, lang, "persona_05"))
-        
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = [executor.submit(generate_tts_mp3, *t) for t in tasks]
-        completed = 0
-        for _ in as_completed(futures):
-            completed += 1
-            if completed % 10 == 0:
-                print(f" ({completed}/{len(selected)}) ", end="", flush=True)
+        # We use German for Fortunes as requested
+        # Using generate_tts_mp3, specifying subdir relative to SD_TEMPLATE_DIR
+        generate_tts_mp3(text, filename, "de", "persona_05")
     
     # Also create fortune.txt for automatic phonebook naming (Triggers "Fortune" name in firmware)
     with open(os.path.join(output_dir, "fortune.txt"), "w") as f:
@@ -578,15 +581,15 @@ if __name__ == "__main__":
     
     ensure_folder_structure()
     
-    make_ui_sounds()       # Beeps, Blips
-    make_telephony_tones() # Dial, Busy
+    # make_ui_sounds()       # Beeps, Blips
+    # make_telephony_tones() # Dial, Busy
     
     print("--- Expect ~30-60s for TTS downloads ---")
-    make_all_tts()         # System & Time
+    # make_all_tts()         # System & Time
     
-    make_startup_music()   # Startup pad
+    # make_startup_music()   # Startup pad
     
-    download_fonts()       # Added Fonts
+    # download_fonts()       # Added Fonts
 
     generate_fortune_mp3s() # Added Fortune Cookies
     

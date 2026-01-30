@@ -17,8 +17,8 @@ struct InternalCache {
     int vol;
     int baseVol;
     int snooze;
-    String ringtone; // Changed to String
-    String dialTone; // Changed to String
+    String ringtone;
+    String dialTone;
     int ledDay;
     int ledNight;
     int nightStart;
@@ -46,7 +46,7 @@ void Settings::loadCache() {
             _alarms[i].h = (int8_t)_prefs.getInt(kH, 7);
             _alarms[i].m = (int8_t)_prefs.getInt(KM, 0);
             _alarms[i].en = _prefs.getBool(kE, false);
-            _alarms[i].tone = _prefs.getString(kT, ""); // Default to empty (auto)
+            _alarms[i].tone = (int8_t)_prefs.getInt(kT, 1); // Default to tone index 1
         }
         _cacheLoaded = true;
     }
@@ -62,8 +62,18 @@ void Settings::loadCache() {
         ic.vol = _prefs.getInt("vol", CONF_DEFAULT_VOL);
         ic.baseVol = _prefs.getInt("base_vol", 30);
         ic.snooze = _prefs.getInt("snooze", 9);
-        ic.ringtone = _prefs.getString("ring", ""); // Default empty
-        ic.dialTone = _prefs.getString("dt_idx", ""); // Default empty
+        ic.ringtone = _prefs.getString("ring", "");
+        if (ic.ringtone.length() == 0) {
+            int legacyRing = _prefs.getInt("ring", CONF_DEFAULT_RING);
+            ic.ringtone = String(legacyRing) + ".wav";
+            _prefs.putString("ring", ic.ringtone);
+        }
+        ic.dialTone = _prefs.getString("dt_idx", "");
+        if (ic.dialTone.length() == 0) {
+            int legacyDial = _prefs.getInt("dt_idx", 2);
+            ic.dialTone = "dialtone_" + String(legacyDial) + ".wav";
+            _prefs.putString("dt_idx", ic.dialTone);
+        }
         ic.ledDay = _prefs.getInt("led_day_b", 100);
         ic.ledNight = _prefs.getInt("led_night_b", 10);
         ic.nightStart = _prefs.getInt("night_start", 22);
@@ -136,19 +146,19 @@ void Settings::setAlarmMinute(int day, int m) {
     _prefs.putInt(key, m);
 }
 
-String Settings::getAlarmTone(int day) {
-    if(day < 0 || day > 6) return "";
+int Settings::getAlarmTone(int day) {
+    if(day < 0 || day > 6) return 1;
     if(!_cacheLoaded) loadCache();
     return _alarms[day].tone;
 }
 
-void Settings::setAlarmTone(int day, String tone) {
+void Settings::setAlarmTone(int day, int toneIndex) {
     if(day < 0 || day > 6) return;
     if(!_cacheLoaded) loadCache();
-    _alarms[day].tone = tone;
+    _alarms[day].tone = (int8_t)toneIndex;
 
     char key[10]; sprintf(key, "alm_t_%d", day);
-    _prefs.putString(key, tone);
+    _prefs.putInt(key, toneIndex);
 }
 
 bool Settings::isAlarmEnabled(int day) {
@@ -217,9 +227,9 @@ String Settings::getRingtone() {
     return ic.ringtone;
 }
 
-void Settings::setRingtone(String tone) {
-    ic.ringtone = tone;
-    _prefs.putString("ring", tone);
+void Settings::setRingtone(String toneFilename) {
+    ic.ringtone = toneFilename;
+    _prefs.putString("ring", toneFilename);
 }
 
 String Settings::getDialTone() {
@@ -227,9 +237,9 @@ String Settings::getDialTone() {
     return ic.dialTone;
 }
 
-void Settings::setDialTone(String tone) {
-    ic.dialTone = tone;
-    _prefs.putString("dt_idx", tone);
+void Settings::setDialTone(String toneFilename) {
+    ic.dialTone = toneFilename;
+    _prefs.putString("dt_idx", toneFilename);
 }
 
 bool Settings::getHalfDuplex() {

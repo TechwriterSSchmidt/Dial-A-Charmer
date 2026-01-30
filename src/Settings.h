@@ -24,8 +24,8 @@ public:
     void setAlarmHour(int day, int h);
     int getAlarmMinute(int day);
     void setAlarmMinute(int day, int m);
-    String getAlarmTone(int day); // Changed to String
-    void setAlarmTone(int day, String tone);
+    int getAlarmTone(int day); // New: Per-alarm ringtone
+    void setAlarmTone(int day, int toneIndex);
     bool isAlarmEnabled(int day);
     void setAlarmEnabled(int day, bool enabled);
     
@@ -42,10 +42,10 @@ public:
     void setBaseVolume(int vol);
     int getSnoozeMinutes(); // Added
     void setSnoozeMinutes(int min); 
-    String getRingtone(); // Changed to String
-    void setRingtone(String tone);
-    String getDialTone(); // Changed to String
-    void setDialTone(String tone);
+    String getRingtone();
+    void setRingtone(String toneFilename);
+    String getDialTone(); // New
+    void setDialTone(String toneFilename);
 
     // Half Duplex Mode
     bool getHalfDuplex(); // New
@@ -74,7 +74,7 @@ private:
     struct AlarmCache { 
         int8_t h; 
         int8_t m; 
-        String tone; // Changed to String
+        int8_t tone; // Added tone index
         bool en; 
     };
     AlarmCache _alarms[7];

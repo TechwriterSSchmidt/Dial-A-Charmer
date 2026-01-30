@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Audio.h>
 #include <SPI.h>
-#include <SD.h>
+#include <SD_MMC.h>
 #include <FS.h>
 #include <LittleFS.h>
 #include <esp_task_wdt.h> // Watchdog
@@ -25,6 +25,8 @@
 #include "LedManager.h"
 #include "AiManager.h"   
 #include "PhonebookManager.h"
+
+#define SD SD_MMC // Use SD_MMC with existing SD.* calls
 
 #if HAS_ES8388_CODEC
 #include <es8388.h>
@@ -610,7 +612,10 @@ void sendAudioCmd(AudioCmdType type, const char* path, int val) {
     if (path) strncpy(cmd.path, path, 127);
     else cmd.path[0] = '\0';
     cmd.value = val;
-    xQueueSend(audioQueue, &cmd, 0);
+    BaseType_t ok = xQueueSendToBack(audioQueue, &cmd, pdMS_TO_TICKS(50));
+    if (ok != pdTRUE) {
+        Serial.println("[Audio] Queue full, dropped cmd");
+    }
 }
 
 // Web Server Task - runs on Core 1 with its own WDT resets
@@ -772,16 +777,7 @@ void processTimeQueue() {
 
         case TIME_MONTH:
             timeState = TIME_YEAR;
-            if (currentYear <= 1970) {
-                // Skip speaking year 1970 (Default/Invalid Time)
-                Serial.println("Skipping Year 1970 (Time Invalid)");
-                // Also skip DST as it is irrelevant without valid date
-                timeState = TIME_DONE;
-                Serial.println("Time & Date Speak Done");
-                nextFile = "";
-            } else {
-                nextFile = basePath + "year_" + String(currentYear) + ".mp3";
-            }
+            nextFile = basePath + "year_" + String(currentYear) + ".mp3";
             break;
 
         case TIME_YEAR:
@@ -800,9 +796,7 @@ void processTimeQueue() {
     
     if (nextFile.length() > 0) {
         Serial.print("Next Time File: "); Serial.println(nextFile);
-        // Smart Output: Keep sync with hook state (User might lift/hang up during speech)
-        bool useSpeaker = !dial.isOffHook();
-        playSound(nextFile, useSpeaker);
+        playSound(nextFile, false);
     }
 }
 
@@ -864,7 +858,11 @@ void speakCompliment(int number) {
 }
 
 void playPreviewSound(String type, String filename) {
-    if (audio->isRunning()) audio->stopSong();
+    // Stop any active playback and queued speech/time prompts
+    xQueueReset(audioQueue);
+    sendAudioCmd(CMD_STOP, NULL, 0);
+    clearSpeechQueue();
+    timeState = TIME_IDLE;
     
     // Play on Speaker if On-Hook, Handset if Off-Hook
     bool offHook = dial.isOffHook();
@@ -872,9 +870,11 @@ void playPreviewSound(String type, String filename) {
     
     String path = "";
     if (type == "ring") {
-        path = String(Path::RINGTONES) + "/" + filename; 
+        if (filename.startsWith("/")) path = filename;
+        else path = "/ringtones/" + filename;
     } else if (type == "dt") {
-        path = String(Path::SYSTEM) + "/" + filename;
+        if (filename.startsWith("/")) path = filename;
+        else path = "/system/" + filename;
     }
     
     if (path.length() > 0) {
@@ -893,10 +893,9 @@ void startAlarm(bool isTimer) {
     setAudioOutput(OUT_SPEAKER);
     audio->setVolume(::map(currentAlarmVol, 0, 42, 0, 21)); 
     
-    // Fix: Use stored ringtone filename directly
-    String rt = settings.getRingtone();
-    if(rt == "") rt = "tone01.wav"; // Safe Default
-    playSound("/ringtones/" + rt, true);
+    String ringName = settings.getRingtone();
+    String ringPath = ringName.startsWith("/") ? ringName : "/ringtones/" + ringName;
+    playSound(ringPath, true);
 }
 
 void stopAlarm() {
@@ -1400,17 +1399,20 @@ void playDialTone() {
     if (audio->isRunning()) audio->stopSong();
 
     String dtName = settings.getDialTone();
-    String dt = String(Path::SYSTEM) + "/" + dtName;
+    String dt = dtName.startsWith("/") ? dtName : "/system/" + dtName;
+    if (dtName.length() == 0) {
+        dt = "/system/dialtone_1.wav";
+    }
     
     // SAFETY CHECK: Dial Tone must not be a system announcement!
     if (dt.indexOf("alarm_active") >= 0 || dt.indexOf("timer_") >= 0 || dt.indexOf("menu_") >= 0) {
         Serial.println("Warning: Invalid DialTone config detected (" + dt + "). Reverting to default.");
         dt = "/system/dialtone_1.wav";
+        // Auto-fix settings (Don't reset index blindly, just use safe file temporarily)
+        // settings.setDialTone(2); 
     }
 
-    if (dtName == "" || !SD.exists(dt)) {
-         // Fallback if not scheduled or file missing
-         // Try checking 1.wav legacy? No, just use standard default
+    if (dt == "" || !SD.exists(dt)) {
         dt = "/system/dialtone_1.wav";
     }
 
@@ -1490,9 +1492,6 @@ void setup() {
     phonebook.begin(); // Load Phonebook from LittleFS
     timeManager.begin(); // Added TimeManager
     
-    // Init I2C Common
-    Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
-
     // --- Hardware Init ---
     
     // 0. Create SD Mutex (before any SD access)
@@ -1531,8 +1530,7 @@ void setup() {
         #endif
 
         Serial.println("Initializing ES8388 Codec...");
-        // Ensure Wire is not already started or use proper check
-        // Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL); // Moved to setup() common area or checked
+        Wire.begin(CONF_I2C_CODEC_SDA, CONF_I2C_CODEC_SCL);
         if(!codec.begin(&Wire)){
             Serial.println("ES8388 Init Failed!");
         } else {
@@ -1541,17 +1539,13 @@ void setup() {
         }
     #endif
 
-    // 1. Init SD (Audio Kit HSPI)
-    // SCK=14, MISO=2, MOSI=15, CS=13
-    SPI.begin(14, 2, 15, 13); 
-    // Reduced speed to 5MHz for maximum compatibility with erratic cards (SanDisk etc)
-    if(!SD.begin(13, SPI, 5000000)){
-        Serial.println("SD Card Mount Failed (No Card?)");
+    // 1. Init SD via SD_MMC (1-bit, 5MHz)
+    if(!SD.begin("/sdcard", true, false, 5000000)){
+        Serial.println("SD Card Mount Failed (SD_MMC)");
         ledManager.setMode(LedManager::SOS);
         sdAvailable = false;
     } else {
-
-        Serial.println("SD Card Mounted");
+        Serial.println("SD Card Mounted (SD_MMC 1-bit)");
         sdAvailable = true;
         // buildPlaylist(); // MOVED DOWN
     }
@@ -1861,9 +1855,9 @@ void audio_eof_mp3(const char *info){
     
     if (isAlarmRinging) {
          // Loop Alarm Sound
-         String rt = settings.getRingtone();
-         if(rt == "") rt = "tone01.wav"; 
-         playSound("/ringtones/" + rt, true);
+         String ringName = settings.getRingtone();
+         String ringPath = ringName.startsWith("/") ? ringName : "/ringtones/" + ringName;
+         playSound(ringPath, true);
          
          // Note: setVolume might be reset by playSound internal logic if we called setAudioOutput again?
          // Our modified playSound calls setAudioOutput. 
