@@ -44,6 +44,9 @@ namespace Path {
     constexpr const char* TIMER_STOPPED_EN  = "/system/timer_stopped_en.wav";
     constexpr const char* ALARM_STOPPED_DE  = "/system/alarm_stopped_de.wav";
     constexpr const char* ALARM_STOPPED_EN  = "/system/alarm_stopped_en.wav";
+    
+    constexpr const char* REINDEX_WARNING_DE = "/system/reindex_warning_de.wav";
+    constexpr const char* REINDEX_WARNING_EN = "/system/reindex_warning_en.wav";
 
     constexpr const char* DEFAULT_DIALTONE  = "/system/dialtone_1.wav";
     constexpr const char* FALLBACK_ALARM    = "/system/fallback_alarm.wav";
