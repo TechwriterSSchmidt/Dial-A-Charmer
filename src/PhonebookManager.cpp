@@ -48,7 +48,11 @@ void PhonebookManager::begin() {
     // --- Control Commands ---
     ensure("90", "Toggle Alarms", "FUNCTION", "TOGGLE_ALARMS");
     ensure("91", "Skip Next Alarm", "FUNCTION", "SKIP_NEXT_ALARM");
-    ensure("95", "Re-Index/Update SD", "FUNCTION", "REINDEX_SD"); // Triggers scanAllContent()
+    if (hasEntry("95")) {
+        Serial.println("Migrating old system code 95 to 095...");
+        removeEntry("95"); // Auto-cleanup old code
+    }
+    ensure("095", "Re-Index/Update SD", "FUNCTION", "REINDEX_SD"); // Triggers scanAllContent()
 
     if (changed) {
         save();

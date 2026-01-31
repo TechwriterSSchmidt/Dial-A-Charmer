@@ -900,7 +900,8 @@ const systemItems = [
     { id:'p6', type:'FUNCTION', val:'COMPLIMENT_MIX', param:'0', defName:'Random Mix (Surprise)', defNum:'6' },
     { id:'menu', type:'FUNCTION', val:'VOICE_MENU', param:'', defName:'Operator Menu', defNum:'9' },
     { id:'tog', type:'FUNCTION', val:'TOGGLE_ALARMS', param:'', defName:'Toggle Alarms', defNum:'90' },
-    { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' }
+    { id:'skip', type:'FUNCTION', val:'SKIP_NEXT_ALARM', param:'', defName:'Skip Next Alarm', defNum:'91' },
+    { id:'scan', type:'FUNCTION', val:'REINDEX_SD', param:'', defName:'system update (re-index)', defNum:'095' }
 ];
 let fullData = {};
 async function load() { try { const res = await fetch('/api/phonebook'); fullData = await res.json(); render(); } catch(e) { console.error(e); } }
@@ -925,11 +926,20 @@ function render() {
         // currentName already holds the override if present, or defName if not.
         
         const tr = document.createElement('tr');
+        
+        // Highlight critical system functions (095) in RED
+        let cellStyle = "";
+        let inputStyle = "";
+        if (item.defNum === '095') {
+             cellStyle = "color: #d00; font-weight: bold;";
+             inputStyle = "color: #d00 !important;"; 
+        }
+
         tr.innerHTML = `
             <td style="width: 45px; padding-left: 65px;">
-                <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}" maxlength="3" type="tel">
+                <input id="input_${item.id}" value="${currentKey}" placeholder="${item.defNum}" maxlength="3" type="tel" style="${inputStyle}">
             </td>
-            <td class="name-cell">
+            <td class="name-cell" style="${cellStyle}">
                 ${currentName}
             </td>`;
         tbody.appendChild(tr);

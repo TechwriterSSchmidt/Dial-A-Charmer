@@ -54,7 +54,8 @@ TTS_PROMPTS = {
         ("Timer cancelled.", "timer_deleted_en.wav"),
         ("Alarm deleted.", "alarm_deleted_en.wav"),
         ("Timer stopped.", "timer_stopped_en.wav"),
-        ("Alarm ended.", "alarm_stopped_en.wav")
+        ("Alarm ended.", "alarm_stopped_en.wav"),
+        ("System updating. Please wait.", "reindex_warning_en.wav")
     ],
     # German
     "de": [
@@ -73,7 +74,8 @@ TTS_PROMPTS = {
         ("Timer beendet.", "timer_deleted_de.wav"),
         ("Wecker gelöscht.", "alarm_deleted_de.wav"),
         ("Timer gestoppt.", "timer_stopped_de.wav"),
-        ("Alarm beendet.", "alarm_stopped_de.wav")
+        ("Alarm beendet.", "alarm_stopped_de.wav"),
+        ("System-Update läuft. Bitte warten.", "reindex_warning_de.wav")
     ]
 }
 

@@ -431,14 +431,17 @@ void scanAllContent() {
     Serial.println("Starting Force Re-Index (Code 95)...");
 
     // 1. Audio Warning
-    if (WiFi.status() == WL_CONNECTED) { 
-         // Try TTS
-         audio->connecttospeech("System updating. Please wait.", "en");
+    String lang = settings.getLanguage();
+    String warningMsg = (lang == "de") ? Path::REINDEX_WARNING_DE : Path::REINDEX_WARNING_EN;
+    
+    // Fallback to computing sound if file missing, otherwise play warning
+    if (SD.exists(warningMsg)) {
+         playSound(warningMsg, true);
     } else {
          playSound(Path::COMPUTING, true); 
     }
     
-    // Allow Audio to start and play
+    // Allow Audio to start and play (Wait for duration of typical warning ~3s)
     unsigned long startWait = millis();
     while (millis() - startWait < 4000) { 
         if (audio->isRunning()) audio->loop(); 
@@ -1225,7 +1228,7 @@ void handleDialedNumber(String numberStr) {
          executePhonebookFunction("SKIP_NEXT_ALARM", "");
          return;
     }
-    if (numberStr == "95") { // Force Re-Index
+    if (numberStr == "095") { // Force Re-Index
         scanAllContent();
         return;
     }
