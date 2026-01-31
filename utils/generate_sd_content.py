@@ -9,6 +9,7 @@ import ssl
 import subprocess
 import shutil
 import time
+import concurrent.futures
 
 # --- CONFIGURATION ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -465,78 +466,68 @@ def make_telephony_tones():
     generate_complex_tone("busy_tone.wav", [425], 10, 480, 480)
 
 def make_all_tts():
-    print("Generating System TTS...")
+    print("Generating System TTS (Multithreaded)...")
+    tasks = []
+
     # System Prompts
     for lang, prompts in TTS_PROMPTS.items():
-        print(f"  Processing {lang.upper()} prompts...")
+        # print(f"  Queuing {lang.upper()} prompts...")
         for text, fname in prompts:
-            generate_tts_wav(text, fname, lang, "system")
+            tasks.append((text, fname, lang, "system"))
             
     # Time Prompts (DE & EN)
     for lang in ["de", "en"]:
-        print(f"Generating Time TTS ({lang.upper()})...")
+        # print(f"  Queuing Time TTS ({lang.upper()})...")
         cfg = TIME_CONFIG[lang]
-        subdir = f"time\\{lang}" # Windows style path for printing, os.path.join used in function? No, subdir is passed.
-        # Function expects subdir relative to SD_TEMPLATE_DIR.
-        # Correct subdir is "time/de" or "time/en"
         subdir = os.path.join("time", lang)
         
         # Intro
-        generate_tts_wav(cfg["intro"], "intro.wav", lang, subdir)
+        tasks.append((cfg["intro"], "intro.wav", lang, subdir))
         # Divider (Uhr/O'Clock)
-        generate_tts_wav(cfg["divider"], "uhr.wav", lang, subdir)
+        tasks.append((cfg["divider"], "uhr.wav", lang, subdir))
         
         # Hours 0-23
         for h in range(24):
             txt = str(h)
             if h == 1: 
                 txt = cfg["h_one"]
-            generate_tts_wav(txt, f"h_{h}.wav", lang, subdir)
+            tasks.append((txt, f"h_{h}.wav", lang, subdir))
             
         # Minutes 0-999 (timer confirm can request up to 999)
         for m in range(1000):
             txt = str(m)
-            # Formatting: 
-            # DE: "Null Fünf" or "Fünf"? Code uses "m_05.wav".
-            # EN: "Oh Five"? Or "Five"?
-            # Let's use simple numbers for now. "Five".
-            # If we want "Oh Five", we need logic.
-            # "It is Eight Oh Five" sounds better than "It is Eight Five".
             if lang == "en" and m < 10 and m > 0:
                 txt = f"Oh {m}"
-                
+            
             fname = f"m_{m}.wav"
             if m < 10:
                 fname = f"m_0{m}.wav"
-            generate_tts_wav(txt, fname, lang, subdir)
-
-    # Generate Silence for English gap
-    save_wav("silence.wav", generate_silence(200), "time") # Shared silence
+            tasks.append((txt, fname, lang, subdir))
 
     # Calendar TTS (Weekdays, Days, Months, Years, DST)
     for lang in ["de", "en"]:
-        print(f"Generating Calendar TTS ({lang.upper()})...")
+        # print(f"  Queuing Calendar TTS ({lang.upper()})...")
         c_cfg = CALENDAR_CONFIG[lang]
         subdir = os.path.join("time", lang)
         
         # Intro
-        generate_tts_wav(c_cfg["date_intro"], "date_intro.wav", lang, subdir)
+        tasks.append((c_cfg["date_intro"], "date_intro.wav", lang, subdir))
         
         # DST
-        generate_tts_wav(c_cfg["dst"][0], "dst_winter.wav", lang, subdir)
-        generate_tts_wav(c_cfg["dst"][1], "dst_summer.wav", lang, subdir)
+        tasks.append((c_cfg["dst"][0], "dst_winter.wav", lang, subdir))
+        tasks.append((c_cfg["dst"][1], "dst_summer.wav", lang, subdir))
         
         # Weekdays
         for i, wd in enumerate(c_cfg["weekdays"]):
-            generate_tts_wav(wd, f"wday_{i}.wav", lang, subdir)
+            tasks.append((wd, f"wday_{i}.wav", lang, subdir))
             
         # Months
         for i, mon in enumerate(c_cfg["months"]):
-            generate_tts_wav(mon, f"month_{i}.wav", lang, subdir)
+            tasks.append((mon, f"month_{i}.wav", lang, subdir))
             
         # Years (2024-2035)
         for y in range(2024, 2036):
-            generate_tts_wav(str(y), f"year_{y}.wav", lang, subdir)
+            tasks.append((str(y), f"year_{y}.wav", lang, subdir))
             
         # Days (1-31)
         for d in range(1, 32):
@@ -570,7 +561,27 @@ def make_all_tts():
                     else: suffix = "th"
                 txt = f"The {d}{suffix}"
             
-            generate_tts_wav(txt, f"day_{d}.wav", lang, subdir)
+            tasks.append((txt, f"day_{d}.wav", lang, subdir))
+
+    print(f"Processing {len(tasks)} TTS tasks with up to 24 threads...")
+
+    # Execute with ThreadPool
+    with concurrent.futures.ThreadPoolExecutor(max_workers=24) as executor:
+        # Submit all tasks
+        futures = [executor.submit(generate_tts_wav, t[0], t[1], t[2], t[3]) for t in tasks]
+        
+        # Wait for completion and show simple progress
+        completed = 0
+        total = len(tasks)
+        for future in concurrent.futures.as_completed(futures):
+            completed += 1
+            if completed % 50 == 0:
+                print(f"  Progress: {completed}/{total}...", end="\r")
+    
+    print(f"\nAll {total} tasks completed.")
+
+    # Generate Silence for English gap (Single Thread)
+    save_wav("silence.wav", generate_silence(200), "time") # Shared silence
 
 def make_startup_music():
     print("Generating Startup Sound (Ambient Swell)...")

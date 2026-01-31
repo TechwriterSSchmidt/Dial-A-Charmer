@@ -1187,17 +1187,9 @@ void handleDialedNumber(String numberStr) {
              }
         }
     } else {
-        // Fallback for Timer setting (1-999)
-         int num = numberStr.toInt();
-         if (num > 0 && num <= 999 && numberStr.length() <= 3) {
-            Serial.printf("Setting Timer for %d minutes\n", num);
-            timeManager.setTimer(num);
-            playSound("/system/beep.wav", true); 
-         } else {
-            // Unknown
-            Serial.println("Unknown Number Dialed");
-            playSound("/system/error_tone.wav", false);
-         }
+        // Unknown
+        Serial.println("Unknown Number Dialed");
+        playSound("/system/error_tone.wav", false);
     }
 }
 
