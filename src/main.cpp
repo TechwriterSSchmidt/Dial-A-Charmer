@@ -1499,11 +1499,13 @@ void playDialTone() {
     }
 
     // Workaround: Valid file check for current specific SD corruption/format issue
-    // Since dialtone_1.wav is reported invalid, we map it to beep.wav (which is known good)
+    // Removed Workaround that maps dialtone_1.wav to beep.wav as requested
+    /*
     if (dt == "/system/dialtone_1.wav") {
          Serial.println("Workaround: Remapping potentially broken dialtone_1.wav to beep.wav");
          dt = "/system/beep.wav";
     }
+    */
 
     Serial.println("Starting Dial Tone: " + dt);
     
