@@ -633,11 +633,18 @@ void audioTaskCode(void * parameter) {
 
                     // Software Balance / Gain (Channel gating: ROUT for speaker, LOUT for handset)
                     if (cmd.value == 2) { 
-                        audio->setBalance(16); // Right only
+                        digitalWrite(CONF_PIN_PA_ENABLE, HIGH); // Enable Speaker Amp
+                        /* Speaker (Rout) - Right Channel logic */
+                        audio->setBalance(16); // Right only, mute left (handset)
                         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
                         audio->setVolume(vol);
                     } else if (cmd.value == 1) {
-                        audio->setBalance(-16); // Left only
+                        digitalWrite(CONF_PIN_PA_ENABLE, LOW); // Disable Speaker Amp (mute speaker)
+                        /* Handset (Lout) - Left Channel logic */
+                        // We set balance to -16 (Left Only) because the user confirmed
+                        // the Handset is on Lout. This ensures the handset gets audio
+                        // but specifically the Left channel content.
+                        audio->setBalance(-16); 
                         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
                         audio->setVolume(vol);
                     } else {
