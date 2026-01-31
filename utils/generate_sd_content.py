@@ -664,7 +664,9 @@ def generate_fortune_wavs():
     
     # Use ALL quotes as requested
     selected = lines
-    print(f"Generating {len(selected)} Fortune Cookies...")
+    print(f"Generating {len(selected)} Fortune Cookies with ThreadPool...")
+    
+    tasks = []
     
     for i, text in enumerate(selected):
         filename = f"fortune_{i+1:03d}.wav"
@@ -675,7 +677,20 @@ def generate_fortune_wavs():
         elif text.startswith("EN:"):
             text = text[3:].strip()
             lang = "en"
-        generate_tts_wav(text, filename, lang, "persona_05")
+        tasks.append((text, filename, lang, "persona_05"))
+        
+    # Execute with ThreadPool
+    with concurrent.futures.ThreadPoolExecutor(max_workers=24) as executor:
+        futures = [executor.submit(generate_tts_wav, t[0], t[1], t[2], t[3]) for t in tasks]
+        
+        completed = 0
+        total = len(tasks)
+        for future in concurrent.futures.as_completed(futures):
+            completed += 1
+            if completed % 5 == 0:
+                print(f"  Fortune Progress: {completed}/{total}...", end="\r")
+    
+    print(f"\nFortunes complete.")
     
     # Also create fortune.txt for automatic phonebook naming (Triggers "Fortune" name in firmware)
     with open(os.path.join(output_dir, "fortune.txt"), "w") as f:

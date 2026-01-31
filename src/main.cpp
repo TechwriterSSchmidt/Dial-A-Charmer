@@ -58,6 +58,7 @@ struct AudioCmd {
 // Forward Declaration needed for task
 void audioTaskCode(void * parameter);
 void webServerTaskCode(void * parameter);
+void playSound(String filename, bool useSpeaker = false); // Forward declaration
 void playSequence(std::vector<String> files, bool useSpeaker);
 void clearSpeechQueue();
 void stopDialTone();
@@ -379,69 +380,129 @@ void handlePersonaScan() {
     xSemaphoreGive(sdMutex);
 }
 
-void buildPlaylist() {
-
+void initPlaylists() {
     categories.clear();
     mainPlaylist.tracks.clear();
     mainPlaylist.index = 0;
     
-    Serial.println("Initializing Playlists...");
+    Serial.println("Initializing Playlists (Fast Load)...");
     
-    // Categories 1-5 (5 is Fortune/Offline)
+    // Categories 1-5
     for (int i = 1; i <= 5; i++) {
-        String subfolder = "persona_0" + String(i);
-        
         bool loaded = loadPlaylistFromSD(i, categories[i]);
-        if (!loaded || categories[i].tracks.empty()) {
-            Serial.printf("Building Cat %d (scanning)...\n", i);
-            categories[i].tracks.clear();
-            categories[i].index = 0;
-            // Removed /compliments prefix to match SD card structure where groups are at root
-            scanDirectoryToPlaylist("/" + subfolder, i);
-            
-            // Shuffle
-            auto rng = std::default_random_engine(esp_random());
-            std::shuffle(categories[i].tracks.begin(), categories[i].tracks.end(), rng);
-            
-            savePlaylistToSD(i, categories[i]);
-            saveProgressToSD(i, 0);
+        if (!loaded) {
+            Serial.printf("Cat %d: M3U not found. Empty until re-indexed (Dial 95).\n", i);
+            categories[i].tracks.clear(); // Ensure empty
         } else {
-            Serial.printf("Loaded Cat %d from SD (Tracks: %d, Idx: %d)\n", i, categories[i].tracks.size(), categories[i].index);
+             Serial.printf("Cat %d: Loaded %d tracks.\n", i, categories[i].tracks.size());
         }
     }
     
-    // Main Playlist (0) - Virtual to save RAM
+    // Main Playlist (Virtual)
     mainPlaylist.isVirtual = true;
-    mainPlaylist.tracks.clear(); 
     mainPlaylist.virtualTracks.clear();
     mainPlaylist.index = 0;
     
-    Serial.println("Building Main Playlist (Virtual)...");
-
     bool loadedVirtual = loadVirtualPlaylistFromSD(mainPlaylist);
     if (!loadedVirtual) {
-        // Aggregate References
+        // Try to aggregate if categories have content
         for (int i = 1; i <= 5; i++) {
             for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
                 mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
             }
         }
-
-        if (mainPlaylist.virtualTracks.empty()) {
-            Serial.println("Warning: No tracks found in any category!");
-        } else {
-            auto rng = std::default_random_engine(esp_random());
-            std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
-            saveVirtualPlaylistToSD(mainPlaylist);
-            Serial.printf("Built Main Playlist (Virtual Items: %d)\n", mainPlaylist.virtualTracks.size());
+        if (!mainPlaylist.virtualTracks.empty()) {
+             auto rng = std::default_random_engine(esp_random());
+             std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
+             Serial.printf("Main: Built from loaded cats (%d items)\n", mainPlaylist.virtualTracks.size());
         }
     } else {
-        Serial.printf("Loaded Main Playlist (Virtual Items: %d)\n", mainPlaylist.virtualTracks.size());
+         Serial.printf("Main: Loaded from SD (%d items)\n", mainPlaylist.virtualTracks.size());
     }
-
+    
     if (!mainPlaylist.virtualTracks.empty()) {
         mainPlaylist.index = loadProgressFromSD(0, mainPlaylist.virtualTracks.size());
     }
+}
+
+void scanAllContent() {
+    if (!sdAvailable) return;
+    
+    Serial.println("Starting Force Re-Index (Code 95)...");
+
+    // 1. Audio Warning
+    if (WiFi.status() == WL_CONNECTED) { 
+         // Try TTS
+         audio->connecttospeech("System updating. Please wait.", "en");
+    } else {
+         playSound(Path::COMPUTING, true); 
+    }
+    
+    // Allow Audio to start and play
+    unsigned long startWait = millis();
+    while (millis() - startWait < 4000) { 
+        if (audio->isRunning()) audio->loop(); 
+        delay(10);
+    }
+    
+    // 2. Disable Webserver
+    if (webServerTaskHandle) vTaskSuspend(webServerTaskHandle);
+    
+    // 3. Scan
+    categories.clear();
+    mainPlaylist.tracks.clear();
+    
+    for (int i = 1; i <= 5; i++) {
+        String subfolder = "persona_0" + String(i);
+        categories[i].tracks.clear();
+        categories[i].index = 0;
+        
+        Serial.printf("Scanning Cat %d...\n", i);
+        
+        if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
+            scanDirectoryToPlaylist("/" + subfolder, i);
+            xSemaphoreGive(sdMutex);
+        }
+        
+        // Shuffle & Save
+        auto rng = std::default_random_engine(esp_random());
+        std::shuffle(categories[i].tracks.begin(), categories[i].tracks.end(), rng);
+        
+        if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+            savePlaylistToSD(i, categories[i]);
+            saveProgressToSD(i, 0);
+            xSemaphoreGive(sdMutex);
+        }
+    }
+    
+    // Rebuild Main
+    mainPlaylist.isVirtual = true;
+    mainPlaylist.virtualTracks.clear();
+    mainPlaylist.index = 0;
+    
+    for (int i = 1; i <= 5; i++) {
+        for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
+            mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
+        }
+    }
+    
+    if (!mainPlaylist.virtualTracks.empty()) {
+        auto rng = std::default_random_engine(esp_random());
+        std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
+        
+        if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+            saveVirtualPlaylistToSD(mainPlaylist);
+            xSemaphoreGive(sdMutex);
+        }
+    }
+    
+    // 4. Enable Webserver
+    if (webServerTaskHandle) vTaskResume(webServerTaskHandle);
+    
+    Serial.println("Re-Index Complete.");
+    
+    // 5. Done Sound
+    playSound(Path::READY_SND, true);
 }
 
 String getNextTrack(int category) {
@@ -733,7 +794,7 @@ void setAudioOutput(AudioOutput target) {
     sendAudioCmd(CMD_OUT, NULL, (int)target);
 }
 
-void playSound(String filename, bool useSpeaker = false) {
+void playSound(String filename, bool useSpeaker) {
     if (!sdAvailable) {
         Serial.println("SD Not Available, cannot play: " + filename);
         return;
@@ -1163,6 +1224,10 @@ void handleDialedNumber(String numberStr) {
     if (numberStr == SYS_CODE_SKIP_NEXT_ALARM) { // "91"
          executePhonebookFunction("SKIP_NEXT_ALARM", "");
          return;
+    }
+    if (numberStr == "95") { // Force Re-Index
+        scanAllContent();
+        return;
     }
 
     // Check Phonebook First
@@ -1677,7 +1742,7 @@ void setup() {
     
     // NOW Build Playlists (uses remaining RAM/PSRAM)
     if (sdAvailable) {
-        buildPlaylist();
+        initPlaylists();
     }
     
     // 2. Init Audio Task (Multithreading) - Moved to TOP

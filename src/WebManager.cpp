@@ -823,12 +823,6 @@ String WebManager::getAdvancedHtml() {
     html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
 
-    // --- STORAGE SECTION (Now Below Save) ---
-    html += "<div class='card'><h3>" + t_storage + "</h3>";
-    html += "<p>" + t_reindex_desc + " (1-3 Min)</p>";
-    html += "<button type='button' onclick='if(confirm(\"Reindex?\")) { fetch(\"/api/reindex\").then(res => { alert(\"System Reindexing... LED will pulse blue. Wait for Ready Sound.\"); }); }' style='background-color:#cc4400;'>" + t_reindex + "</button>";
-    html += "</div>";
-
     // OTA Update Form
     esp_task_wdt_reset();
     html += "<div class='card'><h3>Firmware Update</h3>";
