@@ -537,7 +537,23 @@ def make_all_tts():
         for d in range(1, 32):
             txt = str(d)
             if lang == "de":
-                txt = f"Der {d}." # "Der Erste"
+                # Use spoken ordinals to avoid TTS reading just the cardinal number
+                if d == 1:
+                    txt = "Der Erste"
+                elif d == 3:
+                    txt = "Der Dritte"
+                elif d == 7:
+                    txt = "Der Siebte"
+                elif d == 8:
+                    txt = "Der Achte"
+                elif d % 10 == 1 and d != 11:
+                    txt = f"Der {d}ste"
+                elif d % 10 == 2 and d != 12:
+                    txt = f"Der {d}te"
+                elif d % 10 == 3 and d != 13:
+                    txt = f"Der {d}te"
+                else:
+                    txt = f"Der {d}te"
             else:
                 # English Ordinals
                 if 10 < d < 20: suffix = "th"
@@ -632,9 +648,14 @@ def generate_fortune_wavs():
     
     for i, text in enumerate(selected):
         filename = f"fortune_{i+1:03d}.wav"
-        # We use German for Fortunes as requested
-        # Using generate_tts_wav, specifying subdir relative to SD_TEMPLATE_DIR
-        generate_tts_wav(text, filename, "de", "persona_05")
+        lang = "de"
+        if text.startswith("DE:"):
+            text = text[3:].strip()
+            lang = "de"
+        elif text.startswith("EN:"):
+            text = text[3:].strip()
+            lang = "en"
+        generate_tts_wav(text, filename, lang, "persona_05")
     
     # Also create fortune.txt for automatic phonebook naming (Triggers "Fortune" name in firmware)
     with open(os.path.join(output_dir, "fortune.txt"), "w") as f:
