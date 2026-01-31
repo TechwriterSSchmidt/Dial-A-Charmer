@@ -704,6 +704,74 @@ def validate_and_fix_wav_tree():
                     pass
     print(f"WAV check complete. Checked: {checked}, Fixed: {fixed}, Removed: {removed}")
 
+def generate_playlists():
+    print("\n--- Generating Playlists ---")
+    playlist_dir = os.path.join(SD_TEMPLATE_DIR, "playlists")
+    if not os.path.exists(playlist_dir):
+        os.makedirs(playlist_dir)
+
+    all_tracks_ref = [] # List of (cat_id, index)
+
+    # Categories 1-5
+    for cat_id in range(1, 6):
+        persona_folder = f"persona_0{cat_id}"
+        full_folder_path = os.path.join(SD_TEMPLATE_DIR, persona_folder)
+        
+        # Find WAV files
+        files = []
+        if os.path.exists(full_folder_path):
+            for f in os.listdir(full_folder_path):
+                if f.lower().endswith(".wav") and not f.startswith("._") and not f.startswith("."):
+                    files.append(f)
+        
+        # Shuffle for initial random order
+        random.shuffle(files)
+        
+        m3u_path = os.path.join(playlist_dir, f"cat_{cat_id}_v3.m3u")
+        idx_path = os.path.join(playlist_dir, f"cat_{cat_id}_v3.idx")
+        
+        if not files:
+            # Clean up if empty
+            if os.path.exists(m3u_path): os.remove(m3u_path)
+            if os.path.exists(idx_path): os.remove(idx_path)
+            print(f"  Category {cat_id} ({persona_folder}): Empty/Missing")
+            continue
+
+        print(f"  Category {cat_id}: Found {len(files)} tracks in {persona_folder}")
+        
+        with open(m3u_path, "w") as f:
+            for index, filename in enumerate(files):
+                # Firmware expects paths like "/persona_01/filename.wav"
+                # It handles relative paths if they start with /
+                rel_path = f"/{persona_folder}/{filename}"
+                f.write(rel_path + "\n")
+                
+                # Add to Main Mix (Cat 0) as reference
+                all_tracks_ref.append((cat_id, index))
+        
+        # Init Index to 0
+        with open(idx_path, "w") as f:
+            f.write("0")
+
+    # Main Playlist (Cat 0) - Mix
+    cat0_m3u = os.path.join(playlist_dir, "cat_0_v3.m3u")
+    cat0_idx = os.path.join(playlist_dir, "cat_0_v3.idx")
+    
+    if all_tracks_ref:
+        print(f"  Category 0 (Mix): Generating {len(all_tracks_ref)} items...")
+        random.shuffle(all_tracks_ref)
+        
+        with open(cat0_m3u, "w") as f:
+            for cat, idx in all_tracks_ref:
+                # Format: cat,index
+                f.write(f"{cat},{idx}\n")
+        
+        with open(cat0_idx, "w") as f:
+            f.write("0")
+    else:
+        print("  Category 0 (Mix): Empty.")
+
+
 # --- MAIN EXECUTION ---
 
 if __name__ == "__main__":
@@ -725,6 +793,8 @@ if __name__ == "__main__":
     generate_fortune_wavs() # Added Fortune Cookies
 
     validate_and_fix_wav_tree()
+    
+    generate_playlists() # Added Playlist Generation
     
     print("\n=== GENERATION COMPLETE ===")
     print(f"Copy the contents of '{SD_TEMPLATE_DIR}' to your SD Card.")
