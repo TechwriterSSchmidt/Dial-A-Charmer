@@ -1187,9 +1187,9 @@ void handleDialedNumber(String numberStr) {
              }
         }
     } else {
-        // Fallback for Timer setting (1-60)
+        // Fallback for Timer setting (1-999)
          int num = numberStr.toInt();
-         if (num > 0 && num <= 60 && numberStr.length() <= 2) {
+         if (num > 0 && num <= 999 && numberStr.length() <= 3) {
             Serial.printf("Setting Timer for %d minutes\n", num);
             timeManager.setTimer(num);
             playSound("/system/beep.wav", true); 
@@ -1273,7 +1273,7 @@ void processBufNumber(String numberStr) {
     else {
         // Interpret number as Minutes
          int num = numberStr.toInt();
-         if (num > 0 && num <= 120) { // Allow up to 120 minutes
+         if (num > 0 && num <= 999) { // Allow up to 999 minutes
             Serial.printf("Setting Timer for %d minutes\n", num);
             timeManager.setTimer(num);
             

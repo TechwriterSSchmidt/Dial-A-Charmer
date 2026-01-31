@@ -194,6 +194,11 @@ def generate_tts_wav(text, filename, lang='de', output_subdir="system"):
     """
     target_path = os.path.join(SD_TEMPLATE_DIR, output_subdir, filename)
     
+    # Skip if exists and valid
+    if validate_wav_file(target_path):
+        # print(f"  [SKIP] {filename} exists.")
+        return
+
     # 1. Try Piper TTS Local (WAV output)
     piper_bin = os.path.join(SCRIPT_DIR, "piper", "piper")
     piper_model = None
@@ -488,8 +493,8 @@ def make_all_tts():
                 txt = cfg["h_one"]
             generate_tts_wav(txt, f"h_{h}.wav", lang, subdir)
             
-        # Minutes 00-60 (timer confirm can request 60)
-        for m in range(61):
+        # Minutes 0-999 (timer confirm can request up to 999)
+        for m in range(1000):
             txt = str(m)
             # Formatting: 
             # DE: "Null Fünf" or "Fünf"? Code uses "m_05.wav".
