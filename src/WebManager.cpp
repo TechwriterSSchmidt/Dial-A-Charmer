@@ -1075,7 +1075,7 @@ String WebManager::getHelpHtml() {
     html += "</ul></div>";
 
     // SECTION 2: CODES & SHORTCUTS (Dynamic based on logic, but defaults listed)
-    html += "<div class='card'><h3>2. " + String(isDe ? "Nummern & Codes" : "Numbers & Codes") + "</h3>";
+    html += "<div class='card'><h3>2. " + String(isDe ? "Nummern & Codes (H&ouml;rer abgenommen)" : "Numbers & Codes (Off Hook)") + "</h3>";
     html += "<ul>";
     html += "<li><b>0:</b> " + String(isDe ? "Gemini AI" : "Gemini AI") + "</li>";
     html += "<li><b>1 - 5:</b> " + String(isDe ? "Personas / Charaktere" : "Personas / Characters") + "</li>";
@@ -1089,10 +1089,10 @@ String WebManager::getHelpHtml() {
     // SECTION 3: ALARMS & TIMER
     html += "<div class='card'><h3>3. " + String(isDe ? "Wecker & Timer" : "Alarms & Timer") + "</h3>";
     html += "<ul>";
-    html += "<li><b>Timer (Kurzzeitmesser):</b> " + String(isDe ? "H&ouml;rer AUFGELEGT lassen -> Zahl w&auml;hlen (z.B. 5 = 5 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (e.g. 5 = 5 Minutes).") + "</li>";
+    html += "<li><b>Timer (Kurzzeitmesser):</b> " + String(isDe ? "H&ouml;rer AUFGELEGT lassen -> Zahl w&auml;hlen (1 - 999 Minuten)." : "Keep Receiver ON HOOK -> Dial Number (1 - 999 Minutes).") + "</li>";
     html += "<li><b>" + String(isDe ? "Wecker stellen:" : "Set Alarm:") + "</b> " + String(isDe ? "Extra-Taste HALTEN + 4 Ziffern w&auml;hlen (z.B. 0730 = 07:30 Uhr)." : "HOLD Extra Button + Dial 4 digits (e.g. 0730 = 07:30).") + "</li>";
-    html += "<li><b>Timer/Alarm beenden:</b> " + String(isDe ? "H&ouml;rer abnehmen und wieder auflegen." : "Lift receiver and hang up.") + "</li>";
-    html += "<li><b>Schlummermodus:</b> " + String(isDe ? "H&ouml;rer abnehmen und daneben legen (nicht auflegen!)." : "Lift receiver and leave it off-hook / put aside.") + "</li>";
+    html += "<li><b>Timer/Alarm beenden:</b> " + String(isDe ? "H&ouml;rer abnehmen." : "Lift receiver to stop.") + "</li>";
+    html += "<li><b>Schlummermodus:</b> " + String(isDe ? "Extra-Taste dr&uuml;cken." : "Press Extra Button.") + "</li>";
     html += "</ul></div>";
     
     html += getFooterHtml(isDe, "help");

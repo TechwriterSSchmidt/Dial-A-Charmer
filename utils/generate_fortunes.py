@@ -13,8 +13,8 @@ TARGET_ADDITIONAL_COUNT = 750
 # Sources
 URL_WITZE_JSON = "https://raw.githubusercontent.com/tschlumpf/deutsche-Witze/main/witze.json"
 URL_FLACHWITZE = "https://raw.githubusercontent.com/derphilipp/Flachwitze/main/README.md"
-# Using a specific consistent source for Bauernregeln if possible, or fallback
 URL_BAUERNREGELN_WIKI = "https://de.wikiquote.org/wiki/Bauernregeln"
+URL_DAD_JOKES = "https://official-joke-api.appspot.com/jokes/random/250"
 
 def clean_text(text):
     """
@@ -73,7 +73,7 @@ def get_nietzsche_quotes():
         "Wer von seinem Tag nicht zwei Drittel für sich selbst hat ist ein Sklave"
     ]
     # Format: Quote, Friedrich Nietzsche
-    return [clean_text(q) + ", Friedrich Nietzsche" for q in raw]
+    return ["DE: " + clean_text(q) + ", Friedrich Nietzsche" for q in raw]
 
 def fetch_url(url):
     try:
@@ -121,7 +121,7 @@ def fetch_bauernregeln():
         rules.append(f"{c} im {m}, {cons}")
 
     print(f"  Generated/Found {len(rules)} Bauernregeln.")
-    return list(set([clean_text(r) for r in rules]))
+    return list(set(["DE: " + clean_text(r) for r in rules]))
 
 def fetch_witze():
     print("Fetching Witze...")
@@ -141,7 +141,7 @@ def fetch_witze():
                         txt = item
                     
                     if txt and len(txt) < 150: # Short jokes only
-                        jokes.append(clean_text(txt))
+                        jokes.append("DE: " + clean_text(txt))
         except: pass
 
     # 2. Markdown (Flachwitze)
@@ -152,9 +152,32 @@ def fetch_witze():
             if line.startswith("- "):
                 txt = line[2:]
                 if len(txt) < 100:
-                    jokes.append(clean_text(txt))
+                    jokes.append("DE: " + clean_text(txt))
         
     print(f"  Found {len(jokes)} jokes.")
+    return jokes
+
+def fetch_dad_jokes():
+    print("Fetching Dad Jokes...")
+    jokes = []
+
+    data_str = fetch_url(URL_DAD_JOKES)
+    if data_str:
+        try:
+            data = json.loads(data_str)
+            if isinstance(data, list):
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    setup = item.get("setup", "")
+                    punchline = item.get("punchline", "")
+                    text = (setup + " " + punchline).strip()
+                    if text and len(text) < 180:
+                        jokes.append("EN: " + clean_text(text))
+        except Exception as e:
+            print(f"  Warning: Could not parse Dad Jokes ({e})")
+
+    print(f"  Found {len(jokes)} dad jokes.")
     return jokes
 
 def main():
@@ -165,6 +188,7 @@ def main():
     # 1. Fetch Sources
     rules = fetch_bauernregeln()
     jokes = fetch_witze()
+    dad_jokes = fetch_dad_jokes()
     nietzsche = get_nietzsche_quotes() 
 
     # 2. Combine
@@ -175,6 +199,7 @@ def main():
     combined = []
     combined.extend(rules)
     combined.extend(jokes)
+    combined.extend(dad_jokes)
     combined.extend(nietzsche * 3) # Add Nietzsche 3x to increase probability in shuffle
     
     # Needs 500 new ones + keeping old? Or just generate a fresh set?

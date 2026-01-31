@@ -9,17 +9,26 @@ RotaryDial::RotaryDial(int pulsePin, int hookPin, int extraButtonPin, int modePi
 }
 
 void IRAM_ATTR RotaryDial::isrPulse() {
-    if (_instance) {
-        // Simple debounce
-        static unsigned long lastIsr = 0;
-        unsigned long now = millis();
-        if (now - lastIsr > CONF_DIAL_DEBOUNCE_PULSE) {
-            _instance->_pulseCount++;
-            _instance->_lastPulseTime = now;
-            _instance->_dialing = true;
-            _instance->_newPulse = true; // Signal new pulse
-            lastIsr = now;
-        }
+    if (!_instance) return;
+
+    if (_instance->_modePin >= 0) {
+        bool modeActive = (digitalRead(_instance->_modePin) == (CONF_DIAL_MODE_ACTIVE_LOW ? LOW : HIGH));
+        if (!modeActive) return;
+    }
+
+    // Count only on transition to inactive level
+    bool pulseInactive = (digitalRead(_instance->_pulsePin) == (CONF_DIAL_PULSE_ACTIVE_LOW ? HIGH : LOW));
+    if (!pulseInactive) return;
+
+    // Simple debounce
+    static unsigned long lastIsr = 0;
+    unsigned long now = millis();
+    if (now - lastIsr > CONF_DIAL_DEBOUNCE_PULSE) {
+        _instance->_pulseCount++;
+        _instance->_lastPulseTime = now;
+        _instance->_dialing = true;
+        _instance->_newPulse = true; // Signal new pulse
+        lastIsr = now;
     }
 }
 
@@ -34,7 +43,7 @@ void RotaryDial::begin() {
         if (_modePin >= 34 && _modePin <= 39) pinMode(_modePin, INPUT); else pinMode(_modePin, INPUT_PULLUP);
     }
 
-    attachInterrupt(digitalPinToInterrupt(_pulsePin), isrPulse, FALLING);
+    attachInterrupt(digitalPinToInterrupt(_pulsePin), isrPulse, CHANGE);
 }
 
 void RotaryDial::loop() {

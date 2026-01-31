@@ -32,8 +32,8 @@
 #if HAS_ES8388_CODEC
 #include <es8388.h>
 es8388 codec;
-// Default Output: Headphone (L+R)
-es_dac_output_t currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT1 | DAC_OUTPUT_ROUT1); 
+// Default Output: Both channels active
+es_dac_output_t currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_ALL); 
 #endif
 
 // --- Objects ---
@@ -60,6 +60,7 @@ void audioTaskCode(void * parameter);
 void webServerTaskCode(void * parameter);
 void playSequence(std::vector<String> files, bool useSpeaker);
 void clearSpeechQueue();
+void stopDialTone();
 
 // Global State
 std::vector<String> globalSpeechQueue;
@@ -85,6 +86,8 @@ bool isAlarmRinging = false;
 bool isTimerRinging = false; 
 unsigned long ringingStartTime = 0;
 int currentAlarmVol = 0;
+bool pendingDeleteAlarm = false;
+bool pendingDeleteTimer = false;
 
 // Dialing State
 String dialBuffer = "";
@@ -530,14 +533,21 @@ void audioTaskCode(void * parameter) {
     #else
         audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
     #endif
-    audio->forceMono(false); // Stereo required for Audio Kit to work properly? 
+    audio->forceMono(true); // Force mono -> duplicate to L/R for channel gating
 #if DEBUG_AUDIO
     Serial.printf("[Audio][INIT] bitsPerSample=%u\n", audio->getBitsPerSample());
 #endif
     
+    bool lastRunning = false;
     for(;;) {
         audio->loop();
         isAudioBusy = audio->isRunning();
+#if DEBUG_AUDIO
+        if (isAudioBusy != lastRunning) {
+            Serial.printf("[Audio][STATE] running=%d\n", isAudioBusy ? 1 : 0);
+            lastRunning = isAudioBusy;
+        }
+#endif
         
         AudioCmd cmd;
         if(xQueueReceive(audioQueue, &cmd, 0) == pdTRUE) {
@@ -607,8 +617,8 @@ void audioTaskCode(void * parameter) {
                     Serial.printf("[Audio][CMD_OUT] val=%d\n", cmd.value);
 #endif
                     #if HAS_ES8388_CODEC
-                        // ES8388 Hardware Routing (Speaker-only)
-                        currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_SPK);
+                        // ES8388 Hardware Routing (Both outputs active)
+                        currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_ALL);
                         int vol = (cmd.value == 2)
                                   ? ::map(settings.getBaseVolume(), 0, 42, 0, 100)
                                   : ::map(settings.getVolume(), 0, 42, 0, 100);
@@ -621,15 +631,17 @@ void audioTaskCode(void * parameter) {
 #endif
                     #endif
 
-                    // Software Balance / Gain (Legacy support & Fine tuning)
+                    // Software Balance / Gain (Channel gating: ROUT for speaker, LOUT for handset)
                     if (cmd.value == 2) { 
-                        audio->setBalance(0);
+                        audio->setBalance(16); // Right only
                         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
                         audio->setVolume(vol);
+                    } else if (cmd.value == 1) {
+                        audio->setBalance(-16); // Left only
+                        int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
+                        audio->setVolume(vol);
                     } else {
-                         audio->setBalance(0);
-                         int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
-                         audio->setVolume(vol);
+                        audio->setBalance(0);
                     }
                     break;
             }
@@ -653,9 +665,7 @@ void sendAudioCmd(AudioCmdType type, const char* path, int val) {
 // Web Server Task - runs on Core 1 with its own WDT resets
 void webServerTaskCode(void * parameter) {
     Serial.print("[WebServerTask] Started on Core "); Serial.println(xPortGetCoreID());
-    esp_task_wdt_add(NULL); // register this task
     for(;;) {
-        esp_task_wdt_reset();
         webManager.loop();
         vTaskDelay(5 / portTICK_PERIOD_MS); // yield CPU
     }
@@ -685,6 +695,19 @@ void playSound(String filename, bool useSpeaker = false) {
                   (audio && audio->isRunning()) ? 1 : 0);
 #endif
     setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
+    sendAudioCmd(CMD_PLAY, filename.c_str(), 0);
+}
+
+void playSoundNoRoute(String filename) {
+    if (!sdAvailable) {
+        Serial.println("SD Not Available, cannot play: " + filename);
+        return;
+    }
+#if DEBUG_AUDIO
+    Serial.printf("[Audio][REQ] (no-route) file=%s offHook=%d running=%d\n",
+                  filename.c_str(), dial.isOffHook() ? 1 : 0,
+                  (audio && audio->isRunning()) ? 1 : 0);
+#endif
     sendAudioCmd(CMD_PLAY, filename.c_str(), 0);
 }
 
@@ -737,23 +760,9 @@ void speakTime() {
         Serial.println("Time Invalid (No Sync). Announcing unavailable.");
         String lang = settings.getLanguage();
         String msg = "/system/time_unavailable_" + lang + ".wav";
-
-        if (dial.isOffHook()) {
-            setAudioOutput(OUT_HANDSET);
-        } else {
-            setAudioOutput(OUT_SPEAKER);
-        }
-
         timeState = TIME_IDLE;
-        playSound(msg, (currentOutput == OUT_SPEAKER));
+        playSound(msg, !dial.isOffHook());
         return;
-    }
-
-    // Smart Output: Handset if off-hook, Speaker if on-hook
-    if (dial.isOffHook()) {
-        setAudioOutput(OUT_HANDSET);
-    } else {
-        setAudioOutput(OUT_SPEAKER);
     }
 
     timeState = TIME_INTRO;
@@ -763,7 +772,7 @@ void speakTime() {
     // Debug
     Serial.printf("Queueing Time Intro: %s\n", introPath.c_str());
     
-    playSound(introPath, (currentOutput == OUT_SPEAKER));
+    playSound(introPath, !dial.isOffHook());
 }
 
 void processTimeQueue() {
@@ -837,6 +846,12 @@ void processTimeQueue() {
         case TIME_DST:
             timeState = TIME_DONE;
             Serial.println("Time & Date Speak Done");
+            if (dial.isOffHook()) {
+                isLineBusy = true;
+                stopDialTone();
+                setAudioOutput(OUT_HANDSET);
+                playSound("/system/busy_tone.wav", false);
+            }
             break;
             
         default: break;
@@ -844,7 +859,7 @@ void processTimeQueue() {
     
     if (nextFile.length() > 0) {
         Serial.print("Next Time File: "); Serial.println(nextFile);
-        playSound(nextFile, false);
+        playSound(nextFile, !dial.isOffHook());
     }
 }
 
@@ -912,10 +927,6 @@ void playPreviewSound(String type, String filename) {
     clearSpeechQueue();
     timeState = TIME_IDLE;
     
-    // Play on Speaker if On-Hook, Handset if Off-Hook
-    bool offHook = dial.isOffHook();
-    // setAudioOutput(offHook ? OUT_HANDSET : OUT_SPEAKER); // playSound handles this
-    
     String path = "";
     if (type == "ring") {
         if (filename.startsWith("/")) path = filename;
@@ -927,7 +938,7 @@ void playPreviewSound(String type, String filename) {
     
     if (path.length() > 0) {
         Serial.printf("Preview Sound: %s\n", path.c_str());
-        playSound(path, !offHook); // Use Speaker if NOT off-hook
+        playSound(path, true); // Always preview on base speaker
     }
 }
 
@@ -1176,17 +1187,9 @@ void handleDialedNumber(String numberStr) {
              }
         }
     } else {
-        // Fallback for Timer setting (1-60)
-         int num = numberStr.toInt();
-         if (num > 0 && num <= 60 && numberStr.length() <= 2) {
-            Serial.printf("Setting Timer for %d minutes\n", num);
-            timeManager.setTimer(num);
-            playSound("/system/beep.wav", true); 
-         } else {
-            // Unknown
-            Serial.println("Unknown Number Dialed");
-            playSound("/system/error_tone.wav", false);
-         }
+        // Unknown
+        Serial.println("Unknown Number Dialed");
+        playSound("/system/error_tone.wav", false);
     }
 }
 
@@ -1262,7 +1265,12 @@ void processBufNumber(String numberStr) {
     else {
         // Interpret number as Minutes
          int num = numberStr.toInt();
-         if (num > 0 && num <= 120) { // Allow up to 120 minutes
+         if (num > 0 && num <= 999) { // Allow up to 999 minutes
+            // Ensure any active alarm/timer ringing is stopped
+            if (isAlarmRinging) {
+                stopAlarm();
+            }
+
             Serial.printf("Setting Timer for %d minutes\n", num);
             timeManager.setTimer(num);
             
@@ -1319,22 +1327,6 @@ void stopDialTone();
 
 void onHook(bool offHook) {
     // Serial.printf("Hook State: %s\n", offHook ? "OFF HOOK (Picked Up)" : "ON HOOK (Hung Up)");
-    
-    // 2. Logic: Delete Alarm (Lift Handset + Hold Button)
-    if (offHook && dial.isButtonDown()) {
-         if (timeManager.isAlarmSet()) {
-             timeManager.deleteAlarm(0); 
-             Serial.println("Manual Alarm Deleted (Button + Lift)");
-             
-             // Feedback on Speaker (Consistent with Timer Cancel)
-             String lang = settings.getLanguage();
-             playSound("/system/alarm_deleted_" + lang + ".wav", true); 
-         } else {
-             // Nothing to delete
-             playSound("/system/error_tone.wav", false);
-         }
-         return;
-    }
 
     if (offHook) {
         // Reset Timeout State
@@ -1343,22 +1335,25 @@ void onHook(bool offHook) {
 
         // statusLed.setIdle();
         
-        // Stop Alarm if ringing
-        if (isAlarmRinging) {
-            startSnooze(); // Lift = Snooze Start (Put Aside)
+        // If Alarm/Timer is ringing, mark delete on hang-up and stop audio
+        if (isAlarmRinging || isTimerRinging) {
+            pendingDeleteAlarm = isAlarmRinging;
+            pendingDeleteTimer = isTimerRinging;
+            stopAlarm();
             return;
         }
         
         // Check running Timer -> Cancel and Speak on Base
         if (timeManager.isTimerRunning()) {
-             timeManager.cancelTimer();
-             stopAlarm(); 
-             Serial.println("Timer Stopped by Pickup");
-             
-             setAudioOutput(OUT_SPEAKER);
-             String lang = settings.getLanguage();
-             playSound("/system/timer_deleted_" + lang + ".wav", true);
+             pendingDeleteTimer = true;
+             Serial.println("Timer Pending Delete (Pickup)");
              return; 
+        }
+
+        // If time announcement active, route to handset and skip dial tone
+        if (timeState != TIME_IDLE && timeState != TIME_DONE) {
+            setAudioOutput(OUT_HANDSET);
+            return;
         }
         
         // NEW Standard Behavior: Play Dial Tone
@@ -1368,6 +1363,12 @@ void onHook(bool offHook) {
     } else {
         // ON HOOK (Hung Up)
         
+        // If time announcement active, route to speaker and skip stopping audio
+        if (timeState != TIME_IDLE && timeState != TIME_DONE) {
+            setAudioOutput(OUT_SPEAKER);
+            return;
+        }
+
         // BUG FIX: Stop any pending sentences
         clearSpeechQueue();
         
@@ -1377,9 +1378,21 @@ void onHook(bool offHook) {
         // Ensure Tone is stopped
         stopDialTone();
         
-        if (timeManager.isSnoozeActive()) {
-            // User hung up during snooze -> Cancel Snooze (I am awake)
-            cancelSnooze();
+        if (pendingDeleteAlarm || pendingDeleteTimer) {
+            String lang = settings.getLanguage();
+            if (pendingDeleteAlarm && timeManager.isAlarmSet()) {
+                timeManager.deleteAlarm(0);
+                Serial.println("Alarm Deleted (Pickup + Hangup)");
+                playSound("/system/alarm_deleted_" + lang + ".wav", true);
+            }
+            if (pendingDeleteTimer && timeManager.isTimerRunning()) {
+                timeManager.cancelTimer();
+                Serial.println("Timer Deleted (Pickup + Hangup)");
+                playSound("/system/timer_deleted_" + lang + ".wav", true);
+            }
+            pendingDeleteAlarm = false;
+            pendingDeleteTimer = false;
+            return;
         }
         
         if (audio->isRunning()) {
@@ -1390,6 +1403,11 @@ void onHook(bool offHook) {
 }
 
 void onButton() {
+    // Snooze Alarm on Key5
+    if (isAlarmRinging) {
+        startSnooze();
+        return;
+    }
     // Interruption Logic: Stop Speaking if Button Pressed
     if (audio->isRunning() || !globalSpeechQueue.empty()) {
         Serial.println("Interruption: Button Pressed -> Stopping Audio & Queue");
@@ -1665,6 +1683,19 @@ void loop() {
     // Reset Watchdog
     esp_task_wdt_reset();
 
+    // Apply volume changes immediately
+    static int lastVol = -1;
+    static int lastBaseVol = -1;
+    int curVol = settings.getVolume();
+    int curBaseVol = settings.getBaseVolume();
+    if (curVol != lastVol || curBaseVol != lastBaseVol) {
+        lastVol = curVol;
+        lastBaseVol = curBaseVol;
+        if (currentOutput != OUT_NONE) {
+            sendAudioCmd(CMD_OUT, NULL, (int)currentOutput);
+        }
+    }
+
     // Verify Hook State Log
     static bool lastHookState = false; 
     bool actualHook = dial.isOffHook();
@@ -1924,7 +1955,7 @@ void audio_eof_mp3(const char *info){
          // Loop Alarm Sound
          String ringName = settings.getRingtone();
          String ringPath = ringName.startsWith("/") ? ringName : "/ringtones/" + ringName;
-         playSound(ringPath, true);
+            playSoundNoRoute(ringPath);
          
          // Note: setVolume might be reset by playSound internal logic if we called setAudioOutput again?
          // Our modified playSound calls setAudioOutput. 
@@ -1938,4 +1969,16 @@ void audio_eof_mp3(const char *info){
 void audio_eof_stream(const char *info){
     Serial.print("EOF Stream: "); Serial.println(info);
     // statusLed.setIdle();
+}
+
+void audio_info(const char *info){
+#if DEBUG_AUDIO
+    Serial.print("[Audio][INFO] "); Serial.println(info);
+#endif
+}
+
+void audio_error(const char *info){
+#if DEBUG_AUDIO
+    Serial.print("[Audio][ERROR] "); Serial.println(info);
+#endif
 }
