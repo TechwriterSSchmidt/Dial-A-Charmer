@@ -25,7 +25,8 @@
 #define CONF_PIN_DIAL_MODE  23  // Key 4 - Dial State Contact (temporary test)
 #define CONF_PIN_HOOK       19  
 #define CONF_PIN_EXTRA_BTN  18  
-#define CONF_DIAL_MODE_ACTIVE_LOW false
+#define CONF_DIAL_MODE_ACTIVE_LOW true
+#define CONF_DIAL_PULSE_ACTIVE_LOW true
 #define CONF_HOOK_ACTIVE_LOW  true // Floating = HIGH = On Hook (Idle). Low = Off Hook (Active)
 
 // Status LED (WS2812) - Header P2 (GPIO 23 used as Output, ignore Key 4)
