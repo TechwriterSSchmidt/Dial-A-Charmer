@@ -510,6 +510,14 @@ String getNextTrack(int category) {
 
 // --- Audio Task & Helpers ---
 
+// Helper for Manual Register Access (user request for LOUT fix)
+void writeCodecReg(uint8_t reg, uint8_t val) {
+    Wire.beginTransmission(0x10); // ES8388 Address
+    Wire.write(reg);
+    Wire.write(val);
+    Wire.endTransmission();
+}
+
 void audioTaskCode(void * parameter) {
     Serial.print("[AudioTask] Started on Core "); Serial.println(xPortGetCoreID());
     
@@ -538,7 +546,9 @@ void audioTaskCode(void * parameter) {
     Serial.printf("[Audio][INIT] bitsPerSample=%u\n", audio->getBitsPerSample());
 #endif
     
+    static int activeOutputMode = 2; // Default to Speaker (2)
     bool lastRunning = false;
+    
     for(;;) {
         audio->loop();
         isAudioBusy = audio->isRunning();
@@ -600,55 +610,92 @@ void audioTaskCode(void * parameter) {
                     break;
                 case CMD_VOL:
 #if DEBUG_AUDIO
-                    Serial.printf("[Audio][CMD_VOL] val=%d\n", cmd.value);
+                    Serial.printf("[Audio][CMD_VOL] raw=%d mode=%d\n", cmd.value, activeOutputMode);
 #endif
-                    audio->setVolume(cmd.value);
-                    #if HAS_ES8388_CODEC
-                        // Update Codec Volume (Map 0-21 internal gain to 0-100 hardware gain)
-                        {
-                            int hwVol = ::map(cmd.value, 0, 21, 0, 100);
-                            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, hwVol);
-                        }
-                    #endif
+                    {
+                        // Safely clamp volume to valid range 0-21
+                        int safeVol = cmd.value;
+                        if (safeVol < 0) safeVol = 0;
+                        if (safeVol > 21) safeVol = 21;
+
+                        audio->setVolume(safeVol);
+                        #if HAS_ES8388_CODEC
+                            // Update Codec Volume (Map 0-21 internal gain to 0-100 hardware gain)
+                            int hwVol = ::map(safeVol, 0, 21, 0, 100);
+                            
+                            // We use DAC_OUTPUT_ALL to ensure chip stays powered, but we gate via regs
+                            codec.config(16, (es_dac_output_t)(DAC_OUTPUT_ALL), ADC_INPUT_LINPUT2_RINPUT2, hwVol);
+
+                            // MANUAL REGISTER OVERWRITE Logic (Depend on Active Mode)
+                            int volReg = hwVol / 3;
+                            
+                            // Split Output based on Mode
+                            // Mode 1 = Handset (LOUT), Mode 2 = Speaker (ROUT)
+                            // We mute the other channel to ensure isolation
+                            if (activeOutputMode == 1) {
+                                writeCodecReg(0x2F, 0);               // ROUT (Speaker) = Mute
+                                writeCodecReg(0x2E, (uint8_t)volReg); // LOUT (Handset) = Vol
+                            } else {
+                                // Default or Speaker
+                                writeCodecReg(0x2F, (uint8_t)volReg); // ROUT (Speaker) = Vol
+                                writeCodecReg(0x2E, 0);               // LOUT (Handset) = Mute
+                            }
+                            
+                            // Ensure Mixers are open (Reg 0x27/0x2A)
+                            writeCodecReg(0x27, 0x90); // Left DAC -> Left Mixer
+                            writeCodecReg(0x2A, 0x90); // Right DAC -> Right Mixer
+                        #endif
+                    }
                     break;
 
                 case CMD_OUT:
 #if DEBUG_AUDIO
                     Serial.printf("[Audio][CMD_OUT] val=%d\n", cmd.value);
 #endif
+                    // Update Active Mode (Tracking for Volume Changes)
+                    activeOutputMode = cmd.value;
+
+                    // Hardware: Enable PA Pin HIGH always (Handset also needs this on some boards)
+                    // We will Mute Speaker via 0x2F Digital Reg instead of PA Pin
+                    digitalWrite(CONF_PIN_PA_ENABLE, HIGH);
+
                     #if HAS_ES8388_CODEC
-                        // ES8388 Hardware Routing (Both outputs active)
-                        currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_ALL);
-                        int vol = (cmd.value == 2)
-                                  ? ::map(settings.getBaseVolume(), 0, 42, 0, 100)
-                                  : ::map(settings.getVolume(), 0, 42, 0, 100);
-                        codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
+                        // ES8388 Hardware Routing
+                        int targetVolInternal = (activeOutputMode == 2) ? settings.getBaseVolume() : settings.getVolume();
+                        int targetVolHw = ::map(targetVolInternal, 0, 42, 0, 100);
+
+                        // Configure Codec with ALL Outputs enabled
+                        codec.config(16, (es_dac_output_t)(DAC_OUTPUT_ALL), ADC_INPUT_LINPUT2_RINPUT2, targetVolHw);
+                        
+                        // Force 0x04 (Power) to Enable All Outputs: LOUT1/2 ROUT1/2
+                        writeCodecReg(0x04, 0x3C); 
+                        
+                        // Force Mixer Routing (Left DAC -> Left Mixer)
+                        writeCodecReg(0x27, 0x90);
+                        writeCodecReg(0x2A, 0x90);
+                        
+                        // Volume Register Logic (Split L/R)
+                        int volReg = targetVolHw / 3;
+                        
+                        if (activeOutputMode == 1) { // Handset Mode
+                             writeCodecReg(0x2F, 0);               // ROUT (Speaker) = Mute
+                             writeCodecReg(0x2E, (uint8_t)volReg); // LOUT (Handset) = Vol
+                        } else { // Speaker Mode (2)
+                             writeCodecReg(0x2F, (uint8_t)volReg); // ROUT (Speaker) = Vol
+                             writeCodecReg(0x2E, 0);               // LOUT (Handset) = Mute
+                        }
 #if DEBUG_AUDIO
-                        Serial.printf("[Audio][CODEC] out=%d vol=%d\n",
-                                      (int)currentCodecOutput,
-                                      (cmd.value == 2) ? ::map(settings.getBaseVolume(), 0, 42, 0, 100)
-                                                       : ::map(settings.getVolume(), 0, 42, 0, 100));
+                        Serial.printf("[Audio][CODEC] Mode=%d -> LOUT=%d ROUT=%d\n", 
+                             activeOutputMode, (activeOutputMode==1)?volReg:0, (activeOutputMode==2)?volReg:0);
 #endif
                     #endif
 
-                    // Software Balance / Gain (Channel gating: ROUT for speaker, LOUT for handset)
-                    if (cmd.value == 2) { 
-                        digitalWrite(CONF_PIN_PA_ENABLE, HIGH); // Enable Speaker Amp
-                        /* Speaker (Rout) - Right Channel logic */
-                        audio->setBalance(16); // Right only, mute left (handset)
-                        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
-                        audio->setVolume(vol);
-                    } else if (cmd.value == 1) {
-                        digitalWrite(CONF_PIN_PA_ENABLE, LOW); // Disable Speaker Amp (mute speaker)
-                        /* Handset (Lout) - Left Channel logic */
-                        // We set balance to -16 (Left Only) because the user confirmed
-                        // the Handset is on Lout. This ensures the handset gets audio
-                        // but specifically the Left channel content.
-                        audio->setBalance(-16); 
-                        int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
-                        audio->setVolume(vol);
-                    } else {
-                        audio->setBalance(0);
+                    // Audio Lib Volume (Software scaling)
+                    audio->setBalance(0); // Center Balance
+                    {
+                        // Set software volume matching the hardware mode source
+                        int swVol = ::map((activeOutputMode == 2) ? settings.getBaseVolume() : settings.getVolume(), 0, 42, 0, 21);
+                        audio->setVolume(swVol);
                     }
                     break;
             }
@@ -976,14 +1023,6 @@ void stopAlarm() {
     timeManager.cancelTimer(); 
     
     setAudioOutput(OUT_HANDSET); 
-    
-    // BUG FIX: Volume Reset
-    // Reset volume to standard level immediately, otherwise next call is loud!
-    int defVol = settings.getBaseVolume(); 
-    if(audio) {
-        audio->setVolume(defVol);
-        sendAudioCmd(CMD_VOL, NULL, defVol);
-    }
 
     Serial.println("Alarm Stopped");
 }
