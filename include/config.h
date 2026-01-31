@@ -65,4 +65,7 @@
 #define CONF_DEFAULT_VOL    30
 #define CONF_DEFAULT_RING   1
 
+// --- Debugging ---
+#define DEBUG_AUDIO         1
+
 #endif

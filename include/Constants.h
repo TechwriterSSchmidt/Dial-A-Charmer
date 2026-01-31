@@ -14,8 +14,8 @@ namespace Path {
     // Specific Files
     constexpr const char* DIAL_TONE   = "/system/dial_tone.wav";
     constexpr const char* BUSY_TONE   = "/system/busy_tone.wav";
-    constexpr const char* STARTUP_SND = "/system/startup.mp3";
-    constexpr const char* READY_SND   = "/system/system_ready.mp3";
+    constexpr const char* STARTUP_SND = "/system/startup.wav";
+    constexpr const char* READY_SND   = "/system/system_ready.wav";
     
     // Fonts
     constexpr const char* FONT_MAIN   = "/system/fonts/ZenTokyoZoo-Regular.ttf";

@@ -10,7 +10,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
-
 #define WDT_TIMEOUT 30 // 30 Seconds Watchdog Limit (needed for WebServer HTML generation)
 
 #include <random>
@@ -25,6 +24,8 @@
 #include "LedManager.h"
 #include "AiManager.h"   
 #include "PhonebookManager.h"
+#include "Constants.h"
+
 
 #define SD SD_MMC // Use SD_MMC with existing SD.* calls
 
@@ -254,7 +255,7 @@ void scanDirectoryToPlaylist(String path, int categoryId) {
         esp_task_wdt_reset(); // Prevent WDT Reset during long directory scans
         if(!file.isDirectory()) {
             String fname = String(file.name());
-            if(fname.endsWith(".mp3") && fname.indexOf("._") == -1) {
+            if(fname.endsWith(".wav") && fname.indexOf("._") == -1) {
                 // Construct full path
                 String fullPath = path;
                 if(!fullPath.endsWith("/")) fullPath += "/";
@@ -530,6 +531,9 @@ void audioTaskCode(void * parameter) {
         audio->setPinout(CONF_I2S_BCLK, CONF_I2S_LRC, CONF_I2S_DOUT);
     #endif
     audio->forceMono(false); // Stereo required for Audio Kit to work properly? 
+#if DEBUG_AUDIO
+    Serial.printf("[Audio][INIT] bitsPerSample=%u\n", audio->getBitsPerSample());
+#endif
     
     for(;;) {
         audio->loop();
@@ -539,28 +543,55 @@ void audioTaskCode(void * parameter) {
         if(xQueueReceive(audioQueue, &cmd, 0) == pdTRUE) {
             switch(cmd.type) {
                 case CMD_PLAY:
+#if DEBUG_AUDIO
+                    Serial.printf("[Audio][CMD_PLAY] path=%s\n", cmd.path);
+#endif
                     // Take SD mutex (wait up to 10 seconds for playback)
                     if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
+#if DEBUG_AUDIO
+                        Serial.println("[Audio][SD] mutex acquired");
+#endif
                         if (SD.exists(cmd.path)) {
+#if DEBUG_AUDIO
+                            Serial.println("[Audio][SD] file exists");
+#endif
                             audio->connecttoFS(SD, cmd.path);
+#if DEBUG_AUDIO
+                            Serial.println("[Audio][SD] connecttoFS");
+#endif
                         } else {
                             Serial.printf("[Audio] File missing: %s\n", cmd.path);
                             if (SD.exists("/system/fallback_alarm.wav")) {
                                  audio->connecttoFS(SD, "/system/fallback_alarm.wav");
+#if DEBUG_AUDIO
+                                Serial.println("[Audio][SD] fallback_alarm.wav -> connecttoFS");
+#endif
                             }
                         }
                         xSemaphoreGive(sdMutex); // Release after file is opened
+#if DEBUG_AUDIO
+                        Serial.println("[Audio][SD] mutex released");
+#endif
                     } else {
                         Serial.println("[Audio] SD Mutex timeout, skipping playback");
                     }
                     break;
                 case CMD_CONNECT_SPEECH:
+#if DEBUG_AUDIO
+                    Serial.printf("[Audio][CMD_SPEECH] text=%s\n", cmd.path);
+#endif
                     audio->connecttospeech(cmd.path, "de");
                     break;
                 case CMD_STOP:
+#if DEBUG_AUDIO
+                    Serial.println("[Audio][CMD_STOP]");
+#endif
                     audio->stopSong();
                     break;
                 case CMD_VOL:
+#if DEBUG_AUDIO
+                    Serial.printf("[Audio][CMD_VOL] val=%d\n", cmd.value);
+#endif
                     audio->setVolume(cmd.value);
                     #if HAS_ES8388_CODEC
                         // Update Codec Volume (Map 0-21 internal gain to 0-100 hardware gain)
@@ -572,6 +603,9 @@ void audioTaskCode(void * parameter) {
                     break;
 
                 case CMD_OUT:
+#if DEBUG_AUDIO
+                    Serial.printf("[Audio][CMD_OUT] val=%d\n", cmd.value);
+#endif
                     #if HAS_ES8388_CODEC
                         // ES8388 Hardware Routing
                         if (cmd.value == 2) { 
@@ -587,6 +621,12 @@ void audioTaskCode(void * parameter) {
                             codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
                             // codec.volume(vol); // Removed invalid call
                         }
+#if DEBUG_AUDIO
+                        Serial.printf("[Audio][CODEC] out=%d vol=%d\n",
+                                      (int)currentCodecOutput,
+                                      (cmd.value == 2) ? ::map(settings.getBaseVolume(), 0, 42, 0, 100)
+                                                       : ::map(settings.getVolume(), 0, 42, 0, 100));
+#endif
                     #endif
 
                     // Software Balance / Gain (Legacy support & Fine tuning)
@@ -636,6 +676,9 @@ AudioOutput currentOutput = OUT_NONE;
 void setAudioOutput(AudioOutput target) {
     if (currentOutput == target) return; 
     currentOutput = target;
+#if DEBUG_AUDIO
+    Serial.printf("[Audio][OUT] target=%d\n", (int)target);
+#endif
     sendAudioCmd(CMD_OUT, NULL, (int)target);
 }
 
@@ -644,6 +687,11 @@ void playSound(String filename, bool useSpeaker = false) {
         Serial.println("SD Not Available, cannot play: " + filename);
         return;
     }
+#if DEBUG_AUDIO
+    Serial.printf("[Audio][REQ] file=%s useSpeaker=%d offHook=%d running=%d\n",
+                  filename.c_str(), useSpeaker ? 1 : 0, dial.isOffHook() ? 1 : 0,
+                  (audio && audio->isRunning()) ? 1 : 0);
+#endif
     setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
     sendAudioCmd(CMD_PLAY, filename.c_str(), 0);
 }
@@ -694,11 +742,19 @@ void speakTime() {
         currentIsDst = (tInfo->tm_isdst > 0);
         
     } else {
-        Serial.println("Time Invalid (No Sync), using 12:00 default");
-        currentHour = 12;
-        currentMinute = 0;
-        // Defaults if needed (1970)
-        currentDay = 1; currentMonth = 0; currentYear = 1970; currentWeekday = 4;
+        Serial.println("Time Invalid (No Sync). Announcing unavailable.");
+        String lang = settings.getLanguage();
+        String msg = "/system/time_unavailable_" + lang + ".wav";
+
+        if (dial.isOffHook()) {
+            setAudioOutput(OUT_HANDSET);
+        } else {
+            setAudioOutput(OUT_SPEAKER);
+        }
+
+        timeState = TIME_IDLE;
+        playSound(msg, (currentOutput == OUT_SPEAKER));
+        return;
     }
 
     // Smart Output: Handset if off-hook, Speaker if on-hook
@@ -710,7 +766,7 @@ void speakTime() {
 
     timeState = TIME_INTRO;
     String lang = settings.getLanguage();
-    String introPath = "/time/" + lang + "/intro.mp3";
+    String introPath = "/time/" + lang + "/intro.wav";
     
     // Debug
     Serial.printf("Queueing Time Intro: %s\n", introPath.c_str());
@@ -731,59 +787,59 @@ void processTimeQueue() {
     switch (timeState) {
         case TIME_INTRO: // Intro finished, play Hour
             timeState = TIME_HOUR;
-            nextFile = basePath + "h_" + String(currentHour) + ".mp3";
+            nextFile = basePath + "h_" + String(currentHour) + ".wav";
             break;
             
         case TIME_HOUR: // Hour finished, play "Uhr"
             timeState = TIME_UHR;
-            nextFile = basePath + "uhr.mp3";
+            nextFile = basePath + "uhr.wav";
             break;
             
         case TIME_UHR: // "Uhr" finished, play Minute (if not 0)
             if (currentMinute == 0) {
                 // If minute is 0, skip to Date
                 timeState = TIME_DATE_INTRO;
-                nextFile = basePath + "date_intro.mp3";
+                 nextFile = basePath + "date_intro.wav";
             } else {
                 timeState = TIME_MINUTE;
                 if (currentMinute < 10) {
-                     nextFile = basePath + "m_0" + String(currentMinute) + ".mp3";
+                     nextFile = basePath + "m_0" + String(currentMinute) + ".wav";
                 } else {
-                     nextFile = basePath + "m_" + String(currentMinute) + ".mp3";
+                     nextFile = basePath + "m_" + String(currentMinute) + ".wav";
                 }
             }
             break;
             
         case TIME_MINUTE: // Minute finished
             timeState = TIME_DATE_INTRO;
-            nextFile = basePath + "date_intro.mp3";
+            nextFile = basePath + "date_intro.wav";
             break;
 
         // --- NEW DATE LOGIC ---
         case TIME_DATE_INTRO:
             timeState = TIME_WEEKDAY;
-            nextFile = basePath + "wday_" + String(currentWeekday) + ".mp3";
+            nextFile = basePath + "wday_" + String(currentWeekday) + ".wav";
             break;
 
         case TIME_WEEKDAY:
             timeState = TIME_DAY;
-            nextFile = basePath + "day_" + String(currentDay) + ".mp3";
+            nextFile = basePath + "day_" + String(currentDay) + ".wav";
             break;
 
         case TIME_DAY:
             timeState = TIME_MONTH;
-            nextFile = basePath + "month_" + String(currentMonth) + ".mp3";
+            nextFile = basePath + "month_" + String(currentMonth) + ".wav";
             break;
 
         case TIME_MONTH:
             timeState = TIME_YEAR;
-            nextFile = basePath + "year_" + String(currentYear) + ".mp3";
+            nextFile = basePath + "year_" + String(currentYear) + ".wav";
             break;
 
         case TIME_YEAR:
             timeState = TIME_DST;
-            if (currentIsDst) nextFile = basePath + "dst_summer.mp3";
-            else nextFile = basePath + "dst_winter.mp3";
+            if (currentIsDst) nextFile = basePath + "dst_summer.wav";
+            else nextFile = basePath + "dst_winter.wav";
             break;
 
         case TIME_DST:
@@ -977,8 +1033,8 @@ void executePhonebookFunction(String func, String param) {
         speakCompliment(cat > 0 ? cat : 0);
     }
     else if (func == "VOICE_MENU") {
-        // Plays /system/menu_de.mp3 or /system/menu_en.mp3
-        String path = "/system/menu_" + lang + ".mp3";
+        // Plays /system/menu_de.wav or /system/menu_en.wav
+        String path = "/system/menu_" + lang + ".wav";
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
@@ -1017,7 +1073,7 @@ void executePhonebookFunction(String func, String param) {
         
         // Try playing file first
         String fName = alarmsEnabled ? "alarms_on" : "alarms_off";
-        String path = "/system/" + fName + "_" + lang + ".mp3";
+        String path = "/system/" + fName + "_" + lang + ".wav";
         
         if (SD.exists(path)) {
             playSound(path, false);
@@ -1039,7 +1095,7 @@ void executePhonebookFunction(String func, String param) {
         
         // File paths: alarm_skipped (Active Skip) vs alarm_active (Normal)
         String fName = newState ? "alarm_skipped" : "alarm_active";
-        String path = "/system/" + fName + "_" + lang + ".mp3";
+        String path = "/system/" + fName + "_" + lang + ".wav";
         
         if (SD.exists(path)) {
             playSound(path, false);
@@ -1145,8 +1201,10 @@ void handleDialedNumber(String numberStr) {
 // Helper to speak Timer/Alarm confirmation
 void speakTimerConfirm(int minutes) {
     String lang = settings.getLanguage(); 
-    String confirmFile = (lang == "de") ? "/system/timer_confirm_de.mp3" : "/system/timer_confirm_en.mp3";
-    String numFile = "/time/" + lang + "/" + String(minutes) + ".mp3";
+    String confirmFile = (lang == "de") ? "/system/timer_confirm_de.wav" : "/system/timer_confirm_en.wav";
+    String numFile;
+    if (minutes < 10) numFile = "/time/" + lang + "/m_0" + String(minutes) + ".wav";
+    else numFile = "/time/" + lang + "/m_" + String(minutes) + ".wav";
     
     std::vector<String> seq;
     if(SD.exists(confirmFile)) seq.push_back(confirmFile);
@@ -1157,20 +1215,21 @@ void speakTimerConfirm(int minutes) {
 
 void speakAlarmConfirm(int h, int m) {
     String lang = settings.getLanguage();
-    String confirmFile = (lang == "de") ? "/system/alarm_confirm_de.mp3" : "/system/alarm_confirm_en.mp3";
+    String confirmFile = (lang == "de") ? "/system/alarm_confirm_de.wav" : "/system/alarm_confirm_en.wav";
     
     std::vector<String> seq;
     if(SD.exists(confirmFile)) seq.push_back(confirmFile);
     
     // Hour
-    String hFile = "/time/" + lang + "/" + String(h) + ".mp3";
+    String hFile = "/time/" + lang + "/h_" + String(h) + ".wav";
     if (SD.exists(hFile)) seq.push_back(hFile);
     
     // Minute
     // Simple logic: If minute > 0, speak it.
     if (m > 0 || m == 0) { // Always speak minute for alarm? "14 00"? 
-        // File "0.mp3" exists? Yes.
-        String mFile = "/time/" + lang + "/" + String(m) + ".mp3";
+        String mFile;
+        if (m < 10) mFile = "/time/" + lang + "/m_0" + String(m) + ".wav";
+        else mFile = "/time/" + lang + "/m_" + String(m) + ".wav";
         if (SD.exists(mFile)) seq.push_back(mFile);
     }
     
@@ -1277,7 +1336,7 @@ void onHook(bool offHook) {
              
              // Feedback on Speaker (Consistent with Timer Cancel)
              String lang = settings.getLanguage();
-             playSound("/system/alarm_deleted_" + lang + ".mp3", true); 
+             playSound("/system/alarm_deleted_" + lang + ".wav", true); 
          } else {
              // Nothing to delete
              playSound("/system/error_tone.wav", false);
@@ -1306,7 +1365,7 @@ void onHook(bool offHook) {
              
              setAudioOutput(OUT_SPEAKER);
              String lang = settings.getLanguage();
-             playSound("/system/timer_deleted_" + lang + ".mp3", true);
+             playSound("/system/timer_deleted_" + lang + ".wav", true);
              return; 
         }
         
@@ -1401,6 +1460,12 @@ void playDialTone() {
     String dtName = settings.getDialTone();
     String dt = dtName.startsWith("/") ? dtName : "/system/" + dtName;
     if (dtName.length() == 0) {
+        dt = "/system/dialtone_1.wav";
+    }
+
+    // Enforce dialtone-only selection
+    if (dt.indexOf("dialtone_") < 0 && dt.indexOf("dial_tone") < 0) {
+        Serial.println("Warning: Non-dialtone file selected (" + dt + "). Reverting to default.");
         dt = "/system/dialtone_1.wav";
     }
     
@@ -1587,8 +1652,18 @@ void setup() {
     Serial.printf("Current Hook State: %s\n", dial.isOffHook() ? "OFF HOOK" : "ON HOOK");
 
     setAudioOutput(OUT_SPEAKER);
-    playSound("/system/beep.wav", true); // Speaker
-    Serial.println("Initial Beep played on SPEAKER (Output 2)");
+    std::vector<String> bootSequence;
+    if (sdAvailable) {
+        if (SD.exists(Path::STARTUP_SND)) bootSequence.push_back(Path::STARTUP_SND);
+        if (SD.exists(Path::READY_SND)) bootSequence.push_back(Path::READY_SND);
+    }
+    if (!bootSequence.empty()) {
+        playSequence(bootSequence, true);
+        Serial.println("Boot sequence started on SPEAKER (Output 2)");
+    } else {
+        playSound("/system/beep.wav", true); // Speaker
+        Serial.println("Initial Beep played on SPEAKER (Output 2)");
+    }
 
     // Start Background Scan for updated Persona Names
     startPersonaScan();

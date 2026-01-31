@@ -36,32 +36,37 @@ REQUIRED_DIRS = [
 TTS_PROMPTS = {
     # English
     "en": [
-        ("System Menu. Dial 9 0 to toggle all alarms. 9 1 to skip the next routine alarm. 8 for system status.", "menu_en.mp3"),
-        ("All alarms enabled.", "alarms_on_en.mp3"),
-        ("All alarms disabled.", "alarms_off_en.mp3"),
-        ("Next recurring alarm skipped.", "alarm_skipped_en.mp3"),
-        ("Recurring alarm reactivated.", "alarm_active_en.mp3"),
-        ("Alarm set.", "timer_set.mp3"),
-        ("Error. Playlist empty.", "error_msg_en.mp3"),
-        ("Timer set for:", "timer_confirm_en.mp3"),
-        ("Alarm set for:", "alarm_confirm_en.mp3"),
-        ("Timer cancelled.", "timer_deleted_en.mp3"),
-        ("Alarm deleted.", "alarm_deleted_en.mp3")
+        ("System Menu. Dial 9 0 to toggle all alarms. 9 1 to skip the next routine alarm. 8 for system status.", "menu_en.wav"),
+        ("All alarms enabled.", "alarms_on_en.wav"),
+        ("All alarms disabled.", "alarms_off_en.wav"),
+        ("Next recurring alarm skipped.", "alarm_skipped_en.wav"),
+        ("Recurring alarm reactivated.", "alarm_active_en.wav"),
+        ("Alarm set.", "timer_set_en.wav"),
+        ("Error. Playlist empty.", "error_msg_en.wav"),
+        ("Warning. Power cells critical.", "battery_crit_en.wav"),
+        ("System ready.", "system_ready_en.wav"),
+        ("Date and time not yet available!", "time_unavailable_en.wav"),
+        ("Timer set for:", "timer_confirm_en.wav"),
+        ("Alarm set for:", "alarm_confirm_en.wav"),
+        ("Timer cancelled.", "timer_deleted_en.wav"),
+        ("Alarm deleted.", "alarm_deleted_en.wav")
     ],
     # German
     "de": [
-        ("System-Menü. Wähle 9 0 um alle Alarme ein- oder auszuschalten. 9 1 um den nächsten Routine-Wecker zu überspringen. 8 für System Status.", "menu_de.mp3"),
-        ("Alle Alarme aktiviert.", "alarms_on_de.mp3"),
-        ("Alle Alarme deaktiviert.", "alarms_off_de.mp3"),
-        ("Nächster wiederkehrender Wecker übersprungen.", "alarm_skipped_de.mp3"),
-        ("Wiederkehrender Wecker wieder aktiv.", "alarm_active_de.mp3"),
-        ("Alarm gesetzt.", "timer_set_de.mp3"),
-        ("Warnung. Energiezellen kritisch.", "battery_crit.mp3"),
-        ("System bereit.", "system_ready.mp3"),
-        ("Timer gesetzt auf:", "timer_confirm_de.mp3"),
-        ("Wecker gestellt auf:", "alarm_confirm_de.mp3"),
-        ("Timer beendet.", "timer_deleted_de.mp3"),
-        ("Wecker gelöscht.", "alarm_deleted_de.mp3")
+        ("System-Menü. Wähle 9 0 um alle Alarme ein- oder auszuschalten. 9 1 um den nächsten Routine-Wecker zu überspringen. 8 für System Status.", "menu_de.wav"),
+        ("Alle Alarme aktiviert.", "alarms_on_de.wav"),
+        ("Alle Alarme deaktiviert.", "alarms_off_de.wav"),
+        ("Nächster wiederkehrender Wecker übersprungen.", "alarm_skipped_de.wav"),
+        ("Wiederkehrender Wecker wieder aktiv.", "alarm_active_de.wav"),
+        ("Alarm gesetzt.", "timer_set_de.wav"),
+        ("Fehler. Playlist leer.", "error_msg_de.wav"),
+        ("Warnung. Energiezellen kritisch.", "battery_crit_de.wav"),
+        ("System bereit.", "system_ready_de.wav"),
+        ("Datum und Uhrzeit noch nicht verfügbar!", "time_unavailable_de.wav"),
+        ("Timer gesetzt auf:", "timer_confirm_de.wav"),
+        ("Wecker gestellt auf:", "alarm_confirm_de.wav"),
+        ("Timer beendet.", "timer_deleted_de.wav"),
+        ("Wecker gelöscht.", "alarm_deleted_de.wav")
     ]
 }
 
@@ -116,13 +121,13 @@ def ensure_folder_structure():
             os.makedirs(path)
             print(f"  + Created time/{lang}/")
 
-def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
+def generate_tts_wav(text, filename, lang='de', output_subdir="system"):
     """
-    Generates TTS audio using local Piper TTS (if available) or Google Translate (fallback).
+    Generates TTS audio as WAV using local Piper TTS (if available) or Google Translate (fallback + ffmpeg).
     """
     target_path = os.path.join(SD_TEMPLATE_DIR, output_subdir, filename)
     
-    # 1. Try Piper TTS Local
+    # 1. Try Piper TTS Local (WAV output)
     piper_bin = os.path.join(SCRIPT_DIR, "piper", "piper")
     piper_model = None
     
@@ -135,21 +140,13 @@ def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
     if os.path.exists(piper_bin) and piper_model and os.path.exists(piper_model):
         try:
             # Piper output is 16-bit mono WAV by default
-            cmd = [piper_bin, "--model", piper_model, "--output_file", target_path + ".wav"]
+            cmd = [piper_bin, "--model", piper_model, "--output_file", target_path]
             
             # Pipe text to stdin
             process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             stdout, stderr = process.communicate(input=text.encode('utf-8'))
             
-            if process.returncode == 0 and os.path.exists(target_path + ".wav"):
-                # Convert WAV to MP3 using ffmpeg
-                subprocess.run([
-                    "ffmpeg", "-y", "-i", target_path + ".wav", 
-                    "-codec:a", "libmp3lame", "-qscale:a", "2", 
-                    target_path
-                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                
-                os.remove(target_path + ".wav") # Cleanup
+            if process.returncode == 0 and os.path.exists(target_path):
                 print(f".", end="", flush=True)
                 return
             else:
@@ -159,7 +156,7 @@ def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
             print(f"\n[Piper Exception] {e}")
 
 
-    # 2. Fallback to Google TTS
+    # 2. Fallback to Google TTS (MP3 download + ffmpeg to WAV)
     # print(f"  TTS ({lang}): '{text}' -> {filename}")
     
     base_url = "https://translate.google.com/translate_tts"
@@ -178,11 +175,20 @@ def generate_tts_mp3(text, filename, lang='de', output_subdir="system"):
         
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
         
+        temp_mp3 = target_path + ".mp3"
         with urllib.request.urlopen(req, context=ctx, timeout=10) as response:
             data = response.read()
-            with open(target_path, 'wb') as f:
+            with open(temp_mp3, 'wb') as f:
                 f.write(data)
-        
+
+        subprocess.run([
+            "ffmpeg", "-y", "-i", temp_mp3,
+            "-c:a", "pcm_s16le", "-ar", "44100", "-ac", "1",
+            target_path
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+
+        os.remove(temp_mp3)
+
         print(f".", end="", flush=True) # Progress indicator
         time.sleep(0.5) # Rate limit politeness
     except Exception as e:
@@ -383,7 +389,7 @@ def make_all_tts():
     for lang, prompts in TTS_PROMPTS.items():
         print(f"  Processing {lang.upper()} prompts...")
         for text, fname in prompts:
-            generate_tts_mp3(text, fname, lang, "system")
+            generate_tts_wav(text, fname, lang, "system")
             
     # Time Prompts (DE & EN)
     for lang in ["de", "en"]:
@@ -395,22 +401,22 @@ def make_all_tts():
         subdir = os.path.join("time", lang)
         
         # Intro
-        generate_tts_mp3(cfg["intro"], "intro.mp3", lang, subdir)
+        generate_tts_wav(cfg["intro"], "intro.wav", lang, subdir)
         # Divider (Uhr/O'Clock)
-        generate_tts_mp3(cfg["divider"], "uhr.mp3", lang, subdir)
+        generate_tts_wav(cfg["divider"], "uhr.wav", lang, subdir)
         
         # Hours 0-23
         for h in range(24):
             txt = str(h)
             if h == 1: 
                 txt = cfg["h_one"]
-            generate_tts_mp3(txt, f"h_{h}.mp3", lang, subdir)
+            generate_tts_wav(txt, f"h_{h}.wav", lang, subdir)
             
-        # Minutes 00-59
-        for m in range(60):
+        # Minutes 00-60 (timer confirm can request 60)
+        for m in range(61):
             txt = str(m)
             # Formatting: 
-            # DE: "Null Fünf" or "Fünf"? Code says "m_05.mp3".
+            # DE: "Null Fünf" or "Fünf"? Code uses "m_05.wav".
             # EN: "Oh Five"? Or "Five"?
             # Let's use simple numbers for now. "Five".
             # If we want "Oh Five", we need logic.
@@ -418,10 +424,10 @@ def make_all_tts():
             if lang == "en" and m < 10 and m > 0:
                 txt = f"Oh {m}"
                 
-            fname = f"m_{m}.mp3"
+            fname = f"m_{m}.wav"
             if m < 10:
-                fname = f"m_0{m}.mp3"
-            generate_tts_mp3(txt, fname, lang, subdir)
+                fname = f"m_0{m}.wav"
+            generate_tts_wav(txt, fname, lang, subdir)
 
     # Generate Silence for English gap
     save_wav("silence.wav", generate_silence(200), "time") # Shared silence
@@ -433,23 +439,23 @@ def make_all_tts():
         subdir = os.path.join("time", lang)
         
         # Intro
-        generate_tts_mp3(c_cfg["date_intro"], "date_intro.mp3", lang, subdir)
+        generate_tts_wav(c_cfg["date_intro"], "date_intro.wav", lang, subdir)
         
         # DST
-        generate_tts_mp3(c_cfg["dst"][0], "dst_winter.mp3", lang, subdir)
-        generate_tts_mp3(c_cfg["dst"][1], "dst_summer.mp3", lang, subdir)
+        generate_tts_wav(c_cfg["dst"][0], "dst_winter.wav", lang, subdir)
+        generate_tts_wav(c_cfg["dst"][1], "dst_summer.wav", lang, subdir)
         
         # Weekdays
         for i, wd in enumerate(c_cfg["weekdays"]):
-            generate_tts_mp3(wd, f"wday_{i}.mp3", lang, subdir)
+            generate_tts_wav(wd, f"wday_{i}.wav", lang, subdir)
             
         # Months
         for i, mon in enumerate(c_cfg["months"]):
-            generate_tts_mp3(mon, f"month_{i}.mp3", lang, subdir)
+            generate_tts_wav(mon, f"month_{i}.wav", lang, subdir)
             
         # Years (2024-2035)
         for y in range(2024, 2036):
-            generate_tts_mp3(str(y), f"year_{y}.mp3", lang, subdir)
+            generate_tts_wav(str(y), f"year_{y}.wav", lang, subdir)
             
         # Days (1-31)
         for d in range(1, 32):
@@ -467,12 +473,11 @@ def make_all_tts():
                     else: suffix = "th"
                 txt = f"The {d}{suffix}"
             
-            generate_tts_mp3(txt, f"day_{d}.mp3", lang, subdir)
+            generate_tts_wav(txt, f"day_{d}.wav", lang, subdir)
 
 def make_startup_music():
     print("Generating Startup Sound (Ambient Swell)...")
     path_wav = os.path.join(SD_TEMPLATE_DIR, "system", "startup.wav") # temp
-    path_mp3 = os.path.join(SD_TEMPLATE_DIR, "system", "startup.mp3")
     
     # Chord: Eb Major Add9 (Eb, Bb, G, F...)
     freqs = [155.56, 233.08, 311.13, 392.00, 466.16, 622.25]
@@ -506,22 +511,7 @@ def make_startup_music():
             packed.extend(struct.pack('<h', int(s)))
         wav_file.writeframes(packed)
         
-    # Convert to MP3 if ffmpeg exists
-    ffmpeg_cmd = "ffmpeg"
-    if os.path.exists(FFMPEG_EXE):
-        ffmpeg_cmd = FFMPEG_EXE
-    
-    if shutil.which(ffmpeg_cmd) or os.path.exists(ffmpeg_cmd):
-        try:
-            print("  Converting startup.wav -> startup.mp3 ...")
-            subprocess.run([ffmpeg_cmd, "-y", "-i", path_wav, path_mp3], 
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-            os.remove(path_wav)
-            print("  Done.")
-        except Exception:
-            print("  [WARN] FFmpeg failed. Keeping startup.wav.")
-    else:
-        print("  [WARN] FFmpeg not found. 'startup.wav' created instead of mp3.")
+    print("  Done.")
 
 def download_fonts():
     print("Checking Fonts...")
@@ -545,8 +535,8 @@ def download_fonts():
         else:
             print(f"  {fname} already exists.")
 
-def generate_fortune_mp3s():
-    """Reads fortune_examples.txt and generates 50 random MP3s for Persona 5"""
+def generate_fortune_wavs():
+    """Reads fortune_examples.txt and generates WAVs for Persona 5"""
     text_file = os.path.join(SCRIPT_DIR, "fortune_examples.txt")
     output_dir = os.path.join(SD_TEMPLATE_DIR, "persona_05")
     
@@ -554,7 +544,7 @@ def generate_fortune_mp3s():
         print(f"Skipping Fortune Gen: {text_file} not found.")
         return
 
-    print("Generating Fortune Cookies (MP3)...")
+    print("Generating Fortune Cookies (WAV)...")
     
     with open(text_file, "r", encoding="utf-8") as f:
         lines = [l.strip() for l in f if len(l.strip()) > 5]
@@ -564,10 +554,10 @@ def generate_fortune_mp3s():
     print(f"Generating {len(selected)} Fortune Cookies...")
     
     for i, text in enumerate(selected):
-        filename = f"fortune_{i+1:03d}.mp3"
+        filename = f"fortune_{i+1:03d}.wav"
         # We use German for Fortunes as requested
-        # Using generate_tts_mp3, specifying subdir relative to SD_TEMPLATE_DIR
-        generate_tts_mp3(text, filename, "de", "persona_05")
+        # Using generate_tts_wav, specifying subdir relative to SD_TEMPLATE_DIR
+        generate_tts_wav(text, filename, "de", "persona_05")
     
     # Also create fortune.txt for automatic phonebook naming (Triggers "Fortune" name in firmware)
     with open(os.path.join(output_dir, "fortune.txt"), "w") as f:
@@ -576,23 +566,22 @@ def generate_fortune_mp3s():
 # --- MAIN EXECUTION ---
 
 if __name__ == "__main__":
-    print(f"=== ChainJuicer / AtomicCharmer SD Asset Generator ===")
+    print(f"=== Dial-A-Charmer SD Asset Generator ===")
     print(f"Output: {SD_TEMPLATE_DIR}\n")
     
     ensure_folder_structure()
     
-    # make_ui_sounds()       # Beeps, Blips
-    # make_telephony_tones() # Dial, Busy
+    make_ui_sounds()       # Beeps, Blips
+    make_telephony_tones() # Dial, Busy
     
     print("--- Expect ~30-60s for TTS downloads ---")
-    # make_all_tts()         # System & Time
+    make_all_tts()         # System & Time
     
-    # make_startup_music()   # Startup pad
+    make_startup_music()   # Startup pad
     
-    # download_fonts()       # Added Fonts
+    download_fonts()       # Added Fonts
 
-    generate_fortune_mp3s() # Added Fortune Cookies
+    generate_fortune_wavs() # Added Fortune Cookies
     
     print("\n=== GENERATION COMPLETE ===")
     print(f"Copy the contents of '{SD_TEMPLATE_DIR}' to your SD Card.")
-
