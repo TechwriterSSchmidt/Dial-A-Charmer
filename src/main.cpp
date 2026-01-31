@@ -25,7 +25,7 @@
 #include "AiManager.h"   
 #include "PhonebookManager.h"
 #include "Constants.h"
-
+#include "TextResources.h"
 
 #define SD SD_MMC // Use SD_MMC with existing SD.* calls
 
@@ -71,7 +71,7 @@ bool isDialTonePlaying = false; // New Dial Tone State
 // --- Timeout / Busy Logic ---
 bool isLineBusy = false;       
 unsigned long offHookTime = 0; 
-#define OFF_HOOK_TIMEOUT 5000  
+// Defined in Constants.h: OFF_HOOK_TIMEOUT
 
 // Note: PCM5100A is a "dumb" DAC and doesn't report I2C status. We assume it's working.
 
@@ -92,7 +92,7 @@ bool pendingDeleteTimer = false;
 // Dialing State
 String dialBuffer = "";
 unsigned long lastDialTime = 0;
-#define DIAL_CMD_TIMEOUT 3000
+// Defined in Constants.h: DIAL_CMD_TIMEOUT
 
 // --- Playlist Management ---
 struct Playlist {
@@ -485,7 +485,7 @@ String getNextTrack(int category) {
             track = categories[ref.cat].tracks[ref.idx];
         } else {
             Serial.println("Invalid Virtual Track Reference!");
-            track = "/system/error_tone.wav"; // Fallback
+            track = Path::ERROR_TONE; // Fallback
         }
     } else {
         // --- Standard Playlist Logic ---
@@ -571,8 +571,8 @@ void audioTaskCode(void * parameter) {
 #endif
                         } else {
                             Serial.printf("[Audio] File missing: %s\n", cmd.path);
-                            if (SD.exists("/system/fallback_alarm.wav")) {
-                                 audio->connecttoFS(SD, "/system/fallback_alarm.wav");
+                            if (SD.exists(Path::FALLBACK_ALARM)) {
+                                 audio->connecttoFS(SD, Path::FALLBACK_ALARM);
 #if DEBUG_AUDIO
                                 Serial.println("[Audio][SD] fallback_alarm.wav -> connecttoFS");
 #endif
@@ -766,7 +766,7 @@ void speakTime() {
     } else {
         Serial.println("Time Invalid (No Sync). Announcing unavailable.");
         String lang = settings.getLanguage();
-        String msg = "/system/time_unavailable_" + lang + ".wav";
+        String msg = (lang == "de") ? Path::TIME_UNAVAILABLE_DE : Path::TIME_UNAVAILABLE_EN;
         timeState = TIME_IDLE;
         playSound(msg, !dial.isOffHook());
         return;
@@ -857,7 +857,7 @@ void processTimeQueue() {
                 isLineBusy = true;
                 stopDialTone();
                 setAudioOutput(OUT_HANDSET);
-                playSound("/system/busy_tone.wav", false);
+                playSound(Path::BUSY_TONE, false);
             }
             break;
             
@@ -882,7 +882,7 @@ void speakCompliment(int number) {
         // Play sound BEFORE request to bridge the gap.
         // Needs a loop to play out, as getCompliment blocks.
         Serial.println("Playing Thinking Sound...");
-        playSound("/system/computing.wav", false); // Assuming file exists
+        playSound(Path::COMPUTING, false);
         unsigned long startThink = millis();
         // Play for max 3 seconds or until file ends
         while (audio->isRunning() && (millis() - startThink < 3000)) {
@@ -920,7 +920,7 @@ void speakCompliment(int number) {
     
     if (path.length() == 0) {
          Serial.println("Playlist Empty! Check SD Card.");
-         path = "/system/error_tone.wav"; 
+         path = Path::ERROR_TONE; 
     }
     
     Serial.printf("Playing compliment (Cat: %d): %s\n", category, path.c_str());
@@ -1048,23 +1048,19 @@ void executePhonebookFunction(String func, String param) {
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
-            // Fallback TTS if file missing
-            String text = (lang == "de") ? 
-                "System Menü. Wähle 9 0 um alle Alarme ein- oder auszuschalten. 9 1 um den nächsten Routine-Wecker zu überspringen. 8 für Status." :
-                "System Menu. Dial 9 0 to toggle all alarms. 9 1 to skip the next routine alarm. 8 for status.";
+            // Fallback TTS
+            String text = (lang == "de") ? TextDE::MENU_FALLBACK : TextEN::MENU_FALLBACK;
             if (ai.hasApiKey()) {
                 audio->connecttohost(ai.getTTSUrl(text).c_str());
             }
         }
     }
     else if (func == "SYSTEM_STATUS") {
-        String statusText = "";
+        String statusText = (lang == "de") ? TextDE::STATUS_PREFIX : TextEN::STATUS_PREFIX;
         if (lang == "de") {
-            statusText += "System Status. ";
             statusText += "WLAN Signal " + String(WiFi.RSSI()) + " dB. ";
             statusText += "IP Adresse " + formatIpForSpeech(WiFi.localIP()) + ". ";
         } else {
-            statusText += "System Status. ";
             statusText += "WiFi Signal " + String(WiFi.RSSI()) + " dB. ";
             statusText += "IP Address " + formatIpForSpeech(WiFi.localIP()) + ". ";
         }
@@ -1074,7 +1070,7 @@ void executePhonebookFunction(String func, String param) {
              audio->connecttohost(ai.getTTSUrl(statusText).c_str());
         } else {
              Serial.println(statusText);
-             playSound("/system/beep.wav", false);
+             playSound(Path::BEEP, false);
         }
     }
     else if (func == "TOGGLE_ALARMS") {
@@ -1088,12 +1084,10 @@ void executePhonebookFunction(String func, String param) {
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
-            String msg = "";
-            if (lang == "de") {
-                msg = alarmsEnabled ? "Alarme aktiviert." : "Alarme deaktiviert.";
-            } else {
-                msg = alarmsEnabled ? "Alarms enabled." : "Alarms disabled.";
-            }
+            String msg;
+            if (lang == "de") msg = alarmsEnabled ? TextDE::ALARMS_ON : TextDE::ALARMS_OFF;
+            else              msg = alarmsEnabled ? TextEN::ALARMS_ON : TextEN::ALARMS_OFF;
+            
             if (ai.hasApiKey()) {
                 audio->connecttohost(ai.getTTSUrl(msg).c_str());
             }
@@ -1110,12 +1104,10 @@ void executePhonebookFunction(String func, String param) {
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
-            String msg = "";
-            if (lang == "de") {
-                msg = newState ? "Nächster wiederkehrender Alarm übersprungen." : "Wiederkehrender Alarm wieder aktiv.";
-            } else {
-                msg = newState ? "Next recurring alarm skipped." : "Recurring alarm reactivated.";
-            }
+            String msg;
+            if (lang == "de") msg = newState ? TextDE::SKIP_ON : TextDE::SKIP_OFF;
+            else              msg = newState ? TextEN::SKIP_ON : TextEN::SKIP_OFF;
+
             if (ai.hasApiKey()) {
                 audio->connecttohost(ai.getTTSUrl(msg).c_str());
             }
@@ -1130,11 +1122,11 @@ void executePhonebookFunction(String func, String param) {
 void handleDialedNumber(String numberStr) {
     
     // System Codes (Fixed)
-    if (numberStr == "90") {
+    if (numberStr == SYS_CODE_TOGGLE_ALARMS) {
          executePhonebookFunction("TOGGLE_ALARMS", "");
          return;
     }
-    if (numberStr == "91") {
+    if (numberStr == SYS_CODE_SKIP_NEXT_ALARM) { // "91"
          executePhonebookFunction("SKIP_NEXT_ALARM", "");
          return;
     }
@@ -1196,7 +1188,7 @@ void handleDialedNumber(String numberStr) {
     } else {
         // Unknown
         Serial.println("Unknown Number Dialed");
-        playSound("/system/error_tone.wav", false);
+        playSound(Path::ERROR_TONE, false);
     }
 }
 
@@ -1255,11 +1247,11 @@ void processBufNumber(String numberStr) {
                 speakAlarmConfirm(h, m);
             } else {
                 Serial.println("Invalid Time Format");
-                playSound("/system/error_tone.wav", false);
+                playSound(Path::ERROR_TONE, false);
             }
         } else {
             // Wrong length for Alarm Setting
-             playSound("/system/error_tone.wav", false);
+             playSound(Path::ERROR_TONE, false);
         }
         return;
     }
@@ -1286,7 +1278,7 @@ void processBufNumber(String numberStr) {
          } else {
             // Unknown
             Serial.println("Invalid Timer Value");
-            playSound("/system/error_tone.wav", false);
+            playSound(Path::ERROR_TONE, false);
          }
     }
 }
@@ -1344,9 +1336,32 @@ void onHook(bool offHook) {
         
         // If Alarm/Timer is ringing, mark delete on hang-up and stop audio
         if (isAlarmRinging || isTimerRinging) {
+            bool wasTimer = isTimerRinging;
             pendingDeleteAlarm = isAlarmRinging;
             pendingDeleteTimer = isTimerRinging;
             stopAlarm();
+
+            // Speak Confirmation (Handset)
+            String lang = settings.getLanguage();
+            String path;
+            if (wasTimer) {
+                path = (lang == "de") ? Path::TIMER_STOPPED_DE : Path::TIMER_STOPPED_EN;
+            } else {
+                path = (lang == "de") ? Path::ALARM_STOPPED_DE : Path::ALARM_STOPPED_EN;
+            }
+            
+            // Try playing file
+            if (SD.exists(path)) {
+                playSound(path, false);
+            } else {
+                // Fallback TTS (less likely to work nicely mid-action but logic kept)
+                const char* txt = (lang == "de") 
+                                  ? (wasTimer ? TextDE::TIMER_STOPPED : TextDE::ALARM_STOPPED)
+                                  : (wasTimer ? TextEN::TIMER_STOPPED : TextEN::ALARM_STOPPED);
+                if (ai.hasApiKey()) {
+                    audio->connecttohost(ai.getTTSUrl(txt).c_str());
+                }
+            }
             return;
         }
         
@@ -1680,7 +1695,7 @@ void setup() {
         playSequence(bootSequence, true);
         Serial.println("Boot sequence started on SPEAKER (Output 2)");
     } else {
-        playSound("/system/beep.wav", true); // Speaker
+        playSound(Path::BEEP, true); // Speaker
         Serial.println("Initial Beep played on SPEAKER (Output 2)");
     }
 
@@ -1737,7 +1752,7 @@ void loop() {
                      stopDialTone(); 
                      // Play Busy Signal Loop
                      setAudioOutput(OUT_HANDSET);
-                     playSound("/system/busy_tone.wav", false);
+                     playSound(Path::BUSY_TONE, false);
                  }
              }
         }
@@ -1765,8 +1780,8 @@ void loop() {
              // For now, we attempt to play. Ensure file is TINY.
              // If loop latency is high, this will slow down dialing detection!
              // Proceed with caution.
-             if (SD.exists("/system/click.wav")) {
-                audio->connecttoFS(SD, "/system/click.wav");
+             if (SD.exists(Path::CLICK)) {
+                audio->connecttoFS(SD, Path::CLICK);
              }
         }
     }
@@ -1782,8 +1797,6 @@ void loop() {
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {
-        #define DIAL_CMD_TIMEOUT 3000
-
         if (millis() - lastDialTime > DIAL_CMD_TIMEOUT) {
             Serial.printf("Dialing Finished (Timeout). Buffer: %s\n", dialBuffer.c_str());
             processBufNumber(dialBuffer);
@@ -1860,7 +1873,7 @@ void loop() {
         // 10s Action: AP Mode
         if (dur > 10000 && !buttonActionTriggered) {
              Serial.println("Long Press Detected: Starting AP Mode");
-             playSound("/system/beep.wav", false);
+             playSound(Path::BEEP, false);
              webManager.startAp();
              buttonActionTriggered = true; 
              // Wait for release
