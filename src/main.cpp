@@ -510,7 +510,7 @@ String getNextTrack(int category) {
 
 // --- Audio Task & Helpers ---
 
-// Helper for Manual Register Access (user request for LOUT fix)
+// Helper for Codec Register Access
 void writeCodecReg(uint8_t reg, uint8_t val) {
     Wire.beginTransmission(0x10); // ES8388 Address
     Wire.write(reg);
@@ -626,19 +626,15 @@ void audioTaskCode(void * parameter) {
                             // We use DAC_OUTPUT_ALL to ensure chip stays powered, but we gate via regs
                             codec.config(16, (es_dac_output_t)(DAC_OUTPUT_ALL), ADC_INPUT_LINPUT2_RINPUT2, hwVol);
 
-                            // MANUAL REGISTER OVERWRITE Logic (Depend on Active Mode)
+                            // Apply Channel Isolation based on Mode
                             int volReg = hwVol / 3;
                             
-                            // Split Output based on Mode
-                            // Mode 1 = Handset (LOUT), Mode 2 = Speaker (ROUT)
-                            // We mute the other channel to ensure isolation
-                            if (activeOutputMode == 1) {
-                                writeCodecReg(0x2F, 0);               // ROUT (Speaker) = Mute
-                                writeCodecReg(0x2E, (uint8_t)volReg); // LOUT (Handset) = Vol
-                            } else {
-                                // Default or Speaker
-                                writeCodecReg(0x2F, (uint8_t)volReg); // ROUT (Speaker) = Vol
-                                writeCodecReg(0x2E, 0);               // LOUT (Handset) = Mute
+                            if (activeOutputMode == 1) { // Handset Mode
+                                writeCodecReg(0x2F, 0);               // Mute Speaker
+                                writeCodecReg(0x2E, (uint8_t)volReg); // Set Handset Vol
+                            } else { // Speaker Mode
+                                writeCodecReg(0x2F, (uint8_t)volReg); // Set Speaker Vol
+                                writeCodecReg(0x2E, 0);               // Mute Handset
                             }
                             
                             // Ensure Mixers are open (Reg 0x27/0x2A)
@@ -655,8 +651,7 @@ void audioTaskCode(void * parameter) {
                     // Update Active Mode (Tracking for Volume Changes)
                     activeOutputMode = cmd.value;
 
-                    // Hardware: Enable PA Pin HIGH always (Handset also needs this on some boards)
-                    // We will Mute Speaker via 0x2F Digital Reg instead of PA Pin
+                    // Enable PA Pin (controlled via Codec Regs for Mute/Unmute)
                     digitalWrite(CONF_PIN_PA_ENABLE, HIGH);
 
                     #if HAS_ES8388_CODEC
@@ -678,11 +673,11 @@ void audioTaskCode(void * parameter) {
                         int volReg = targetVolHw / 3;
                         
                         if (activeOutputMode == 1) { // Handset Mode
-                             writeCodecReg(0x2F, 0);               // ROUT (Speaker) = Mute
-                             writeCodecReg(0x2E, (uint8_t)volReg); // LOUT (Handset) = Vol
-                        } else { // Speaker Mode (2)
-                             writeCodecReg(0x2F, (uint8_t)volReg); // ROUT (Speaker) = Vol
-                             writeCodecReg(0x2E, 0);               // LOUT (Handset) = Mute
+                             writeCodecReg(0x2F, 0);               // Mute Speaker
+                             writeCodecReg(0x2E, (uint8_t)volReg); // Set Handset Vol
+                        } else { // Speaker Mode
+                             writeCodecReg(0x2F, (uint8_t)volReg); // Set Speaker Vol
+                             writeCodecReg(0x2E, 0);               // Mute Handset
                         }
 #if DEBUG_AUDIO
                         Serial.printf("[Audio][CODEC] Mode=%d -> LOUT=%d ROUT=%d\n", 
@@ -1338,17 +1333,6 @@ void onDial(int number) {
     dialBuffer += String(number);
     lastDialTime = millis();
     
-    // Immediate Feedback (Click/Beep)
-    // Don't play loud beep if handset is on hook? 
-    // Maybe play quietly on speaker if on hook?
-    // Let's use Handset if OffHook, Speaker if OnHook?
-    // For now, simple beep via current output.
-    // playSound can be disruptive to currently playing audio?
-    // Only beep if silence?
-    // Ideally: Short mechanical click simulation or just silence (rotary is physical).
-    // Let's play a very short beep if nothing is playing?
-    // if (!audio->isRunning()) playSound("/system/click.wav", false);
-    
     // Special Case: ALARM SETTING (Button Held)
     // If we have 4 digits, we can execute immediately without waiting for timeout
     // to give "snappy" feel.
@@ -1430,7 +1414,7 @@ void onHook(bool offHook) {
             return;
         }
 
-        // BUG FIX: Stop any pending sentences
+        // Stop any pending sentences
         clearSpeechQueue();
         
         // Reset Busy State and Stop Loop
@@ -1647,7 +1631,7 @@ void setup() {
         0                /* Core 0 */
     );
     
-    // BUG FIX: Wait for Audio Object Creation before consuming more RAM
+    // Wait for Audio Object Creation before consuming more RAM
     Serial.print("Waiting for Audio Engine...");
     unsigned long startWait = millis();
     while (audio == nullptr) {

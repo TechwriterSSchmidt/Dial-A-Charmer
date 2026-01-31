@@ -75,6 +75,13 @@ Target hardware: **Ai-Thinker Audio Kit v2.2** (ES8388). Most peripherals connec
 
 *Note: PlatformIO environment: `esp32_audio_kit`*
 
+### Audio Routing (Ai-Thinker)
+The firmware leverages the stereo capabilities of the ES8388 codec to drive two separate audio paths:
+- **Handset Audio** (Ear piece) is routed to the **Left Channel (LOUT)**.
+- **Base Speaker** (Ringing/Speakerphone) is routed to the **Right Channel (ROUT)**.
+
+The firmware automatically manages muting/unmuting these channels based on the device state (On-Hook/Off-Hook).
+
 ## Accessing the Configuration
 
 Once the device is connected to your WiFi network (or you are connected to its Access Point), you can access the configuration interface by navigating to:
