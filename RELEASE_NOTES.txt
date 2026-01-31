@@ -1,5 +1,21 @@
 # Release Notes - Dial-A-Charmer
 
+## v0.8.3-beta (2026-01-31) - "Performance & UX Update"
+- **Scan-on-Demand (Fast Boot)**:
+    - Removed the slow automatic SD card scan on every boot. The device now boots instantly and loads cached playlists.
+    - Added **Dial Code 95** to manually trigger a full re-index / scan of the SD card. This is only necessary if you add files manually without using the helper scripts.
+    - During re-indexing, the Web Interface is temporarily suspended to maximize scanning speed.
+    - Removed the "Reindex" button from the Web Interface; this function is now exclusively available via the Dial (for privacy/security).
+- **Phonebook Updates**:
+    - Added "Re-Index SD" (95) to the internal phonebook documentation.
+
+## v0.8.2-beta (2026-01-31) - "Audio Logic Refinements"
+- **Audio Routing Engine Overhaul**: Fixed silent handset issues by rearchitecting the output logic for ES8388 codecs.
+- **Channel Isolation**: Implemented pure digital isolation. Handset Mode now digitally mutes the Speaker channel (Right) and Speaker Mode mutes the Handset channel (Left), fixing volume bleed-over.
+- **Volume Control Fix**: The Web Interface sliders ("Base Volume" vs "Handset Volume") now work independently and correctly thanks to mode-aware volume handling.
+- **PA Logic Update**: The Power Amplifier (PA) signal is now kept permanently enabled to prevent accidental muting of the headphone stage on certain hardware revisions.
+- **Codebase Cleanup**: Removed legacy debug code and optimized audio task structure.
+
 ## v0.8.1-beta (2026-01-23) - "Fortune & Mix Refinements"
 - **Phonebook Updates**:
     - Persona 5 reserved for **Fortune Cookie** (Dial `5`).

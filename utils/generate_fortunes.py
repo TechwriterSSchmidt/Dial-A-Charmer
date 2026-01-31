@@ -13,8 +13,8 @@ TARGET_ADDITIONAL_COUNT = 750
 # Sources
 URL_WITZE_JSON = "https://raw.githubusercontent.com/tschlumpf/deutsche-Witze/main/witze.json"
 URL_FLACHWITZE = "https://raw.githubusercontent.com/derphilipp/Flachwitze/main/README.md"
-URL_BAUERNREGELN_WIKI = "https://de.wikiquote.org/wiki/Bauernregeln"
-URL_DAD_JOKES = "https://official-joke-api.appspot.com/jokes/random/250"
+URL_DAD_JOKES = "https://official-joke-api.appspot.com/jokes/random/300"
+URL_DWYL_QUOTES = "https://raw.githubusercontent.com/dwyl/quotes/main/quotes.json"
 
 def clean_text(text):
     """
@@ -83,51 +83,11 @@ def fetch_url(url):
         print(f"  Warning: Could not fetch {url} ({e})")
         return ""
 
-def fetch_bauernregeln():
-    print("Fetching Bauernregeln...")
-    rules = []
-    
-    # 1. Fallback / Hardcoded list to ensure result (Top 20 Classics)
-    fallback = [
-        "Kräht der Hahn auf dem Mist, ändert sich das Wetter oder es bleibt wie es ist",
-        "Abendrot schön Wetter bot, Morgenrot mit Regen droht",
-        "Ist der Mai kühl und nass, füllt's dem Bauern Scheun und Fass",
-        "April, April, der macht was er will",
-        "Schwalben tief im Fluge, Gewitter kommt zum Zuge",
-        "Regen im Mai, April vorbei",
-        "Donner im März, bricht dem Bauer das Herz",
-        "Hundert Tage nach dem ersten Schnee, tut dem Bauern der Rücken weh",
-        "Wenn der Hahn kräht auf dem Mist, ändert sich das Wetter oder es bleibt wie es ist",
-        "Liegt der Bauer tot im Zimmer, lebt er nimmer",
-        "Stirbt der Bauer im Oktober, braucht er im Winter koan Pullover",
-        "Trinkt der Bauer zu viel Bier, melkt er die Kühe wie ein Tier"
-    ]
-    rules.extend(fallback)
-
-    # 2. Try fetching from generic text sources if available
-    # Since specific git repos might be unstable, we use a simple mock generator 
-    # if we don't have a reliable 500-line text file.
-    # However, let's try one known source.
-    
-    # Mock generation for "Quantity" if download fails
-    months = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
-    conditions = ["Regen", "Sonne", "Schnee", "Wind", "Nebel", "Donner", "Sturm"]
-    consequences = ["bringt Segen", "bringt Regen", "macht das Fass voll", "freut den Bauer", "stört den Bauer", "bringt Korn", "macht Heu nass"]
-    
-    for _ in range(200):
-        m = random.choice(months)
-        c = random.choice(conditions)
-        cons = random.choice(consequences)
-        rules.append(f"{c} im {m}, {cons}")
-
-    print(f"  Generated/Found {len(rules)} Bauernregeln.")
-    return list(set(["DE: " + clean_text(r) for r in rules]))
-
 def fetch_witze():
     print("Fetching Witze...")
     jokes = []
     
-    # 1. JSON
+    # JSON
     data_str = fetch_url(URL_WITZE_JSON)
     if data_str:
         try:
@@ -180,32 +140,53 @@ def fetch_dad_jokes():
     print(f"  Found {len(jokes)} dad jokes.")
     return jokes
 
+def fetch_dwyl_quotes():
+    print("Fetching DWYL Quotes...")
+    quotes = []
+
+    data_str = fetch_url(URL_DWYL_QUOTES)
+    if data_str:
+        try:
+            data = json.loads(data_str)
+            if isinstance(data, list):
+                # Sample to avoid exploding the file size (Source has ~16k quotes)
+                # Taking 400 random quotes
+                if len(data) > 500:
+                    data = random.sample(data, 500)
+
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    text = item.get("text", "")
+                    author = item.get("author", "Unknown")
+                    if text and len(text) < 250:
+                        quotes.append(f"EN: {clean_text(text)}, {author}")
+        except Exception as e:
+            print(f"  Warning: Could not parse DWYL Quotes ({e})")
+
+    print(f"  Found {len(quotes)} DWYL quotes.")
+    return quotes
+
 def main():
     # Load Existing
     existing = []
-    # (Optional: Read previous file if we want to merge, but we are regenerating to clean)
     
     # 1. Fetch Sources
-    rules = fetch_bauernregeln()
     jokes = fetch_witze()
     dad_jokes = fetch_dad_jokes()
     nietzsche = get_nietzsche_quotes() 
+    dwyl_quotes = fetch_dwyl_quotes()
 
     # 2. Combine
     # We want a good mix. 
-    # Nietzsche quotes are rare (30), multiply them to appear more often or just add once.
-    # User asked for "original fortune examples", assuming mixing everything.
     
     combined = []
-    combined.extend(rules)
     combined.extend(jokes)
     combined.extend(dad_jokes)
-    combined.extend(nietzsche * 3) # Add Nietzsche 3x to increase probability in shuffle
+    combined.extend(dwyl_quotes)
+    combined.extend(nietzsche) 
     
-    # Needs 500 new ones + keeping old? Or just generate a fresh set?
-    # User said "please work on the python script... strange characters in fortune.txt... can you clean formatting".
-    # Safest is to regenerate a clean list.
-    
+    # Shuffle    
     random.shuffle(combined)
     
     # 3. Write

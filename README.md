@@ -44,6 +44,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Voice Menu** | **Receiver Lifted** → Dial `9` | Plays spoken instructions for system codes. |
 | **Toggle Alarms** | **Receiver Lifted** → Dial `90` | Enables or disables all alarms globally. |
 | **Skip Next Alarm** | **Receiver Lifted** → Dial `91` | Skips only the next scheduled recurring alarm. |
+| **Re-Index SD** | **Receiver Lifted** → Dial `95` | Force manual re-scan of SD card content (temporarily disables Web UI). |
 | **Stop Ringing** | **Ringing** → Lift Receiver, then Hang Up | Stops the alarm or timer alert. |
 | **Snooze** | **Ringing** → Lift Receiver (Keep Off Hook) | Snoozes the alarm for the configured duration (default: 9 min). |
 | **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. If mDNS is unavailable, use the device IP announced by Dial `8`. |
@@ -74,6 +75,13 @@ Target hardware: **Ai-Thinker Audio Kit v2.2** (ES8388). Most peripherals connec
 | **SD Card** | SPI | *Internal* | On-board Slot |
 
 *Note: PlatformIO environment: `esp32_audio_kit`*
+
+### Audio Routing (Ai-Thinker)
+The firmware leverages the stereo capabilities of the ES8388 codec to drive two separate audio paths:
+- **Handset Audio** (Ear piece) is routed to the **Left Channel (LOUT)**.
+- **Base Speaker** (Ringing/Speakerphone) is routed to the **Right Channel (ROUT)**.
+
+The firmware automatically manages muting/unmuting these channels based on the device state (On-Hook/Off-Hook).
 
 ## Accessing the Configuration
 

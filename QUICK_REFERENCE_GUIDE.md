@@ -24,6 +24,7 @@
    - **Dial 9:** System Menu Instructions.
    - **Dial 90:** Toggle **ALL** Alarms (On/Off).
    - **Dial 91:** Skip **Next Repeating Alarm** (e.g. skip tomorrow morning).
+   - **Dial 95:** Force **Manual Re-Index** of SD Card (Use after adding files manually).
    - **Dial 8:** Speak full system status (IP, Signal).
 
 ## 📂 Content Management (SD Card)

@@ -48,6 +48,7 @@ void PhonebookManager::begin() {
     // --- Control Commands ---
     ensure("90", "Toggle Alarms", "FUNCTION", "TOGGLE_ALARMS");
     ensure("91", "Skip Next Alarm", "FUNCTION", "SKIP_NEXT_ALARM");
+    ensure("95", "Re-Index/Update SD", "FUNCTION", "REINDEX_SD"); // Triggers scanAllContent()
 
     if (changed) {
         save();
