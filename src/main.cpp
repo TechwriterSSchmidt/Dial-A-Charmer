@@ -25,7 +25,7 @@
 #include "AiManager.h"   
 #include "PhonebookManager.h"
 #include "Constants.h"
-
+#include "TextResources.h"
 
 #define SD SD_MMC // Use SD_MMC with existing SD.* calls
 
@@ -71,7 +71,7 @@ bool isDialTonePlaying = false; // New Dial Tone State
 // --- Timeout / Busy Logic ---
 bool isLineBusy = false;       
 unsigned long offHookTime = 0; 
-#define OFF_HOOK_TIMEOUT 5000  
+// Defined in Constants.h: OFF_HOOK_TIMEOUT
 
 // Note: PCM5100A is a "dumb" DAC and doesn't report I2C status. We assume it's working.
 
@@ -92,7 +92,7 @@ bool pendingDeleteTimer = false;
 // Dialing State
 String dialBuffer = "";
 unsigned long lastDialTime = 0;
-#define DIAL_CMD_TIMEOUT 3000
+// Defined in Constants.h: DIAL_CMD_TIMEOUT
 
 // --- Playlist Management ---
 struct Playlist {
@@ -485,7 +485,7 @@ String getNextTrack(int category) {
             track = categories[ref.cat].tracks[ref.idx];
         } else {
             Serial.println("Invalid Virtual Track Reference!");
-            track = "/system/error_tone.wav"; // Fallback
+            track = Path::ERROR_TONE; // Fallback
         }
     } else {
         // --- Standard Playlist Logic ---
@@ -509,6 +509,14 @@ String getNextTrack(int category) {
 
 
 // --- Audio Task & Helpers ---
+
+// Helper for Manual Register Access (user request for LOUT fix)
+void writeCodecReg(uint8_t reg, uint8_t val) {
+    Wire.beginTransmission(0x10); // ES8388 Address
+    Wire.write(reg);
+    Wire.write(val);
+    Wire.endTransmission();
+}
 
 void audioTaskCode(void * parameter) {
     Serial.print("[AudioTask] Started on Core "); Serial.println(xPortGetCoreID());
@@ -538,7 +546,9 @@ void audioTaskCode(void * parameter) {
     Serial.printf("[Audio][INIT] bitsPerSample=%u\n", audio->getBitsPerSample());
 #endif
     
+    static int activeOutputMode = 2; // Default to Speaker (2)
     bool lastRunning = false;
+    
     for(;;) {
         audio->loop();
         isAudioBusy = audio->isRunning();
@@ -571,8 +581,8 @@ void audioTaskCode(void * parameter) {
 #endif
                         } else {
                             Serial.printf("[Audio] File missing: %s\n", cmd.path);
-                            if (SD.exists("/system/fallback_alarm.wav")) {
-                                 audio->connecttoFS(SD, "/system/fallback_alarm.wav");
+                            if (SD.exists(Path::FALLBACK_ALARM)) {
+                                 audio->connecttoFS(SD, Path::FALLBACK_ALARM);
 #if DEBUG_AUDIO
                                 Serial.println("[Audio][SD] fallback_alarm.wav -> connecttoFS");
 #endif
@@ -600,48 +610,92 @@ void audioTaskCode(void * parameter) {
                     break;
                 case CMD_VOL:
 #if DEBUG_AUDIO
-                    Serial.printf("[Audio][CMD_VOL] val=%d\n", cmd.value);
+                    Serial.printf("[Audio][CMD_VOL] raw=%d mode=%d\n", cmd.value, activeOutputMode);
 #endif
-                    audio->setVolume(cmd.value);
-                    #if HAS_ES8388_CODEC
-                        // Update Codec Volume (Map 0-21 internal gain to 0-100 hardware gain)
-                        {
-                            int hwVol = ::map(cmd.value, 0, 21, 0, 100);
-                            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, hwVol);
-                        }
-                    #endif
+                    {
+                        // Safely clamp volume to valid range 0-21
+                        int safeVol = cmd.value;
+                        if (safeVol < 0) safeVol = 0;
+                        if (safeVol > 21) safeVol = 21;
+
+                        audio->setVolume(safeVol);
+                        #if HAS_ES8388_CODEC
+                            // Update Codec Volume (Map 0-21 internal gain to 0-100 hardware gain)
+                            int hwVol = ::map(safeVol, 0, 21, 0, 100);
+                            
+                            // We use DAC_OUTPUT_ALL to ensure chip stays powered, but we gate via regs
+                            codec.config(16, (es_dac_output_t)(DAC_OUTPUT_ALL), ADC_INPUT_LINPUT2_RINPUT2, hwVol);
+
+                            // MANUAL REGISTER OVERWRITE Logic (Depend on Active Mode)
+                            int volReg = hwVol / 3;
+                            
+                            // Split Output based on Mode
+                            // Mode 1 = Handset (LOUT), Mode 2 = Speaker (ROUT)
+                            // We mute the other channel to ensure isolation
+                            if (activeOutputMode == 1) {
+                                writeCodecReg(0x2F, 0);               // ROUT (Speaker) = Mute
+                                writeCodecReg(0x2E, (uint8_t)volReg); // LOUT (Handset) = Vol
+                            } else {
+                                // Default or Speaker
+                                writeCodecReg(0x2F, (uint8_t)volReg); // ROUT (Speaker) = Vol
+                                writeCodecReg(0x2E, 0);               // LOUT (Handset) = Mute
+                            }
+                            
+                            // Ensure Mixers are open (Reg 0x27/0x2A)
+                            writeCodecReg(0x27, 0x90); // Left DAC -> Left Mixer
+                            writeCodecReg(0x2A, 0x90); // Right DAC -> Right Mixer
+                        #endif
+                    }
                     break;
 
                 case CMD_OUT:
 #if DEBUG_AUDIO
                     Serial.printf("[Audio][CMD_OUT] val=%d\n", cmd.value);
 #endif
+                    // Update Active Mode (Tracking for Volume Changes)
+                    activeOutputMode = cmd.value;
+
+                    // Hardware: Enable PA Pin HIGH always (Handset also needs this on some boards)
+                    // We will Mute Speaker via 0x2F Digital Reg instead of PA Pin
+                    digitalWrite(CONF_PIN_PA_ENABLE, HIGH);
+
                     #if HAS_ES8388_CODEC
-                        // ES8388 Hardware Routing (Both outputs active)
-                        currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_ALL);
-                        int vol = (cmd.value == 2)
-                                  ? ::map(settings.getBaseVolume(), 0, 42, 0, 100)
-                                  : ::map(settings.getVolume(), 0, 42, 0, 100);
-                        codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
+                        // ES8388 Hardware Routing
+                        int targetVolInternal = (activeOutputMode == 2) ? settings.getBaseVolume() : settings.getVolume();
+                        int targetVolHw = ::map(targetVolInternal, 0, 42, 0, 100);
+
+                        // Configure Codec with ALL Outputs enabled
+                        codec.config(16, (es_dac_output_t)(DAC_OUTPUT_ALL), ADC_INPUT_LINPUT2_RINPUT2, targetVolHw);
+                        
+                        // Force 0x04 (Power) to Enable All Outputs: LOUT1/2 ROUT1/2
+                        writeCodecReg(0x04, 0x3C); 
+                        
+                        // Force Mixer Routing (Left DAC -> Left Mixer)
+                        writeCodecReg(0x27, 0x90);
+                        writeCodecReg(0x2A, 0x90);
+                        
+                        // Volume Register Logic (Split L/R)
+                        int volReg = targetVolHw / 3;
+                        
+                        if (activeOutputMode == 1) { // Handset Mode
+                             writeCodecReg(0x2F, 0);               // ROUT (Speaker) = Mute
+                             writeCodecReg(0x2E, (uint8_t)volReg); // LOUT (Handset) = Vol
+                        } else { // Speaker Mode (2)
+                             writeCodecReg(0x2F, (uint8_t)volReg); // ROUT (Speaker) = Vol
+                             writeCodecReg(0x2E, 0);               // LOUT (Handset) = Mute
+                        }
 #if DEBUG_AUDIO
-                        Serial.printf("[Audio][CODEC] out=%d vol=%d\n",
-                                      (int)currentCodecOutput,
-                                      (cmd.value == 2) ? ::map(settings.getBaseVolume(), 0, 42, 0, 100)
-                                                       : ::map(settings.getVolume(), 0, 42, 0, 100));
+                        Serial.printf("[Audio][CODEC] Mode=%d -> LOUT=%d ROUT=%d\n", 
+                             activeOutputMode, (activeOutputMode==1)?volReg:0, (activeOutputMode==2)?volReg:0);
 #endif
                     #endif
 
-                    // Software Balance / Gain (Channel gating: ROUT for speaker, LOUT for handset)
-                    if (cmd.value == 2) { 
-                        audio->setBalance(16); // Right only
-                        int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
-                        audio->setVolume(vol);
-                    } else if (cmd.value == 1) {
-                        audio->setBalance(-16); // Left only
-                        int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
-                        audio->setVolume(vol);
-                    } else {
-                        audio->setBalance(0);
+                    // Audio Lib Volume (Software scaling)
+                    audio->setBalance(0); // Center Balance
+                    {
+                        // Set software volume matching the hardware mode source
+                        int swVol = ::map((activeOutputMode == 2) ? settings.getBaseVolume() : settings.getVolume(), 0, 42, 0, 21);
+                        audio->setVolume(swVol);
                     }
                     break;
             }
@@ -759,7 +813,7 @@ void speakTime() {
     } else {
         Serial.println("Time Invalid (No Sync). Announcing unavailable.");
         String lang = settings.getLanguage();
-        String msg = "/system/time_unavailable_" + lang + ".wav";
+        String msg = (lang == "de") ? Path::TIME_UNAVAILABLE_DE : Path::TIME_UNAVAILABLE_EN;
         timeState = TIME_IDLE;
         playSound(msg, !dial.isOffHook());
         return;
@@ -850,7 +904,7 @@ void processTimeQueue() {
                 isLineBusy = true;
                 stopDialTone();
                 setAudioOutput(OUT_HANDSET);
-                playSound("/system/busy_tone.wav", false);
+                playSound(Path::BUSY_TONE, false);
             }
             break;
             
@@ -875,7 +929,7 @@ void speakCompliment(int number) {
         // Play sound BEFORE request to bridge the gap.
         // Needs a loop to play out, as getCompliment blocks.
         Serial.println("Playing Thinking Sound...");
-        playSound("/system/computing.wav", false); // Assuming file exists
+        playSound(Path::COMPUTING, false);
         unsigned long startThink = millis();
         // Play for max 3 seconds or until file ends
         while (audio->isRunning() && (millis() - startThink < 3000)) {
@@ -913,7 +967,7 @@ void speakCompliment(int number) {
     
     if (path.length() == 0) {
          Serial.println("Playlist Empty! Check SD Card.");
-         path = "/system/error_tone.wav"; 
+         path = Path::ERROR_TONE; 
     }
     
     Serial.printf("Playing compliment (Cat: %d): %s\n", category, path.c_str());
@@ -969,14 +1023,6 @@ void stopAlarm() {
     timeManager.cancelTimer(); 
     
     setAudioOutput(OUT_HANDSET); 
-    
-    // BUG FIX: Volume Reset
-    // Reset volume to standard level immediately, otherwise next call is loud!
-    int defVol = settings.getBaseVolume(); 
-    if(audio) {
-        audio->setVolume(defVol);
-        sendAudioCmd(CMD_VOL, NULL, defVol);
-    }
 
     Serial.println("Alarm Stopped");
 }
@@ -1041,23 +1087,19 @@ void executePhonebookFunction(String func, String param) {
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
-            // Fallback TTS if file missing
-            String text = (lang == "de") ? 
-                "System Menü. Wähle 9 0 um alle Alarme ein- oder auszuschalten. 9 1 um den nächsten Routine-Wecker zu überspringen. 8 für Status." :
-                "System Menu. Dial 9 0 to toggle all alarms. 9 1 to skip the next routine alarm. 8 for status.";
+            // Fallback TTS
+            String text = (lang == "de") ? TextDE::MENU_FALLBACK : TextEN::MENU_FALLBACK;
             if (ai.hasApiKey()) {
                 audio->connecttohost(ai.getTTSUrl(text).c_str());
             }
         }
     }
     else if (func == "SYSTEM_STATUS") {
-        String statusText = "";
+        String statusText = (lang == "de") ? TextDE::STATUS_PREFIX : TextEN::STATUS_PREFIX;
         if (lang == "de") {
-            statusText += "System Status. ";
             statusText += "WLAN Signal " + String(WiFi.RSSI()) + " dB. ";
             statusText += "IP Adresse " + formatIpForSpeech(WiFi.localIP()) + ". ";
         } else {
-            statusText += "System Status. ";
             statusText += "WiFi Signal " + String(WiFi.RSSI()) + " dB. ";
             statusText += "IP Address " + formatIpForSpeech(WiFi.localIP()) + ". ";
         }
@@ -1067,7 +1109,7 @@ void executePhonebookFunction(String func, String param) {
              audio->connecttohost(ai.getTTSUrl(statusText).c_str());
         } else {
              Serial.println(statusText);
-             playSound("/system/beep.wav", false);
+             playSound(Path::BEEP, false);
         }
     }
     else if (func == "TOGGLE_ALARMS") {
@@ -1081,12 +1123,10 @@ void executePhonebookFunction(String func, String param) {
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
-            String msg = "";
-            if (lang == "de") {
-                msg = alarmsEnabled ? "Alarme aktiviert." : "Alarme deaktiviert.";
-            } else {
-                msg = alarmsEnabled ? "Alarms enabled." : "Alarms disabled.";
-            }
+            String msg;
+            if (lang == "de") msg = alarmsEnabled ? TextDE::ALARMS_ON : TextDE::ALARMS_OFF;
+            else              msg = alarmsEnabled ? TextEN::ALARMS_ON : TextEN::ALARMS_OFF;
+            
             if (ai.hasApiKey()) {
                 audio->connecttohost(ai.getTTSUrl(msg).c_str());
             }
@@ -1103,12 +1143,10 @@ void executePhonebookFunction(String func, String param) {
         if (SD.exists(path)) {
             playSound(path, false);
         } else {
-            String msg = "";
-            if (lang == "de") {
-                msg = newState ? "Nächster wiederkehrender Alarm übersprungen." : "Wiederkehrender Alarm wieder aktiv.";
-            } else {
-                msg = newState ? "Next recurring alarm skipped." : "Recurring alarm reactivated.";
-            }
+            String msg;
+            if (lang == "de") msg = newState ? TextDE::SKIP_ON : TextDE::SKIP_OFF;
+            else              msg = newState ? TextEN::SKIP_ON : TextEN::SKIP_OFF;
+
             if (ai.hasApiKey()) {
                 audio->connecttohost(ai.getTTSUrl(msg).c_str());
             }
@@ -1123,11 +1161,11 @@ void executePhonebookFunction(String func, String param) {
 void handleDialedNumber(String numberStr) {
     
     // System Codes (Fixed)
-    if (numberStr == "90") {
+    if (numberStr == SYS_CODE_TOGGLE_ALARMS) {
          executePhonebookFunction("TOGGLE_ALARMS", "");
          return;
     }
-    if (numberStr == "91") {
+    if (numberStr == SYS_CODE_SKIP_NEXT_ALARM) { // "91"
          executePhonebookFunction("SKIP_NEXT_ALARM", "");
          return;
     }
@@ -1189,7 +1227,7 @@ void handleDialedNumber(String numberStr) {
     } else {
         // Unknown
         Serial.println("Unknown Number Dialed");
-        playSound("/system/error_tone.wav", false);
+        playSound(Path::ERROR_TONE, false);
     }
 }
 
@@ -1248,11 +1286,11 @@ void processBufNumber(String numberStr) {
                 speakAlarmConfirm(h, m);
             } else {
                 Serial.println("Invalid Time Format");
-                playSound("/system/error_tone.wav", false);
+                playSound(Path::ERROR_TONE, false);
             }
         } else {
             // Wrong length for Alarm Setting
-             playSound("/system/error_tone.wav", false);
+             playSound(Path::ERROR_TONE, false);
         }
         return;
     }
@@ -1279,7 +1317,7 @@ void processBufNumber(String numberStr) {
          } else {
             // Unknown
             Serial.println("Invalid Timer Value");
-            playSound("/system/error_tone.wav", false);
+            playSound(Path::ERROR_TONE, false);
          }
     }
 }
@@ -1337,9 +1375,32 @@ void onHook(bool offHook) {
         
         // If Alarm/Timer is ringing, mark delete on hang-up and stop audio
         if (isAlarmRinging || isTimerRinging) {
+            bool wasTimer = isTimerRinging;
             pendingDeleteAlarm = isAlarmRinging;
             pendingDeleteTimer = isTimerRinging;
             stopAlarm();
+
+            // Speak Confirmation (Handset)
+            String lang = settings.getLanguage();
+            String path;
+            if (wasTimer) {
+                path = (lang == "de") ? Path::TIMER_STOPPED_DE : Path::TIMER_STOPPED_EN;
+            } else {
+                path = (lang == "de") ? Path::ALARM_STOPPED_DE : Path::ALARM_STOPPED_EN;
+            }
+            
+            // Try playing file
+            if (SD.exists(path)) {
+                playSound(path, false);
+            } else {
+                // Fallback TTS (less likely to work nicely mid-action but logic kept)
+                const char* txt = (lang == "de") 
+                                  ? (wasTimer ? TextDE::TIMER_STOPPED : TextDE::ALARM_STOPPED)
+                                  : (wasTimer ? TextEN::TIMER_STOPPED : TextEN::ALARM_STOPPED);
+                if (ai.hasApiKey()) {
+                    audio->connecttohost(ai.getTTSUrl(txt).c_str());
+                }
+            }
             return;
         }
         
@@ -1492,11 +1553,13 @@ void playDialTone() {
     }
 
     // Workaround: Valid file check for current specific SD corruption/format issue
-    // Since dialtone_1.wav is reported invalid, we map it to beep.wav (which is known good)
+    // Removed Workaround that maps dialtone_1.wav to beep.wav as requested
+    /*
     if (dt == "/system/dialtone_1.wav") {
          Serial.println("Workaround: Remapping potentially broken dialtone_1.wav to beep.wav");
          dt = "/system/beep.wav";
     }
+    */
 
     Serial.println("Starting Dial Tone: " + dt);
     
@@ -1671,7 +1734,7 @@ void setup() {
         playSequence(bootSequence, true);
         Serial.println("Boot sequence started on SPEAKER (Output 2)");
     } else {
-        playSound("/system/beep.wav", true); // Speaker
+        playSound(Path::BEEP, true); // Speaker
         Serial.println("Initial Beep played on SPEAKER (Output 2)");
     }
 
@@ -1728,7 +1791,7 @@ void loop() {
                      stopDialTone(); 
                      // Play Busy Signal Loop
                      setAudioOutput(OUT_HANDSET);
-                     playSound("/system/busy_tone.wav", false);
+                     playSound(Path::BUSY_TONE, false);
                  }
              }
         }
@@ -1756,8 +1819,8 @@ void loop() {
              // For now, we attempt to play. Ensure file is TINY.
              // If loop latency is high, this will slow down dialing detection!
              // Proceed with caution.
-             if (SD.exists("/system/click.wav")) {
-                audio->connecttoFS(SD, "/system/click.wav");
+             if (SD.exists(Path::CLICK)) {
+                audio->connecttoFS(SD, Path::CLICK);
              }
         }
     }
@@ -1773,8 +1836,6 @@ void loop() {
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {
-        #define DIAL_CMD_TIMEOUT 3000
-
         if (millis() - lastDialTime > DIAL_CMD_TIMEOUT) {
             Serial.printf("Dialing Finished (Timeout). Buffer: %s\n", dialBuffer.c_str());
             processBufNumber(dialBuffer);
@@ -1851,7 +1912,7 @@ void loop() {
         // 10s Action: AP Mode
         if (dur > 10000 && !buttonActionTriggered) {
              Serial.println("Long Press Detected: Starting AP Mode");
-             playSound("/system/beep.wav", false);
+             playSound(Path::BEEP, false);
              webManager.startAp();
              buttonActionTriggered = true; 
              // Wait for release

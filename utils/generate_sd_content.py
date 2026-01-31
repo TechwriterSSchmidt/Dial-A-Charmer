@@ -52,7 +52,9 @@ TTS_PROMPTS = {
         ("Timer set for:", "timer_confirm_en.wav"),
         ("Alarm set for:", "alarm_confirm_en.wav"),
         ("Timer cancelled.", "timer_deleted_en.wav"),
-        ("Alarm deleted.", "alarm_deleted_en.wav")
+        ("Alarm deleted.", "alarm_deleted_en.wav"),
+        ("Timer stopped.", "timer_stopped_en.wav"),
+        ("Alarm ended.", "alarm_stopped_en.wav")
     ],
     # German
     "de": [
@@ -69,7 +71,9 @@ TTS_PROMPTS = {
         ("Timer gesetzt auf:", "timer_confirm_de.wav"),
         ("Wecker gestellt auf:", "alarm_confirm_de.wav"),
         ("Timer beendet.", "timer_deleted_de.wav"),
-        ("Wecker gelöscht.", "alarm_deleted_de.wav")
+        ("Wecker gelöscht.", "alarm_deleted_de.wav"),
+        ("Timer gestoppt.", "timer_stopped_de.wav"),
+        ("Alarm beendet.", "alarm_stopped_de.wav")
     ]
 }
 

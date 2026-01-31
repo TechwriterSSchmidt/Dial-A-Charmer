@@ -93,7 +93,8 @@ private:
     bool _skipNextAlarm = false;
 
     // Timer
-    unsigned long _timerEndTime = 0;
+    unsigned long _timerStart = 0;
+    unsigned long _timerDuration = 0;
     bool _timerRunning = false;
 
     // Snooze
