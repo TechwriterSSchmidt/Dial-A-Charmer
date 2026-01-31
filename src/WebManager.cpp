@@ -5,7 +5,6 @@
 #include "WebResources.h" // Setup Styles
 #include <ArduinoJson.h>
 #include <ESPmDNS.h>
-#include <Update.h>
 
 #include <SD_MMC.h>
 #include <FS.h>
@@ -254,39 +253,6 @@ void WebManager::begin() {
         request->send(202, "text/plain", "ACCEPTED"); // Immediate Response
     });
 
-    _server.on("/update", HTTP_POST,
-        [this](AsyncWebServerRequest* request){
-            AsyncWebServerResponse* response;
-            if (Update.hasError()) {
-                response = request->beginResponse(500, "text/plain", "FAIL");
-            } else {
-                response = request->beginResponse(200, "text/html", "<html><head><meta http-equiv='refresh' content='10;url=/'><style>body{background:#111;color:#d4af37;font-family:sans-serif;text-align:center;padding:50px;}</style></head><body><h2>Update Successful</h2><p>Rebooting... Please wait.</p></body></html>");
-            }
-            response->addHeader("Connection", "close");
-            request->send(response);
-            request->onDisconnect([](){ ESP.restart(); });
-        },
-        [this](AsyncWebServerRequest* request, const String& filename, size_t index, uint8_t* data, size_t len, bool final){
-            if (index == 0) {
-                Serial.printf("Update: %s\n", filename.c_str());
-                if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-                    Update.printError(Serial);
-                }
-            }
-            if (!Update.hasError()) {
-                if (Update.write(data, len) != len) {
-                    Update.printError(Serial);
-                }
-            }
-            if (final) {
-                if (Update.end(true)) {
-                    Serial.printf("Update Success: %uB\n", index + len);
-                } else {
-                    Update.printError(Serial);
-                }
-            }
-        }
-    );
 
     _server.on("/save", HTTP_POST, [this](AsyncWebServerRequest* request){ handleSave(request); });
     _server.onNotFound([this](AsyncWebServerRequest* request){ handleNotFound(request); });
@@ -823,15 +789,6 @@ String WebManager::getAdvancedHtml() {
     html += "<button type='submit' style='background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:12px; padding:15px; font-size:1.5rem; letter-spacing:4px; margin-bottom:20px; font-family:\"Times New Roman\", serif; border:1px solid #a00000; cursor:pointer;'>" + String(isDe ? "SPEICHERN" : "SAVE") + "</button>";
     html += "</form>";
 
-    // OTA Update Form
-    esp_task_wdt_reset();
-    html += "<div class='card'><h3>Firmware Update</h3>";
-    html += "<p style='margin-bottom:15px;'><a href='https://github.com/TechwriterSSchmidt/Dial-A-Charmer/releases/latest/download/firmware.bin' target='_blank' style='color:#d4af37; text-decoration:underline;'>Download latest firmware.bin</a></p>";
-    html += "<form method='POST' action='/update' enctype='multipart/form-data'>";
-    html += "<input type='file' name='update' accept='.bin'>";
-    html += "<button type='submit' style='background-color:#444; margin-top:10px;'>Start Update</button>";
-    html += "</form></div>";
-    
     esp_task_wdt_reset();
     html += getFooterHtml(isDe, "advanced");
     
