@@ -1266,6 +1266,11 @@ void processBufNumber(String numberStr) {
         // Interpret number as Minutes
          int num = numberStr.toInt();
          if (num > 0 && num <= 999) { // Allow up to 999 minutes
+            // Ensure any active alarm/timer ringing is stopped
+            if (isAlarmRinging) {
+                stopAlarm();
+            }
+
             Serial.printf("Setting Timer for %d minutes\n", num);
             timeManager.setTimer(num);
             
