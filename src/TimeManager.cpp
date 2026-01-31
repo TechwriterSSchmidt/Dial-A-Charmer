@@ -233,8 +233,12 @@ bool TimeManager::isSkipNextAlarmSet() {
 // --- Timer ---
 
 void TimeManager::setTimer(int minutes) {
-    _timerEndTime = millis() + (minutes * 60000UL);
-    _timerRunning = true;
+    if (_timerRunning) {
+        Serial.println("TimeManager: Overwriting existing timer");
+    }
+    _timerStart = millis();
+    _timerDuration = minutes * 60000UL;
+    _timerRunning = true; 
 }
 
 void TimeManager::cancelTimer() {
@@ -247,14 +251,17 @@ bool TimeManager::isTimerRunning() {
 
 unsigned long TimeManager::getTimerRemainingMs() {
     if (!_timerRunning) return 0;
-    if (millis() > _timerEndTime) return 0;
-    return _timerEndTime - millis();
+    unsigned long elapsed = millis() - _timerStart;
+    if (elapsed >= _timerDuration) return 0;
+    return _timerDuration - elapsed;
 }
 
 bool TimeManager::checkTimerTrigger() {
-    if (_timerRunning && millis() > _timerEndTime) {
-        _timerRunning = false; // Auto stop
-        return true;
+    if (_timerRunning) {
+        if ((millis() - _timerStart) >= _timerDuration) {
+            _timerRunning = false; // Auto stop
+            return true;
+        }
     }
     return false;
 }
