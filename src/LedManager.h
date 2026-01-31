@@ -28,6 +28,7 @@ private:
     Adafruit_NeoPixel _pixels;
     Mode _currentMode;
     uint8_t _pin;
+    bool _enabled;
 
     // Animation Variablen
     unsigned long _lastUpdate;

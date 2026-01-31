@@ -665,9 +665,7 @@ void sendAudioCmd(AudioCmdType type, const char* path, int val) {
 // Web Server Task - runs on Core 1 with its own WDT resets
 void webServerTaskCode(void * parameter) {
     Serial.print("[WebServerTask] Started on Core "); Serial.println(xPortGetCoreID());
-    esp_task_wdt_add(NULL); // register this task
     for(;;) {
-        esp_task_wdt_reset();
         webManager.loop();
         vTaskDelay(5 / portTICK_PERIOD_MS); // yield CPU
     }
@@ -697,6 +695,19 @@ void playSound(String filename, bool useSpeaker = false) {
                   (audio && audio->isRunning()) ? 1 : 0);
 #endif
     setAudioOutput(useSpeaker ? OUT_SPEAKER : OUT_HANDSET);
+    sendAudioCmd(CMD_PLAY, filename.c_str(), 0);
+}
+
+void playSoundNoRoute(String filename) {
+    if (!sdAvailable) {
+        Serial.println("SD Not Available, cannot play: " + filename);
+        return;
+    }
+#if DEBUG_AUDIO
+    Serial.printf("[Audio][REQ] (no-route) file=%s offHook=%d running=%d\n",
+                  filename.c_str(), dial.isOffHook() ? 1 : 0,
+                  (audio && audio->isRunning()) ? 1 : 0);
+#endif
     sendAudioCmd(CMD_PLAY, filename.c_str(), 0);
 }
 
@@ -1947,7 +1958,7 @@ void audio_eof_mp3(const char *info){
          // Loop Alarm Sound
          String ringName = settings.getRingtone();
          String ringPath = ringName.startsWith("/") ? ringName : "/ringtones/" + ringName;
-         playSound(ringPath, true);
+            playSoundNoRoute(ringPath);
          
          // Note: setVolume might be reset by playSound internal logic if we called setAudioOutput again?
          // Our modified playSound calls setAudioOutput. 

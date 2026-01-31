@@ -1,18 +1,20 @@
 #include "LedManager.h"
 
 LedManager::LedManager(uint8_t pin, uint8_t numPixels) 
-    : _pixels(numPixels, pin, NEO_GRB + NEO_KHZ800), _pin(pin) {
+    : _pixels(numPixels, pin, NEO_GRB + NEO_KHZ800), _pin(pin), _enabled(pin != 255) {
     _currentMode = OFF;
     _lastUpdate = 0;
     _pulsePhase = 0;
 }
 
 void LedManager::begin() {
+    if (!_enabled) return;
     _pixels.begin();
     _pixels.show(); // Alles aus initial
 }
 
 void LedManager::reloadSettings() {
+    if (!_enabled) return;
     // Placeholder - refresh LED state if needed
     if (_currentMode != OFF) {
         _pixels.show();
@@ -20,6 +22,7 @@ void LedManager::reloadSettings() {
 }
 
 void LedManager::setMode(Mode mode) {
+    if (!_enabled) return;
     if (_currentMode != mode) {
         _currentMode = mode;
         _pulsePhase = 0;
@@ -30,6 +33,7 @@ void LedManager::setMode(Mode mode) {
 }
 
 void LedManager::update() {
+    if (!_enabled) return;
     unsigned long now = millis();
     
     // Framerate Begrenzung (ca. 30 FPS saves CPU/RMT load)
@@ -111,6 +115,7 @@ void LedManager::update() {
 }
 
 void LedManager::setColor(uint8_t r, uint8_t g, uint8_t b) {
+    if (!_enabled) return;
     // Delta Check: Don't write to RMT if color matches (saves CPU/Crash Risk)
     uint32_t newColor = _pixels.Color(r, g, b);
     if (_pixels.getPixelColor(0) == newColor) return;
