@@ -8,7 +8,7 @@ import socket
 
 # Configuration
 OUTPUT_FILE = "fortune_examples.txt"
-TARGET_ADDITIONAL_COUNT = 500
+TARGET_ADDITIONAL_COUNT = 750
 
 # Sources
 URL_WITZE_JSON = "https://raw.githubusercontent.com/tschlumpf/deutsche-Witze/main/witze.json"

@@ -28,6 +28,14 @@ struct InternalCache {
 
 static InternalCache ic; // Statische Instanz, nur in dieser Datei sichtbar
 
+static bool isNumericString(const String& value) {
+    if (value.length() == 0) return false;
+    for (size_t i = 0; i < value.length(); i++) {
+        if (!isDigit(value[i])) return false;
+    }
+    return true;
+}
+
 void Settings::begin() {
     _prefs.begin(_ns, false);
     loadCache();
@@ -67,11 +75,24 @@ void Settings::loadCache() {
             int legacyRing = _prefs.getInt("ring", CONF_DEFAULT_RING);
             ic.ringtone = String(legacyRing) + ".wav";
             _prefs.putString("ring", ic.ringtone);
+        } else if (isNumericString(ic.ringtone)) {
+            ic.ringtone = ic.ringtone + ".wav";
+            _prefs.putString("ring", ic.ringtone);
+        } else if (ic.ringtone.indexOf('.') < 0) {
+            ic.ringtone = ic.ringtone + ".wav";
+            _prefs.putString("ring", ic.ringtone);
         }
+
         ic.dialTone = _prefs.getString("dt_idx", "");
         if (ic.dialTone.length() == 0) {
             int legacyDial = _prefs.getInt("dt_idx", 2);
             ic.dialTone = "dialtone_" + String(legacyDial) + ".wav";
+            _prefs.putString("dt_idx", ic.dialTone);
+        } else if (isNumericString(ic.dialTone)) {
+            ic.dialTone = "dialtone_" + ic.dialTone + ".wav";
+            _prefs.putString("dt_idx", ic.dialTone);
+        } else if (ic.dialTone.indexOf('.') < 0) {
+            ic.dialTone = ic.dialTone + ".wav";
             _prefs.putString("dt_idx", ic.dialTone);
         }
         ic.ledDay = _prefs.getInt("led_day_b", 100);

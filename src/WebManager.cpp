@@ -6,6 +6,7 @@
 #include <ArduinoJson.h>
 #include <ESPmDNS.h>
 #include <Update.h>
+
 #include <SD_MMC.h>
 #include <FS.h>
 #define SD SD_MMC
@@ -82,6 +83,28 @@ static String buildOptions(const std::vector<String>& files, const String& curre
     return options;
 }
 
+static bool isDialToneFile(const String& fileName) {
+    return fileName.startsWith("dialtone_") || fileName.startsWith("dial_tone");
+}
+
+static String buildDialToneOptions(const std::vector<String>& files, const String& currentSelection) {
+    String options;
+    size_t added = 0;
+    for(size_t i=0; i<files.size(); i++) {
+        String fileName = files[i];
+        if (!isDialToneFile(fileName)) continue;
+        String sel = (fileName == currentSelection) ? " selected" : "";
+        String displayName = fileName;
+        int dotIndex = displayName.lastIndexOf('.');
+        if (dotIndex > 0) displayName = displayName.substring(0, dotIndex);
+        options += "<option value='" + fileName + "'" + sel + ">" + displayName + "</option>";
+        added++;
+        if ((added % 50) == 0) esp_task_wdt_reset();
+    }
+    if (added == 0) options = "<option>No dial tones</option>";
+    return options;
+}
+
 // Helper to list files for dropdown (uses cached lists, no SD access during request)
 String getSdFileOptions(String folder, int currentSelection) {
     esp_task_wdt_reset();
@@ -95,6 +118,11 @@ String getSdFileOptionsByName(String folder, String currentSelection) {
     if (folder == Path::RINGTONES) return buildOptions(cachedRingtones, currentSelection);
     if (folder == Path::SYSTEM)    return buildOptions(cachedSystem, currentSelection);
     return "<option>Unknown folder</option>";
+}
+
+String getDialToneOptionsByName(String currentSelection) {
+    esp_task_wdt_reset();
+    return buildDialToneOptions(cachedSystem, currentSelection);
 }
 
 String getFooterHtml(bool isDe, String activePage) {
@@ -425,6 +453,9 @@ void WebManager::handlePreviewApi(AsyncWebServerRequest* request) {
         String type = request->arg("type");
         String id = request->arg("id");
         resetApTimer();
+#if DEBUG_AUDIO
+        Serial.printf("[Web][Preview] type=%s id=%s\n", type.c_str(), id.c_str());
+#endif
         playPreviewSound(type, id);
         request->send(200, "text/plain", "OK");
     } else {
@@ -757,7 +788,7 @@ String WebManager::getAdvancedHtml() {
     html += "<div style='display:flex; gap:10px; margin-top:15px;'>";
     html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>" + getSdFileOptionsByName(Path::RINGTONES, settings.getRingtone()) + "</select></div>";
     esp_task_wdt_reset();
-    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>" + getSdFileOptionsByName(Path::SYSTEM, settings.getDialTone()) + "</select></div>";
+    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>" + getDialToneOptionsByName(settings.getDialTone()) + "</select></div>";
     esp_task_wdt_reset();
     html += "</div>";
     
