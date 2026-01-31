@@ -607,20 +607,12 @@ void audioTaskCode(void * parameter) {
                     Serial.printf("[Audio][CMD_OUT] val=%d\n", cmd.value);
 #endif
                     #if HAS_ES8388_CODEC
-                        // ES8388 Hardware Routing
-                        if (cmd.value == 2) { 
-                            // Speaker Mode
-                            currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT2 | DAC_OUTPUT_ROUT2);
-                            int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 100);
-                            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
-                            // codec.volume(vol); // Removed invalid call
-                        } else {
-                            // Handset Mode (Headset)
-                            currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_LOUT1 | DAC_OUTPUT_ROUT1);
-                            int vol = ::map(settings.getVolume(), 0, 42, 0, 100);
-                            codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
-                            // codec.volume(vol); // Removed invalid call
-                        }
+                        // ES8388 Hardware Routing (Speaker-only)
+                        currentCodecOutput = (es_dac_output_t)(DAC_OUTPUT_SPK);
+                        int vol = (cmd.value == 2)
+                                  ? ::map(settings.getBaseVolume(), 0, 42, 0, 100)
+                                  : ::map(settings.getVolume(), 0, 42, 0, 100);
+                        codec.config(16, currentCodecOutput, ADC_INPUT_LINPUT2_RINPUT2, vol);
 #if DEBUG_AUDIO
                         Serial.printf("[Audio][CODEC] out=%d vol=%d\n",
                                       (int)currentCodecOutput,
@@ -631,11 +623,11 @@ void audioTaskCode(void * parameter) {
 
                     // Software Balance / Gain (Legacy support & Fine tuning)
                     if (cmd.value == 2) { 
-                        audio->setBalance(16); // Right (Speaker)
+                        audio->setBalance(0);
                         int vol = ::map(settings.getBaseVolume(), 0, 42, 0, 21);
                         audio->setVolume(vol);
                     } else {
-                         audio->setBalance(-16); // Left (Handset)
+                         audio->setBalance(0);
                          int vol = ::map(settings.getVolume(), 0, 42, 0, 21);
                          audio->setVolume(vol);
                     }
@@ -961,7 +953,7 @@ void stopAlarm() {
     // Clear Queue to prevent "ghost words" after alarm stops
     clearSpeechQueue();
 
-    if (audio->isRunning()) audio->stopSong();
+    if (audio->isRunning()) sendAudioCmd(CMD_STOP, NULL, 0);
     
     timeManager.cancelTimer(); 
     
@@ -1391,7 +1383,7 @@ void onHook(bool offHook) {
         }
         
         if (audio->isRunning()) {
-            audio->stopSong();
+            sendAudioCmd(CMD_STOP, NULL, 0);
             // statusLed.setIdle();
         }
     }
@@ -1402,7 +1394,7 @@ void onButton() {
     if (audio->isRunning() || !globalSpeechQueue.empty()) {
         Serial.println("Interruption: Button Pressed -> Stopping Audio & Queue");
         clearSpeechQueue(); 
-        audio->stopSong();
+        sendAudioCmd(CMD_STOP, NULL, 0);
         return; 
     }
 
@@ -1455,7 +1447,7 @@ void playDialTone() {
     if (isDialTonePlaying) return;
     
     // Stop any speech holding the audio
-    if (audio->isRunning()) audio->stopSong();
+    if (audio->isRunning()) sendAudioCmd(CMD_STOP, NULL, 0);
 
     String dtName = settings.getDialTone();
     String dt = dtName.startsWith("/") ? dtName : "/system/" + dtName;

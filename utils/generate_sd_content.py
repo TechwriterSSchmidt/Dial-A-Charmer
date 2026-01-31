@@ -18,6 +18,8 @@ FFMPEG_EXE = os.path.join(SCRIPT_DIR, "ffmpeg.exe")
 
 SAMPLE_RATE = 44100
 AMPLITUDE = 16000  # 16-bit PCM (max 32767)
+TARGET_CHANNELS = 1
+TARGET_SAMPLE_WIDTH = 2
 
 # Directory Structure to Enforce
 REQUIRED_DIRS = [
@@ -100,6 +102,71 @@ CALENDAR_CONFIG = {
 
 # --- HELPER FUNCTIONS ---
 
+def get_ffmpeg_cmd():
+    if os.path.isfile(FFMPEG_EXE):
+        return FFMPEG_EXE
+    return "ffmpeg"
+
+def validate_wav_file(path):
+    try:
+        if not os.path.exists(path) or os.path.getsize(path) < 44:
+            return False
+        with wave.open(path, 'rb') as wf:
+            if wf.getnchannels() != TARGET_CHANNELS:
+                return False
+            if wf.getsampwidth() != TARGET_SAMPLE_WIDTH:
+                return False
+            if wf.getframerate() != SAMPLE_RATE:
+                return False
+            if wf.getnframes() <= 0:
+                return False
+        return True
+    except Exception:
+        return False
+
+def fix_wav_file(path):
+    if not os.path.exists(path):
+        return False
+    tmp_path = path + ".fixed.wav"
+    try:
+        subprocess.run(
+            [
+                get_ffmpeg_cmd(),
+                "-y",
+                "-i",
+                path,
+                "-c:a",
+                "pcm_s16le",
+                "-ar",
+                str(SAMPLE_RATE),
+                "-ac",
+                str(TARGET_CHANNELS),
+                tmp_path,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=True,
+        )
+        if validate_wav_file(tmp_path):
+            os.replace(tmp_path, path)
+            return True
+    except Exception:
+        pass
+    if os.path.exists(tmp_path):
+        os.remove(tmp_path)
+    return False
+
+def ensure_valid_wav(path, label=""):
+    if validate_wav_file(path):
+        return True
+    if fix_wav_file(path):
+        if label:
+            print(f"\n[WAV FIXED] {label}: {path}")
+        return True
+    if label:
+        print(f"\n[WAV INVALID] {label}: {path}")
+    return False
+
 def ensure_folder_structure():
     """Creates all required directories."""
     print(f"Creating SD Card Structure in '{SD_TEMPLATE_DIR}'...")
@@ -147,8 +214,11 @@ def generate_tts_wav(text, filename, lang='de', output_subdir="system"):
             stdout, stderr = process.communicate(input=text.encode('utf-8'))
             
             if process.returncode == 0 and os.path.exists(target_path):
-                print(f".", end="", flush=True)
-                return
+                if ensure_valid_wav(target_path, f"Piper {filename}"):
+                    print(f".", end="", flush=True)
+                    return
+                else:
+                    os.remove(target_path)
             else:
                 print(f"\n[Piper Error] {stderr.decode()}")
                 
@@ -182,15 +252,19 @@ def generate_tts_wav(text, filename, lang='de', output_subdir="system"):
                 f.write(data)
 
         subprocess.run([
-            "ffmpeg", "-y", "-i", temp_mp3,
-            "-c:a", "pcm_s16le", "-ar", "44100", "-ac", "1",
+            get_ffmpeg_cmd(), "-y", "-i", temp_mp3,
+            "-c:a", "pcm_s16le", "-ar", str(SAMPLE_RATE), "-ac", str(TARGET_CHANNELS),
             target_path
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
 
         os.remove(temp_mp3)
-
-        print(f".", end="", flush=True) # Progress indicator
-        time.sleep(0.5) # Rate limit politeness
+        if ensure_valid_wav(target_path, f"Google TTS {filename}"):
+            print(f".", end="", flush=True) # Progress indicator
+            time.sleep(0.5) # Rate limit politeness
+        else:
+            if os.path.exists(target_path):
+                os.remove(target_path)
+            print(f"\n  [ERROR] Invalid WAV generated for '{filename}'")
     except Exception as e:
         print(f"\n  [ERROR] TTS Failed for '{filename}': {e}")
 
@@ -211,6 +285,8 @@ def save_wav(filename, samples, output_subdir="system"):
             packed_data.extend(struct.pack('<h', s))
             
         wav_file.writeframes(packed_data)
+    if not ensure_valid_wav(path, f"Generated {filename}"):
+        print(f"\n  [ERROR] Failed to validate generated WAV: {path}")
 
 def generate_sine_wave(frequency, duration_ms):
     """Generates pure sine samples."""
@@ -510,6 +586,7 @@ def make_startup_music():
         for s in samples:
             packed.extend(struct.pack('<h', int(s)))
         wav_file.writeframes(packed)
+    ensure_valid_wav(path_wav, "Startup music")
         
     print("  Done.")
 
@@ -563,6 +640,29 @@ def generate_fortune_wavs():
     with open(os.path.join(output_dir, "fortune.txt"), "w") as f:
         f.write("System: Fortune Cookie")
 
+def validate_and_fix_wav_tree():
+    print("Validating generated WAV files...")
+    fixed = 0
+    removed = 0
+    checked = 0
+    for root, _, files in os.walk(SD_TEMPLATE_DIR):
+        for name in files:
+            if not name.lower().endswith(".wav"):
+                continue
+            path = os.path.join(root, name)
+            checked += 1
+            if validate_wav_file(path):
+                continue
+            if fix_wav_file(path):
+                fixed += 1
+            else:
+                removed += 1
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
+    print(f"WAV check complete. Checked: {checked}, Fixed: {fixed}, Removed: {removed}")
+
 # --- MAIN EXECUTION ---
 
 if __name__ == "__main__":
@@ -582,6 +682,8 @@ if __name__ == "__main__":
     download_fonts()       # Added Fonts
 
     generate_fortune_wavs() # Added Fortune Cookies
+
+    validate_and_fix_wav_tree()
     
     print("\n=== GENERATION COMPLETE ===")
     print(f"Copy the contents of '{SD_TEMPLATE_DIR}' to your SD Card.")
