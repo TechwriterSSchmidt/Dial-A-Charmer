@@ -1,8 +1,11 @@
 #include "WebManager.h"
 #include <esp_task_wdt.h>
+#include <Arduino.h>
+#include <WiFi.h>
 #include "LedManager.h"
 #include "PhonebookManager.h"
 #include "WebResources.h" // Setup Styles
+#include "TimeManager.h"
 #include <ArduinoJson.h>
 #include <ESPmDNS.h>
 
@@ -478,6 +481,10 @@ void WebManager::handleSave(AsyncWebServerRequest* request) {
              if(request->hasArg("alm_t_"+s)) settings.setAlarmTone(i, request->arg("alm_t_"+s).toInt());
              settings.setAlarmEnabled(i, request->hasArg("alm_en_"+s));
         }
+        
+        // Reload Alarms logic
+        timeManager.loadAlarms();
+        Serial.println("WebManager: Alarms reloaded from settings.");
     }
 
     // LED Settings
@@ -1022,7 +1029,7 @@ String WebManager::getHelpHtml() {
     String t_audio_btn = isDe ? "Wecker" : "Alarms";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
     String t_conf = isDe ? "Konfiguration" : "Configuration";
-    String t_manual = isDe ? "Anleitung" : "User Manual";
+    String t_manual = isDe ? "Hilfe" : "Manual";
 
     html += "</head><body>";
     html += "<h2>" + t_manual + "</h2>";
@@ -1035,17 +1042,22 @@ String WebManager::getHelpHtml() {
     html += "<li><b>Timeout:</b> " + String(isDe ? "Nach 5 Sekunden ohne Eingabe ert&ouml;nt das 'Besetzt'-Zeichen. H&ouml;rer auflegen zum Reset." : "After 5 seconds of inactivity, a 'Busy Tone' plays. Hang up to reset.") + "</li>";
     html += "</ul></div>";
 
-    // SECTION 2: CODES & SHORTCUTS (Dynamic based on logic, but defaults listed)
-    html += "<div class='card'><h3>2. " + String(isDe ? "Nummern & Codes (H&ouml;rer abgenommen)" : "Numbers & Codes (Off Hook)") + "</h3>";
-    html += "<ul>";
-    html += "<li><b>0:</b> " + String(isDe ? "Gemini AI" : "Gemini AI") + "</li>";
-    html += "<li><b>1 - 5:</b> " + String(isDe ? "Personas / Charaktere" : "Personas / Characters") + "</li>";
-    html += "<li><b>6:</b> " + String(isDe ? "Zufalls-Mix (&Uuml;berraschung)" : "Random Surprise Mix") + "</li>";
-    html += "<li><b>8:</b> " + String(isDe ? "System Status (IP-Adresse)" : "System Status (IP Address)") + "</li>";
-    html += "<li><b>9:</b> " + String(isDe ? "Sprach-Men&uuml;" : "Voice Menu") + "</li>";
-    html += "<li><b>90:</b> " + String(isDe ? "Alle Wecker: AN / AUS" : "Toggle All Alarms: ON / OFF") + "</li>";
-    html += "<li><b>91:</b> " + String(isDe ? "N&auml;chsten Wecker &uuml;berspringen" : "Skip Next Routine Alarm") + "</li>";
-    html += "</ul></div>";
+    // Helper for visual dots (no new lines for compactness)
+    auto dot = [](String c) { return "<span style='display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:middle;background-color:" + c + ";'></span>"; };
+
+    // SECTION 2: LED CODES
+    html += "<div class='card'><h3>2. LED Status</h3>";
+    html += "<table style='width:100%; border-collapse:collapse;'>";
+    html += "<tr style='border-bottom:1px solid #333; color:#d4af37;'><th style='padding:8px; text-align:left;'>Color</th><th style='padding:8px; text-align:left;'>" + String(isDe?"Bedeutung":"Meaning") + "</th></tr>";
+    
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#00ffff") + "Cyan</td><td style='padding:8px; border-bottom:1px solid #222;'>WiFi Connecting / Boot</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ffaa00") + "Orange</td><td style='padding:8px; border-bottom:1px solid #222;'>Idle (Ready)</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ff00ff") + "Magenta</td><td style='padding:8px; border-bottom:1px solid #222;'>Time Invalid (No Sync)</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ffffff") + "White</td><td style='padding:8px; border-bottom:1px solid #222;'>Alarm Ringing</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ff0000") + "Red (Fast)</td><td style='padding:8px; border-bottom:1px solid #222;'>Timer Alert</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#aa5500") + "Dim Gold</td><td style='padding:8px; border-bottom:1px solid #222;'>Snooze</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ff0000") + "Red (SOS)</td><td style='padding:8px; border-bottom:1px solid #222;'>Error / No SD</td></tr>";
+    html += "</table></div>";
 
     // SECTION 3: ALARMS & TIMER
     html += "<div class='card'><h3>3. " + String(isDe ? "Wecker & Timer" : "Alarms & Timer") + "</h3>";

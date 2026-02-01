@@ -10,6 +10,7 @@ public:
         OFF,            // Komplett aus
         IDLE_GLOW,      // Warmes, goldenes Glimmen (Flackernd)
         CONNECTING,     // Langsames Pulsieren (Blau/Gold)
+        TIME_INVALID,   // Zeit ungültig (Lila Blinken)
         SNOOZE_MODE,    // Warmweißes Dauerleuchten
         ALARM_CLOCK,    // Warmweißes Pulsieren
         TIMER_ALERT,    // Schnelles rotes Pulsieren

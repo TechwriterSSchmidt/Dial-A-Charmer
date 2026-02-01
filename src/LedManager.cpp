@@ -98,6 +98,14 @@ void LedManager::update() {
             brightness = (int)((sin(_pulsePhase) + 1.0) / 2.0 * 255.0);
             setColor((int)brightness, 0, 0);
             break;
+            
+        case TIME_INVALID:
+            // Langsames Lila Pulsieren (keine Zeit)
+            _pulsePhase += 0.15;
+            if (_pulsePhase > 6.283) _pulsePhase -= 6.283;
+            brightness = (int)((sin(_pulsePhase) + 1.0) / 2.0 * 255.0);
+            setColor((int)brightness, 0, (int)brightness); // Magenta
+            break;
 
         case SOS:
             // Rotes Blinken

@@ -1938,7 +1938,11 @@ void loop() {
          ledManager.setMode(LedManager::SOS);
     }
     else if (WiFi.status() == WL_CONNECTED) {
-        ledManager.setMode(LedManager::IDLE_GLOW);
+        if (timeManager.isTimeSet()) {
+             ledManager.setMode(LedManager::IDLE_GLOW);
+        } else {
+             ledManager.setMode(LedManager::TIME_INVALID);
+        }
     }
     else {
          // Not Connected -> Search Mode
