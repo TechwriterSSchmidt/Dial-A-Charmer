@@ -671,6 +671,12 @@ void audioTaskCode(void * parameter) {
                     Serial.println("[Audio][CMD_STOP]");
 #endif
                     audio->stopSong();
+                    
+                    // FIX: Mute Codec to prevent hiss
+                    #if HAS_ES8388_CODEC
+                        writeCodecReg(0x2F, 0x00); // Mute Speaker
+                        writeCodecReg(0x2E, 0x00); // Mute Handset
+                    #endif
                     break;
                 case CMD_VOL:
 #if DEBUG_AUDIO
