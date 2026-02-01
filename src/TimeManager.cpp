@@ -52,21 +52,35 @@ void TimeManager::begin() {
 
 void TimeManager::loadAlarms() {
     alarms.clear();
-    prefs.begin("alarms", true); // R/O
-    int count = prefs.getInt("count", 0);
-    Serial.printf("[Time] Loading %d alarms from NVS...\n", count);
     
-    for (int i = 0; i < count; i++) {
-        String p = String(i);
-        Alarm a;
-        a.hour = prefs.getInt((p + "_h").c_str(), 0);
-        a.minute = prefs.getInt((p + "_m").c_str(), 0);
-        a.active = prefs.getBool((p + "_act").c_str(), false);
-        uint8_t dMap = prefs.getUChar((p + "_days").c_str(), 127);
-        for(int k=0; k<7; k++) a.days[k] = (dMap >> k) & 1;
-        alarms.push_back(a);
+    // NEW: Load strictly from Settings (Web Interface Source of Truth)
+    // Settings use 0=Mon .. 6=Sun
+    // TM uses simple vector of alarms. Each alarm is specific to a day+minute.
+    
+    Serial.println("[Time] Syncing alarms from Settings...");
+    
+    for (int dayIndex = 0; dayIndex < 7; dayIndex++) {
+        if (settings.isAlarmEnabled(dayIndex)) {
+            Alarm a;
+            a.hour = settings.getAlarmHour(dayIndex);
+            a.minute = settings.getAlarmMinute(dayIndex);
+            a.active = true;
+            
+            // Clear all days
+            for(int k=0; k<7; k++) a.days[k] = false;
+            
+            // Map Settings (0=Mon) to tm_wday (0=Sun, 1=Mon)
+            // Mon(0) -> 1
+            // ...
+            // Sun(6) -> 0
+            int tmWday = (dayIndex + 1) % 7;
+            a.days[tmWday] = true;
+            
+            alarms.push_back(a);
+            Serial.printf("[Time] Added Alarm for Day %d (tm_wday %d): %02d:%02d\n", dayIndex, tmWday, a.hour, a.minute);
+        }
     }
-    prefs.end();
+    Serial.printf("[Time] Total active alarms loaded: %d\n", alarms.size());
 }
 
 void TimeManager::saveAlarms() {
@@ -132,27 +146,32 @@ TimeManager::TimeSource TimeManager::getSource() {
 // --- Alarm ---
 
 void TimeManager::setAlarm(int hour, int minute) {
-    // Legacy: Clears all and sets one
-    alarms.clear();
-    addAlarm(hour, minute); // Auto-saves
+    // Legacy mapping: Update ALL entries in Settings to this time and reload.
+    // This supports the "Hold Extra Button + Dial 4 digits" simple mode.
+    // We assume the user wants this time for all currently enabled days?
+    // Or just force enable everything? Let's just set the time for all slots 
+    // to match the "Simple Alarm Clock" metaphor.
+    
+    Serial.printf("[Time] Simple Alarm Set via Dial to %02d:%02d\n", hour, minute);
+    
+    for(int i=0; i<7; i++) {
+        settings.setAlarmHour(i, hour);
+        settings.setAlarmMinute(i, minute);
+        settings.setAlarmEnabled(i, true); // Force enable
+    }
+    
+    loadAlarms(); // Reload internal vector
 }
 
 void TimeManager::addAlarm(int h, int m, bool active, uint8_t daysBitmap) {
-    Alarm a;
-    a.hour = h;
-    a.minute = m;
-    a.active = active;
-    for(int i=0; i<7; i++) a.days[i] = (daysBitmap >> i) & 1;
-    alarms.push_back(a);
-    saveAlarms();
+    // Deprecated - do not use for new logic
 }
 
 void TimeManager::deleteAlarm(int index) {
-    if (index >= 0 && index < alarms.size()) {
-        alarms.erase(alarms.begin() + index);
-        saveAlarms();
-    }
+    // Deprecated
 }
+
+// ... unchanged ...
 
 bool TimeManager::isAlarmSet() {
     return !alarms.empty();

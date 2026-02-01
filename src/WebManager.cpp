@@ -1,8 +1,11 @@
 #include "WebManager.h"
 #include <esp_task_wdt.h>
+#include <Arduino.h>
+#include <WiFi.h>
 #include "LedManager.h"
 #include "PhonebookManager.h"
 #include "WebResources.h" // Setup Styles
+#include "TimeManager.h"
 #include <ArduinoJson.h>
 #include <ESPmDNS.h>
 
@@ -418,6 +421,16 @@ void WebManager::handlePreviewApi(AsyncWebServerRequest* request) {
     if (request->hasArg("type") && request->hasArg("id")) {
         String type = request->arg("type");
         String id = request->arg("id");
+        
+        // If ID is numeric (Index from Dropdown), resolve to Filename
+        int idx = id.toInt();
+        if (idx > 0) {
+             if (type == "ring" && idx <= (int)cachedRingtones.size()) {
+                 id = cachedRingtones[idx-1];
+             }
+             // Add "sys" / "dt" mapping if needed, but usually they use string names
+        }
+
         resetApTimer();
 #if DEBUG_AUDIO
         Serial.printf("[Web][Preview] type=%s id=%s\n", type.c_str(), id.c_str());
@@ -470,6 +483,10 @@ void WebManager::handleSave(AsyncWebServerRequest* request) {
     }
     
     if (request->arg("form_id") == "basic") {
+        if(request->hasArg("max_vol")) settings.setAlarmMaxVolume(request->arg("max_vol").toInt());
+        bool ramp = request->hasArg("ramp");
+        settings.setAlarmRampUp(ramp);
+
         // Save 7 Alarms
         for(int i=0; i<7; i++) {
              String s = String(i);
@@ -478,6 +495,10 @@ void WebManager::handleSave(AsyncWebServerRequest* request) {
              if(request->hasArg("alm_t_"+s)) settings.setAlarmTone(i, request->arg("alm_t_"+s).toInt());
              settings.setAlarmEnabled(i, request->hasArg("alm_en_"+s));
         }
+        
+        // Reload Alarms logic
+        timeManager.loadAlarms();
+        Serial.println("WebManager: Alarms reloaded from settings.");
     }
 
     // LED Settings
@@ -562,12 +583,32 @@ String WebManager::getSettingsHtml() {
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += COMMON_CSS; // Use Shared Resource
     html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>"; // Save Lang
+    html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>"; // Audio Preview
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
 
     html += "<form action='/save' method='POST'>";
     html += "<input type='hidden' name='form_id' value='basic'>";
     html += "<input type='hidden' name='redirect' value='/settings'>"; // Redirect back to settings
+
+    // --- Alarm Configuration ---
+    html += "<div class='card'><h3>" + String(isDe ? "Wecker Einstellungen" : "Alarm Settings") + "</h3>";
+    
+    // Max Volume
+    html += "<label>" + String(isDe ? "Max. Lautst&auml;rke" : "Max Volume") + " (0-42) <output>" + String(settings.getAlarmMaxVolume()) + "</output></label>";
+    html += "<input type='range' name='max_vol' min='0' max='42' value='" + String(settings.getAlarmMaxVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+
+    // Snooze
+    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
+    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
+
+    // Ramp Up Checkbox
+    html += "<div style='display:flex;align-items:center;margin-top:15px;padding-top:10px;border-top:1px solid #333;'>";
+    html += "<label class='switch' style='margin-right:15px;margin-top:0;'><input type='checkbox' name='ramp' value='1'" + String(settings.getAlarmRampUp() ? " checked" : "") + "><span class='slider'></span></label>";
+    html += "<span style='font-size:1rem;color:#ddd;'>" + String(isDe ? "Ansteigende Lautst&auml;rke" : "Ascending Volume") + "</span>";
+    html += "</div>";
+
+    html += "</div>";
 
     // Repeating Alarm - Mobile Friendly Layout (Stacked)
     html += "<div class='card'><h3>" + String(isDe ? "T&auml;gliche Wecker" : "Daily Alarms") + "</h3>";
@@ -604,7 +645,7 @@ String WebManager::getSettingsHtml() {
         
         // Tone Select
         html += "<div style='flex-grow:1; margin-left:15px;'>";
-        html += "<select name='alm_t_" + String(i) + "' style='width:100%;'>";
+        html += "<select name='alm_t_" + String(i) + "' style='width:100%;' onchange='prev(\"ring\",this.value)'>";
         html += getSdFileOptions(Path::RINGTONES, settings.getAlarmTone(i));
         esp_task_wdt_reset();
         html += "</select>";
@@ -747,8 +788,6 @@ String WebManager::getAdvancedHtml() {
     html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
     html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
-    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
     
     // Tones
     html += "<div style='display:flex; gap:10px; margin-top:15px;'>";
@@ -1022,7 +1061,7 @@ String WebManager::getHelpHtml() {
     String t_audio_btn = isDe ? "Wecker" : "Alarms";
     String t_pb = isDe ? "Telefonbuch" : "Phonebook";
     String t_conf = isDe ? "Konfiguration" : "Configuration";
-    String t_manual = isDe ? "Anleitung" : "User Manual";
+    String t_manual = isDe ? "Hilfe" : "Manual";
 
     html += "</head><body>";
     html += "<h2>" + t_manual + "</h2>";
@@ -1035,17 +1074,22 @@ String WebManager::getHelpHtml() {
     html += "<li><b>Timeout:</b> " + String(isDe ? "Nach 5 Sekunden ohne Eingabe ert&ouml;nt das 'Besetzt'-Zeichen. H&ouml;rer auflegen zum Reset." : "After 5 seconds of inactivity, a 'Busy Tone' plays. Hang up to reset.") + "</li>";
     html += "</ul></div>";
 
-    // SECTION 2: CODES & SHORTCUTS (Dynamic based on logic, but defaults listed)
-    html += "<div class='card'><h3>2. " + String(isDe ? "Nummern & Codes (H&ouml;rer abgenommen)" : "Numbers & Codes (Off Hook)") + "</h3>";
-    html += "<ul>";
-    html += "<li><b>0:</b> " + String(isDe ? "Gemini AI" : "Gemini AI") + "</li>";
-    html += "<li><b>1 - 5:</b> " + String(isDe ? "Personas / Charaktere" : "Personas / Characters") + "</li>";
-    html += "<li><b>6:</b> " + String(isDe ? "Zufalls-Mix (&Uuml;berraschung)" : "Random Surprise Mix") + "</li>";
-    html += "<li><b>8:</b> " + String(isDe ? "System Status (IP-Adresse)" : "System Status (IP Address)") + "</li>";
-    html += "<li><b>9:</b> " + String(isDe ? "Sprach-Men&uuml;" : "Voice Menu") + "</li>";
-    html += "<li><b>90:</b> " + String(isDe ? "Alle Wecker: AN / AUS" : "Toggle All Alarms: ON / OFF") + "</li>";
-    html += "<li><b>91:</b> " + String(isDe ? "N&auml;chsten Wecker &uuml;berspringen" : "Skip Next Routine Alarm") + "</li>";
-    html += "</ul></div>";
+    // Helper for visual dots (no new lines for compactness)
+    auto dot = [](String c) { return "<span style='display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:8px;vertical-align:middle;background-color:" + c + ";'></span>"; };
+
+    // SECTION 2: LED CODES
+    html += "<div class='card'><h3>2. LED Status</h3>";
+    html += "<table style='width:100%; border-collapse:collapse;'>";
+    html += "<tr style='border-bottom:1px solid #333; color:#d4af37;'><th style='padding:8px; text-align:left;'>Color</th><th style='padding:8px; text-align:left;'>" + String(isDe?"Bedeutung":"Meaning") + "</th></tr>";
+    
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#00ffff") + "Cyan</td><td style='padding:8px; border-bottom:1px solid #222;'>WiFi Connecting / Boot</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ffaa00") + "Orange</td><td style='padding:8px; border-bottom:1px solid #222;'>Idle (Ready)</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ff00ff") + "Magenta</td><td style='padding:8px; border-bottom:1px solid #222;'>Time Invalid (No Sync)</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ffffff") + "White</td><td style='padding:8px; border-bottom:1px solid #222;'>Alarm Ringing</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ff0000") + "Red (Fast)</td><td style='padding:8px; border-bottom:1px solid #222;'>Timer Alert</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#aa5500") + "Dim Gold</td><td style='padding:8px; border-bottom:1px solid #222;'>Snooze</td></tr>";
+    html += "<tr><td style='padding:8px; border-bottom:1px solid #222;'>" + dot("#ff0000") + "Red (SOS)</td><td style='padding:8px; border-bottom:1px solid #222;'>Error / No SD</td></tr>";
+    html += "</table></div>";
 
     // SECTION 3: ALARMS & TIMER
     html += "<div class='card'><h3>3. " + String(isDe ? "Wecker & Timer" : "Alarms & Timer") + "</h3>";

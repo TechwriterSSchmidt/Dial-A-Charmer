@@ -1059,7 +1059,13 @@ void startAlarm(bool isTimer) {
     isAlarmRinging = true;
     isTimerRinging = isTimer; 
     ringingStartTime = millis();
-    currentAlarmVol = 5; 
+    
+    int maxVol = settings.getAlarmMaxVolume();
+    bool ramp = settings.getAlarmRampUp();
+    
+    // Start at 5 if ramping, else max
+    currentAlarmVol = ramp ? 5 : maxVol;
+     
     Serial.println(isTimer ? "TIMER ALERT STARTED" : "ALARM CLOCK RINGING");
     
     setAudioOutput(OUT_SPEAKER);
@@ -1087,9 +1093,17 @@ void stopAlarm() {
 }
 
 void startSnooze() {
-    stopAlarm();
+    stopAlarm(); // Stops ringing, sets output to handset
     timeManager.startSnooze();
     Serial.println("Snooze Started.");
+    
+    // Play Confirmation
+    String lang = settings.getLanguage();
+    String path = "/system/snooze_active_" + lang + ".wav";
+    // Check if exists, fallback?
+    if (SD.exists(path)) {
+        playSound(path, false); 
+    }
 }
 
 void cancelSnooze() {
@@ -1101,15 +1115,26 @@ void handleAlarmLogic() {
     if (!isAlarmRinging) return;
     
     unsigned long duration = millis() - ringingStartTime;
-    // Vibration Pattern Removed
     
-    // Volume Ramp
-    int maxVol = settings.getBaseVolume();
-    int rampStep = duration / 3000; 
-    int newVol = 5 + rampStep;
+    // Volume Logic
+    int maxVol = settings.getAlarmMaxVolume();
+    bool ramp = settings.getAlarmRampUp();
     
+    int newVol = currentAlarmVol;
+    
+    if (ramp) {
+        // Ramp Up: Start at 5, +1 every 3s
+        int rampStep = duration / 3000; 
+        newVol = 5 + rampStep;
+    } else {
+        // No Ramp: Constant Max
+        newVol = maxVol;
+    }
+    
+    // Cap at Max
     if (newVol > maxVol) newVol = maxVol;
     
+    // Apply if changed
     if (newVol != currentAlarmVol) {
         currentAlarmVol = newVol;
         audio->setVolume(::map(currentAlarmVol, 0, 42, 0, 21));
@@ -1938,7 +1963,11 @@ void loop() {
          ledManager.setMode(LedManager::SOS);
     }
     else if (WiFi.status() == WL_CONNECTED) {
-        ledManager.setMode(LedManager::IDLE_GLOW);
+        if (timeManager.isTimeSet()) {
+             ledManager.setMode(LedManager::IDLE_GLOW);
+        } else {
+             ledManager.setMode(LedManager::TIME_INVALID);
+        }
     }
     else {
          // Not Connected -> Search Mode
