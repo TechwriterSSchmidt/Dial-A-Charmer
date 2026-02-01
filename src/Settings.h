@@ -42,6 +42,13 @@ public:
     void setBaseVolume(int vol);
     int getSnoozeMinutes(); // Added
     void setSnoozeMinutes(int min); 
+    
+    // New Alarm Options
+    bool getAlarmRampUp(); 
+    void setAlarmRampUp(bool enabled);
+    int getAlarmMaxVolume(); 
+    void setAlarmMaxVolume(int vol);
+
     String getRingtone();
     void setRingtone(String toneFilename);
     String getDialTone(); // New

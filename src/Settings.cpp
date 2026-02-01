@@ -17,6 +17,8 @@ struct InternalCache {
     int vol;
     int baseVol;
     int snooze;
+    bool alarmRampUp; // New
+    int alarmMaxVol; // New
     String ringtone;
     String dialTone;
     int ledDay;
@@ -70,6 +72,8 @@ void Settings::loadCache() {
         ic.vol = _prefs.getInt("vol", CONF_DEFAULT_VOL);
         ic.baseVol = _prefs.getInt("base_vol", 30);
         ic.snooze = _prefs.getInt("snooze", 9);
+        ic.alarmRampUp = _prefs.getBool("ramp", false);
+        ic.alarmMaxVol = _prefs.getInt("max_vol", 21);
         ic.ringtone = _prefs.getString("ring", "");
         if (ic.ringtone.length() == 0) {
             int legacyRing = _prefs.getInt("ring", CONF_DEFAULT_RING);
@@ -241,6 +245,28 @@ void Settings::setSnoozeMinutes(int min) {
     if (min > 20) min = 20;
     ic.snooze = min;
     _prefs.putInt("snooze", min);
+}
+
+bool Settings::getAlarmRampUp() {
+    if(!ic.loaded) loadCache();
+    return ic.alarmRampUp;
+}
+
+void Settings::setAlarmRampUp(bool enabled) {
+    ic.alarmRampUp = enabled;
+    _prefs.putBool("ramp", enabled);
+}
+
+int Settings::getAlarmMaxVolume() {
+     if(!ic.loaded) loadCache();
+    return ic.alarmMaxVol;
+}
+
+void Settings::setAlarmMaxVolume(int vol) {
+    if (vol < 0) vol = 0;
+    if (vol > 42) vol = 42; // Limit to 42
+    ic.alarmMaxVol = vol;
+    _prefs.putInt("max_vol", vol);
 }
 
 String Settings::getRingtone() {

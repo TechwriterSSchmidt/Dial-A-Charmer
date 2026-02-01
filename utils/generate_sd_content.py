@@ -72,9 +72,10 @@ TTS_PROMPTS = {
         ("Timer gesetzt auf:", "timer_confirm_de.wav"),
         ("Wecker gestellt auf:", "alarm_confirm_de.wav"),
         ("Timer beendet.", "timer_deleted_de.wav"),
-        ("Wecker gelöscht.", "alarm_deleted_de.wav"),
+        ("Wecker ausgeschaltet.", "alarm_deleted_de.wav"),
         ("Timer gestoppt.", "timer_stopped_de.wav"),
         ("Alarm beendet.", "alarm_stopped_de.wav"),
+        ("Schlummermodus aktiviert.", "snooze_active_de.wav"),
         ("System-Update läuft. Bitte warten.", "reindex_warning_de.wav")
     ]
 }

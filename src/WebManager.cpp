@@ -473,6 +473,10 @@ void WebManager::handleSave(AsyncWebServerRequest* request) {
     }
     
     if (request->arg("form_id") == "basic") {
+        if(request->hasArg("max_vol")) settings.setAlarmMaxVolume(request->arg("max_vol").toInt());
+        bool ramp = request->hasArg("ramp");
+        settings.setAlarmRampUp(ramp);
+
         // Save 7 Alarms
         for(int i=0; i<7; i++) {
              String s = String(i);
@@ -575,6 +579,25 @@ String WebManager::getSettingsHtml() {
     html += "<form action='/save' method='POST'>";
     html += "<input type='hidden' name='form_id' value='basic'>";
     html += "<input type='hidden' name='redirect' value='/settings'>"; // Redirect back to settings
+
+    // --- Alarm Configuration ---
+    html += "<div class='card'><h3>" + String(isDe ? "Wecker Einstellungen" : "Alarm Settings") + "</h3>";
+    
+    // Max Volume
+    html += "<label>" + String(isDe ? "Max. Lautst&auml;rke" : "Max Volume") + " (0-42) <output>" + String(settings.getAlarmMaxVolume()) + "</output></label>";
+    html += "<input type='range' name='max_vol' min='0' max='42' value='" + String(settings.getAlarmMaxVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
+
+    // Snooze
+    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
+    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
+
+    // Ramp Up Checkbox
+    html += "<div style='display:flex;align-items:center;margin-top:15px;padding-top:10px;border-top:1px solid #333;'>";
+    html += "<label class='switch' style='margin-right:15px;margin-top:0;'><input type='checkbox' name='ramp' value='1'" + String(settings.getAlarmRampUp() ? " checked" : "") + "><span class='slider'></span></label>";
+    html += "<span style='font-size:1rem;color:#ddd;'>" + String(isDe ? "Ansteigende Lautst&auml;rke" : "Ascending Volume") + "</span>";
+    html += "</div>";
+
+    html += "</div>";
 
     // Repeating Alarm - Mobile Friendly Layout (Stacked)
     html += "<div class='card'><h3>" + String(isDe ? "T&auml;gliche Wecker" : "Daily Alarms") + "</h3>";
@@ -754,8 +777,6 @@ String WebManager::getAdvancedHtml() {
     html += "<input type='range' name='vol' min='0' max='42' value='" + String(settings.getVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     html += "<label>" + t_r_vol + " (0-42) <output>" + String(settings.getBaseVolume()) + "</output></label>";
     html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
-    html += "<label>" + String(isDe ? "Snooze Dauer (Min)" : "Snooze Time (Min)") + " (0-20)</label>";
-    html += "<input type='number' name='snooze' min='0' max='20' value='" + String(settings.getSnoozeMinutes()) + "'>";
     
     // Tones
     html += "<div style='display:flex; gap:10px; margin-top:15px;'>";
