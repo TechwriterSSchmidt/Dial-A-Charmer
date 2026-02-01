@@ -1420,15 +1420,6 @@ void playDialTone() {
         dt = "/system/dialtone_1.wav";
     }
 
-    // Workaround: Valid file check for current specific SD corruption/format issue
-    // Removed Workaround that maps dialtone_1.wav to beep.wav as requested
-    /*
-    if (dt == "/system/dialtone_1.wav") {
-         Serial.println("Workaround: Remapping potentially broken dialtone_1.wav to beep.wav");
-         dt = "/system/beep.wav";
-    }
-    */
-
     Serial.println("Starting Dial Tone: " + dt);
     
     // Smart Output: If we are "Off Hook", it's Handset.
@@ -1693,9 +1684,10 @@ void loop() {
              // For now, we attempt to play. Ensure file is TINY.
              // If loop latency is high, this will slow down dialing detection!
              // Proceed with caution.
-             if (SD.exists(Path::CLICK)) {
-                audio->connecttoFS(SD, Path::CLICK);
-             }
+             // REMOVED SD.exists check to prevent race condition with Audio Task
+             // if (SD.exists(Path::CLICK)) {
+             //    audio->connecttoFS(SD, Path::CLICK);
+             // }
         }
     }
 

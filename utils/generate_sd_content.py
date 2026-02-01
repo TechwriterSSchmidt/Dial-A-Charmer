@@ -11,7 +11,7 @@ import base64
 from pathlib import Path
 from gtts import gTTS
 from pydub import AudioSegment
-from pydub.generators import Sine, Square, Sawtooth, Pulse
+from pydub.generators import Sine, Square, Sawtooth, Pulse, WhiteNoise
 from google import genai
 
 # Configuration
@@ -56,7 +56,7 @@ PIPER_MODELS_DE = [
 # System Prompts Configuration
 # Format: "path/to/file.wav": ("Text to speak", "Language Code", "Specific Model Name or None")
 # Note: If model is None, it defaults to Gemini (if API key present) or gTTS.
-# You can also use "gemini:VoiceName" (e.g. "gemini:Puck", "gemini:Charon", "gemini:Kore", "gemini:Fenrir", "gemini:Aoede")
+# You can also use "gemini:VoiceName" (e.g. "gemini:Puck", "gemini:Charon", "de_DE-thorsten-high.onnx", "gemini:Fenrir", "gemini:Aoede")
 SYSTEM_PROMPTS = {
     # English System Messages (Using Piper/Jenny for consistency as per user choice)
     "system/snooze_active_en.wav": ("Snooze active.", "en", "en_GB-jenny_dioco-medium.onnx"),
@@ -79,24 +79,24 @@ SYSTEM_PROMPTS = {
     "system/timer_set_en.wav": ("Timer set.", "en", "en_GB-jenny_dioco-medium.onnx"),
     
     # German System Messages (Gemini Kore: friendly but impatient female voice)
-    "system/snooze_active_de.wav": ("(freundlich und erotisch-rauchig) Snooze aktiv.", "de", "gemini:Kore"),
-    "system/system_ready_de.wav": ("(freundlich und erotisch-rauchig) System bereit.", "de", "gemini:Kore"),
-    "system/time_unavailable_de.wav": ("(freundlich und erotisch-rauchig) Zeit-Synchronisation fehlgeschlagen.", "de", "gemini:Kore"),
-    "system/timer_stopped_de.wav": ("(freundlich und erotisch-rauchig) Timer abgebrochen.", "de", "gemini:Kore"),
-    "system/alarm_stopped_de.wav": ("(freundlich und erotisch-rauchig) Alarm abgebrochen.", "de", "gemini:Kore"),
-    "system/reindex_warning_de.wav": ("(freundlich und erotisch-rauchig) Bitte warten. Inhalte werden neu indexiert.", "de", "gemini:Kore"),
-    "system/alarm_active_de.wav": ("(freundlich und erotisch-rauchig) Alarm aktiv.", "de", "gemini:Kore"),
-    "system/alarm_confirm_de.wav": ("(freundlich und erotisch-rauchig) Alarm bestätigt.", "de", "gemini:Kore"),
-    "system/alarm_deleted_de.wav": ("(freundlich und erotisch-rauchig) Alarm gelöscht.", "de", "gemini:Kore"),
-    "system/alarm_skipped_de.wav": ("(freundlich und erotisch-rauchig) Alarm übersprungen.", "de", "gemini:Kore"),
-    "system/alarms_off_de.wav": ("(freundlich und erotisch-rauchig) Alarme deaktiviert.", "de", "gemini:Kore"),
-    "system/alarms_on_de.wav": ("(freundlich und erotisch-rauchig) Alarme aktiviert.", "de", "gemini:Kore"),
-    "system/battery_crit_de.wav": ("(freundlich und erotisch-rauchig) Batterie kritisch. System wird heruntergefahren.", "de", "gemini:Kore"),
-    "system/error_msg_de.wav": ("(freundlich und erotisch-rauchig) Ein Fehler ist aufgetreten.", "de", "gemini:Kore"),
-    "system/menu_de.wav": ("(freundlich und erotisch-rauchig) Hauptmenü.", "de", "gemini:Kore"),
-    "system/timer_confirm_de.wav": ("(freundlich und erotisch-rauchig) Timer gestartet.", "de", "gemini:Kore"),
-    "system/timer_deleted_de.wav": ("(freundlich und erotisch-rauchig) Timer gelöscht.", "de", "gemini:Kore"),
-    "system/timer_set_de.wav": ("(freundlich und erotisch-rauchig) Timer gesetzt.", "de", "gemini:Kore"),
+    "system/snooze_active_de.wav": ("Snooze aktiv.", "de", "de_DE-thorsten-high.onnx"),
+    "system/system_ready_de.wav": ("System bereit.", "de", "de_DE-thorsten-high.onnx"),
+    "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", "de_DE-thorsten-high.onnx"),
+    "system/timer_stopped_de.wav": ("Timer abgebrochen.", "de", "de_DE-thorsten-high.onnx"),
+    "system/alarm_stopped_de.wav": ("Alarm abgebrochen.", "de", "de_DE-thorsten-high.onnx"),
+    "system/reindex_warning_de.wav": ("Bitte warten. Inhalte werden neu indexiert.", "de", "de_DE-thorsten-high.onnx"),
+    "system/alarm_active_de.wav": ("Alarm aktiv.", "de", "de_DE-thorsten-high.onnx"),
+    "system/alarm_confirm_de.wav": ("Alarm bestätigt.", "de", "de_DE-thorsten-high.onnx"),
+    "system/alarm_deleted_de.wav": ("Alarm gelöscht.", "de", "de_DE-thorsten-high.onnx"),
+    "system/alarm_skipped_de.wav": ("Alarm übersprungen.", "de", "de_DE-thorsten-high.onnx"),
+    "system/alarms_off_de.wav": ("Alarme deaktiviert.", "de", "de_DE-thorsten-high.onnx"),
+    "system/alarms_on_de.wav": ("Alarme aktiviert.", "de", "de_DE-thorsten-high.onnx"),
+    "system/battery_crit_de.wav": ("Batterie kritisch. System wird heruntergefahren.", "de", "de_DE-thorsten-high.onnx"),
+    "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", "de_DE-thorsten-high.onnx"),
+    "system/menu_de.wav": ("Hauptmenü.", "de", "de_DE-thorsten-high.onnx"),
+    "system/timer_confirm_de.wav": ("Timer gestartet.", "de", "de_DE-thorsten-high.onnx"),
+    "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", "de_DE-thorsten-high.onnx"),
+    "system/timer_set_de.wav": ("Timer gesetzt.", "de", "de_DE-thorsten-high.onnx"),
 }
 
 # Static Files to Copy (Source Path relative to template, Destination relative to SD Root)
@@ -190,9 +190,9 @@ def generate_tones(base_dir):
 def generate_time_announcements():
     """Generates time announcement files for DE and EN."""
     
-    # German (Gemini Kore: friendly but impatient female voice)
-    model_de = "gemini:Kore"
-    inst_de = "(freundlich und erotisch-rauchig) "
+    # German (Piper/Thorsten - Offline Fallback for speed/reliability)
+    model_de = "de_DE-thorsten-high.onnx"
+    inst_de = ""
     # English (Piper/Jenny)
     model_en = "en_GB-jenny_dioco-medium.onnx"
     inst_en = ""
@@ -301,50 +301,69 @@ def generate_speech(text, lang, output_path, model_name=None):
         effective_model = None
 
     if use_gemini and gemini_client:
-        try:
-            # Using current stable model with Native Audio/TTS support
-            response = gemini_client.models.generate_content(
-                model='gemini-2.0-flash',
-                contents=text,
-                config={
-                    'speech_config': {'voice_config': {'prebuilt_voice_config': {'voice_name': gemini_voice}}},
-                }
-            )
-            
-            audio_data = None
-            mime_type = "audio/wav" # Default assumption
-            
-            if response.candidates and response.candidates[0].content.parts:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        audio_data = part.inline_data.data
-                        mime_type = part.inline_data.mime_type
-                        break
-            
-            if audio_data:
-                # Some models return MP3 data even if WAV is expected, or vice-versa
-                suffix = ".mp3" if "mpeg" in mime_type else ".wav"
-                temp_audio = str(output_path) + suffix
+        max_retries = 3
+        # Base delay to respect the Free Tier Limit (15 RPM = 1 request every 4s)
+        # We add a bit of buffer
+        rate_limit_delay = 5.0 
+        
+        for attempt in range(max_retries):
+            try:
+                # Proactive rate limiting
+                time.sleep(rate_limit_delay)
                 
-                with open(temp_audio, "wb") as f:
-                    f.write(audio_data)
+                # Using current stable model with Native Audio/TTS support
+                response = gemini_client.models.generate_content(
+                    model='gemini-2.0-flash',
+                    contents=text,
+                    config={
+                        'speech_config': {'voice_config': {'prebuilt_voice_config': {'voice_name': gemini_voice}}},
+                    }
+                )
                 
-                # Convert to standard format
-                if ".mp3" in suffix:
-                    sound = AudioSegment.from_mp3(temp_audio)
+                audio_data = None
+                mime_type = "audio/wav" # Default assumption
+                
+                if response.candidates and response.candidates[0].content.parts:
+                    for part in response.candidates[0].content.parts:
+                        if part.inline_data:
+                            audio_data = part.inline_data.data
+                            mime_type = part.inline_data.mime_type
+                            break
+                
+                if audio_data:
+                    # Some models return MP3 data even if WAV is expected, or vice-versa
+                    suffix = ".mp3" if "mpeg" in mime_type else ".wav"
+                    temp_audio = str(output_path) + suffix
+                    
+                    with open(temp_audio, "wb") as f:
+                        f.write(audio_data)
+                    
+                    # Convert to standard format
+                    if ".mp3" in suffix:
+                        sound = AudioSegment.from_mp3(temp_audio)
+                    else:
+                        sound = AudioSegment.from_file(temp_audio)
+                    
+                    sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
+                    sound.export(str(output_path), format="wav")
+                    
+                    if os.path.exists(temp_audio):
+                        os.remove(temp_audio)
+                    return True
                 else:
-                    sound = AudioSegment.from_file(temp_audio)
-                
-                sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-                sound.export(str(output_path), format="wav")
-                
-                if os.path.exists(temp_audio):
-                    os.remove(temp_audio)
-                return True
-            else:
-                safe_print(f"  [WARN] Gemini returned no audio for: {text[:30]}...")
-        except Exception as e:
-            safe_print(f"  [ERROR] Gemini TTS failed: {e}. Falling back...")
+                    safe_print(f"  [WARN] Gemini returned no audio for: {text[:30]}...")
+                    # No audio data usually means safety block or weird response, consider it a non-retryable error unless empty
+                    break 
+
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "quota" in err_str.lower():
+                    wait_time = 10 * (attempt + 1) # Backoff: 10s, 20s, 30s
+                    safe_print(f"  [WARN] Rate limit hit (429). Retrying in {wait_time}s...")
+                    time.sleep(wait_time)
+                else:
+                    safe_print(f"  [ERROR] Gemini TTS failed: {e}. Falling back...")
+                    break # Don't retry other errors
 
     # CASE 1: Use gTTS if no specific Piper model is requested (and Gemini failed or not available)
     if effective_model is None:
@@ -814,6 +833,182 @@ def generate_procedural_tones():
         
     save_tone(siren * 2, "warning_siren.wav", -12.0) # Sawtooth is loud!
 
+    # 6. Zen Garden (Low Gong)
+    print("  Synthesizing Zen Garden...")
+    gong_fund = Sine(220).to_audio_segment(duration=3000).fade_out(2500)
+    gong_over = Sine(220 * 1.6).to_audio_segment(duration=3000).fade_out(2500).apply_gain(-6)
+    gong = gong_fund.overlay(gong_over).apply_gain(-2)
+    save_tone(gong, "zen_garden.wav", -3.0)
+
+    # 7. 8-Bit Powerup (Rapid Arpeggio)
+    print("  Synthesizing 8-Bit Powerup...")
+    notes = [440, 554, 659, 880, 1108, 1318] # A major arpeggio
+    powerup = AudioSegment.silent(duration=0)
+    for freq in notes:
+        powerup += Square(freq).to_audio_segment(duration=60).fade_out(5)
+    save_tone(powerup * 3, "8bit_powerup.wav", -6.0)
+
+    # 8. Gentle Wakeup (Slow Swell)
+    print("  Synthesizing Gentle Wakeup...")
+    # Generate 3 sine waves slightly detuned for richness
+    swell1 = Sine(330).to_audio_segment(duration=4000) # E natural
+    swell2 = Sine(332).to_audio_segment(duration=4000)
+    swell3 = Sine(440).to_audio_segment(duration=4000) # A natural
+    
+    pad = swell1.overlay(swell2).overlay(swell3)
+    # Fade in 2s, Fade out 2s
+    pad = pad.fade_in(2000).fade_out(2000)
+    save_tone(pad, "gentle_wakeup.wav", -5.0)
+    
+    # 9. Funky Beat (Simple Bass-Kicks)
+    print("  Synthesizing Funky Beat...")
+    kick = Sine(60).to_audio_segment(duration=150).fade_out(20).apply_gain(2) # Low thump
+    snare = WhiteNoise().to_audio_segment(duration=100).fade_out(20).apply_gain(-5) # Noise burst
+    hat   = WhiteNoise().to_audio_segment(duration=30).fade_out(5).apply_gain(-10) # Short click
+    
+    silence_short = AudioSegment.silent(duration=100)
+    silence_long = AudioSegment.silent(duration=250)
+    
+    # Kick... Hat.. Snare.. Hat..
+    beat = kick + silence_short + hat + silence_short + snare + silence_short + hat + silence_short
+    save_tone(beat * 4, "funky_beat.wav", -3.0)
+
+    # 10. Ocean Waves (Filtered Noise Swells)
+    print("  Synthesizing Ocean Waves...")
+    # Layering varying low-passed white noise to simulate waves
+    wave_dur = 6000
+    ocean = AudioSegment.silent(duration=wave_dur)
+    wave1 = WhiteNoise().to_audio_segment(duration=wave_dur).low_pass_filter(300).fade_in(2000).fade_out(2000).apply_gain(-3)
+    wave2 = WhiteNoise().to_audio_segment(duration=wave_dur).low_pass_filter(600).fade_in(3000).fade_out(3000).apply_gain(-9)
+    ocean = wave1.overlay(wave2)
+    save_tone(ocean, "ocean_waves.wav", -3.0)
+
+    # 11. Gentle Rain (Constant noise with steady high-cut)
+    print("  Synthesizing Gentle Rain...")
+    rain_dur = 5000
+    rain = WhiteNoise().to_audio_segment(duration=rain_dur).low_pass_filter(1000)
+    rain = rain.fade_in(500).fade_out(500).apply_gain(-6)
+    save_tone(rain, "gentle_rain.wav", -3.0)
+
+    # 12. Wind Chimes (Random Pentatonic High Sines)
+    print("  Synthesizing Wind Chimes...")
+    chimes = AudioSegment.silent(duration=6000)
+    # C Major Pentatonic: C6, D6, E6, G6, A6
+    scale = [1046.5, 1174.6, 1318.5, 1567.9, 1760.0] 
+    for _ in range(8):
+        freq = random.choice(scale)
+        start = random.randint(0, 4500)
+        dur = random.randint(1000, 2000)
+        note = Sine(freq).to_audio_segment(duration=dur).fade_out(dur).apply_gain(-12)
+        chimes = chimes.overlay(note, position=start)
+    save_tone(chimes, "wind_chimes.wav", -3.0)
+
+    # 13. Cosmic Drift (Filtered Sawtooth Pad)
+    print("  Synthesizing Cosmic Drift...")
+    drift_dur = 6000
+    # Left channel-ish freq and Right channel-ish freq mixed slightly detuned
+    pad1 = Sawtooth(110).to_audio_segment(duration=drift_dur).low_pass_filter(300).fade_in(2000).fade_out(2000)
+    pad2 = Sawtooth(111).to_audio_segment(duration=drift_dur).low_pass_filter(400).fade_in(2000).fade_out(2000)
+    cosmic = pad1.overlay(pad2).apply_gain(-10)
+    save_tone(cosmic, "cosmic_drift.wav", -3.0)
+
+    # 14. Crystal Glass (Clean Sine Sequence)
+    print("  Synthesizing Crystal Glass...")
+    glass_notes = [523.25, 659.25, 783.99, 1046.50]
+    glass = AudioSegment.silent(duration=2000 + len(glass_notes)*500)
+    for i, freq in enumerate(glass_notes):
+        tone = Sine(freq).to_audio_segment(duration=2000).fade_out(1500).apply_gain(-10)
+        glass = glass.overlay(tone, position=i * 500)
+    save_tone(glass, "crystal_glass.wav", -3.0)
+    
+    # 15. Singing Bowl (Harmonic constant)
+    print("  Synthesizing Singing Bowl...")
+    bowl_dur = 6000
+    base = Sine(220).to_audio_segment(duration=bowl_dur).fade_in(100).fade_out(4000)
+    # Add a non-integer harmonic for the metallic "beating" sound
+    harm = Sine(220 * 2.3).to_audio_segment(duration=bowl_dur).fade_in(100).fade_out(3000).apply_gain(-12)
+    bowl = base.overlay(harm).apply_gain(-3)
+    save_tone(bowl, "singing_bowl.wav", -3.0)
+
+    # 16. Happy Marimba (Short percussive sines)
+    print("  Synthesizing Happy Marimba...")
+    # C Major: C E G A C
+    notes = [523, 659, 784, 880, 1046]
+    marimba = AudioSegment.silent(duration=5000)
+    for i in range(8):
+        freq = random.choice(notes)
+        start = i * 250
+        # Short envelope simulating mallet hit
+        tone = Sine(freq).to_audio_segment(duration=400).fade_out(300).apply_gain(-5)
+        marimba = marimba.overlay(tone, position=start)
+    save_tone(marimba, "happy_marimba.wav", -3.0)
+
+    # 17. Sunrise Birds (High chirp simulation)
+    print("  Synthesizing Sunrise Birds...")
+    birds = AudioSegment.silent(duration=5000)
+    for i in range(6):
+        start = random.randint(0, 4000)
+        dur = random.randint(100, 300)
+        freq_start = random.randint(2000, 3000)
+        freq_end = random.randint(1500, 2500)
+        # Chirp is a sine sweep
+        # Since pydub doesn't have sweeps, we approximate with short segments or just high sine
+        chirp = Sine(freq_start).to_audio_segment(duration=dur).fade_in(10).fade_out(50).apply_gain(-12)
+        birds = birds.overlay(chirp, position=start)
+    save_tone(birds, "sunrise_birds.wav", -6.0)
+
+    # 18. Bouncy Synth (Square with fast envelope)
+    print("  Synthesizing Bouncy Synth...")
+    bouncy = AudioSegment.silent(duration=4000)
+    b_notes = [261, 329, 392, 523] # C E G C
+    for i in range(8):
+        freq = b_notes[i % 4]
+        start = i * 400
+        # Square wave for retro feel
+        tone = Square(freq).to_audio_segment(duration=200).fade_out(100).apply_gain(-10)
+        bouncy = bouncy.overlay(tone, position=start)
+    save_tone(bouncy, "bouncy_synth.wav", -6.0)
+
+def generate_wake_up_rants():
+    """
+    Generates sassy wake-up quotes using Piper.
+    """
+    print("\n\n--- Generating Sassy Wake Up Quotes (Piper) ---")
+    target_dir = SD_ROOT / "ringtones"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Text, Filename, Lang, Model
+    rants = [
+        # German (Sassy/Frech) - Thorsten
+        ("Aufstehen, Sonnenschein! Oder auch nicht, mir egal. Aber der Wecker sagt ja.", "rant_de_sunshine.wav", "de", "de_DE-thorsten-high.onnx"),
+        ("Der frühe Vogel kann mich mal... aber du musst leider raus. Hopp hopp!", "rant_de_bird.wav", "de", "de_DE-thorsten-high.onnx"),
+        ("Guten Morgen! Dein Bett hat gerade angerufen, es will sich von dir trennen.", "rant_de_breakup.wav", "de", "de_DE-thorsten-high.onnx"),
+        ("Alarm! Alarm! Die Realität ruft an. Leider kannst du das nicht wegdrücken.", "rant_de_reality.wav", "de", "de_DE-thorsten-high.onnx"),
+        ("Na, auch schon wach? Ich mache das hier nur, weil ich programmiert wurde, dich zu nerven.", "rant_de_annoy.wav", "de", "de_DE-thorsten-high.onnx"),
+        
+        # English (Sassy) - Jenny
+        ("Rise and shine! The world awaits your glorious confusion.", "rant_en_confusion.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
+        ("Wake up! Your bed called, it's dumping you for the day.", "rant_en_breakup.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
+        ("Good morning starshine! The earth says hello... loudly!", "rant_en_starshine.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
+        ("I surrender! I surrender! Oh wait, it's just morning. Get up.", "rant_en_surrender.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
+        ("Alert! Alert! You are critically low on caffeine. Initiate wake up sequence.", "rant_en_caffeine.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
+    ]
+    
+    for text, fname, lang, model in rants:
+        out_path = target_dir / fname
+        if not out_path.exists():
+            try:
+                # generate_speech handles format conversion now
+                generate_speech(text, lang, out_path, model_name=model)
+                print(f"  [GEN] {fname}")
+            except Exception as e:
+                print(f"    [ERR] Failed to generate {fname}: {e}")
+        else:
+             print(f"  [SKP] {fname} (exists)")
+
+
+
+
 def generate_system_sounds():
     """Generates mapped system prompts using Piper AND copies static files."""
     print("\n\n--- Generating System Sounds & Time Announcements ---")
@@ -851,9 +1046,8 @@ def generate_system_sounds():
     # Helper for Time
     def process_time_task(task):
         text, lang, path, model = task
-        if path.exists(): return
+        if path.exists(): return False # Skipped
         
-        # print(f"    -> {path.name}") 
         temp_path = path.with_suffix(".tmp.wav")
         try:
              generate_speech(text, lang, temp_path, model_name=model)
@@ -867,8 +1061,26 @@ def generate_system_sounds():
              if temp_path.exists(): os.remove(temp_path)
              return False
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-        list(executor.map(process_time_task, time_tasks))
+    completed = 0
+    start_time = time.time()
+
+    # Using 1 worker to strictly ensure rate limit discipline
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future_to_task = {executor.submit(process_time_task, t): t for t in time_tasks}
+        
+        for future in concurrent.futures.as_completed(future_to_task):
+            completed += 1
+            if completed % 1 == 0: 
+                elapsed = time.time() - start_time
+                if completed > 0:
+                    avg_time = elapsed / completed
+                    remaining = avg_time * (total_time - completed)
+                else:
+                    remaining = 0
+                
+                percent = (completed / total_time) * 100
+                print(f"\r  [GEN] {completed}/{total_time} ({percent:.1f}%) | ETA: {format_time(remaining)}   ", end='', flush=True)
+    print() # Newline
 
 
     # 3. Copy Static Files (SFX, Ringtones)
@@ -925,6 +1137,7 @@ def main():
         categories = generate_audio_cache()
         generate_sd_card_structure(categories)
         generate_procedural_tones()
+        generate_wake_up_rants()
         generate_tones(SD_ROOT)
         generate_system_sounds()
     except KeyboardInterrupt:
