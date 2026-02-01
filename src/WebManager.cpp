@@ -393,8 +393,7 @@ void WebManager::handleRoot(AsyncWebServerRequest* request) {
         
         html += "</div>";
 
-        // Version Footer
-        html += "<div style='text-align:center; padding-top:20px; color:#444; font-size:0.8rem;'>" + String(FIRMWARE_VERSION) + "</div>";
+
         html += "</body></html>";
 
         request->send(200, "text/html", html);
@@ -790,10 +789,8 @@ String WebManager::getAdvancedHtml() {
     html += "<input type='range' name='base_vol' min='0' max='42' value='" + String(settings.getBaseVolume()) + "' oninput='this.previousElementSibling.firstElementChild.value = this.value'>";
     
     // Tones
-    html += "<div style='display:flex; gap:10px; margin-top:15px;'>";
-    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>" + getSdFileOptionsByName(Path::RINGTONES, settings.getRingtone()) + "</select></div>";
-    esp_task_wdt_reset();
-    html += "<div style='flex:1;'><label style='font-size:1rem;'>" + t_dt + "</label><select name='dt' onchange='prev(\"dt\",this.value)'>" + getDialToneOptionsByName(settings.getDialTone()) + "</select></div>";
+    html += "<div style='margin-top:15px;'>";
+    html += "<label style='font-size:1rem;'>" + t_ring + "</label><select name='ring' onchange='prev(\"ring\",this.value)'>" + getSdFileOptionsByName(Path::RINGTONES, settings.getRingtone()) + "</select>";
     esp_task_wdt_reset();
     html += "</div>";
     
@@ -865,7 +862,7 @@ void WebManager::handlePhonebookPost(AsyncWebServerRequest* request, uint8_t* da
     if (index + len < total) return; // wait for full body
 
     // Final chunk: parse and respond
-    DynamicJsonDocument doc(4096);
+    JsonDocument doc;
     DeserializationError error = deserializeJson(doc, *body);
     if (error) {
         request->send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
@@ -1192,7 +1189,7 @@ void WebManager::handleFileListApi(AsyncWebServerRequest* request) {
     
     std::sort(fileList.begin(), fileList.end());
 
-    DynamicJsonDocument doc(4096);
+    JsonDocument doc;
     JsonArray arr = doc.to<JsonArray>();
     size_t jsonTick = 0;
     for(const auto& f : fileList) {

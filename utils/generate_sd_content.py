@@ -34,7 +34,8 @@ PIPER_MODELS_EN = [
     "en_GB-alan-medium.onnx",
     "en_GB-alba-medium.onnx",
     "en_GB-aru-medium.onnx",
-    "en_GB-jenny_dioco-medium.onnx"
+    "en_GB-jenny_dioco-medium.onnx",
+    "en_US-ryan-high.onnx"
 ]
 PIPER_MODELS_DE = [
     "de_DE-thorsten-high.onnx"
@@ -44,6 +45,7 @@ PIPER_MODELS_DE = [
 # Format: "path/to/file.wav": ("Text to speak", "Language Code", "Specific Model Name or None")
 SYSTEM_PROMPTS = {
     # English System Messages (Jenny)
+    "system/snooze_active_en.wav": ("Snooze active.", "en", "en_GB-jenny_dioco-medium.onnx"),
     "system/system_ready_en.wav": ("System ready.", "en", "en_GB-jenny_dioco-medium.onnx"),
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", "en_GB-jenny_dioco-medium.onnx"),
     "system/timer_stopped_en.wav": ("Timer cancelled.", "en", "en_GB-jenny_dioco-medium.onnx"),
@@ -62,58 +64,122 @@ SYSTEM_PROMPTS = {
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", "en_GB-jenny_dioco-medium.onnx"),
     "system/timer_set_en.wav": ("Timer set.", "en", "en_GB-jenny_dioco-medium.onnx"),
     
-    # German System Messages (Thorsten)
-    "system/system_ready_de.wav": ("System bereit.", "de", "de_DE-thorsten-high.onnx"),
-    "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_stopped_de.wav": ("Timer abgebrochen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_stopped_de.wav": ("Alarm abgebrochen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/reindex_warning_de.wav": ("Bitte warten. Inhalte werden neu indexiert.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_active_de.wav": ("Alarm aktiv.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_confirm_de.wav": ("Alarm bestätigt.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_deleted_de.wav": ("Alarm gelöscht.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_skipped_de.wav": ("Alarm übersprungen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarms_off_de.wav": ("Alarme deaktiviert.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarms_on_de.wav": ("Alarme aktiviert.", "de", "de_DE-thorsten-high.onnx"),
-    "system/battery_crit_de.wav": ("Batterie kritisch. System wird heruntergefahren.", "de", "de_DE-thorsten-high.onnx"),
-    "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", "de_DE-thorsten-high.onnx"),
-    "system/menu_de.wav": ("Hauptmenü.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_confirm_de.wav": ("Timer gestartet.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_set_de.wav": ("Timer gesetzt.", "de", "de_DE-thorsten-high.onnx"),
+    # German System Messages (Google TTS preferred for DE System)
+    "system/snooze_active_de.wav": ("Snooze aktiv.", "de", None), # None = Use gTTS
+    "system/system_ready_de.wav": ("System bereit.", "de", None),
+    "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
+    "system/timer_stopped_de.wav": ("Timer abgebrochen.", "de", None),
+    "system/alarm_stopped_de.wav": ("Alarm abgebrochen.", "de", None),
+    "system/reindex_warning_de.wav": ("Bitte warten. Inhalte werden neu indexiert.", "de", None),
+    "system/alarm_active_de.wav": ("Alarm aktiv.", "de", None),
+    "system/alarm_confirm_de.wav": ("Alarm bestätigt.", "de", None),
+    "system/alarm_deleted_de.wav": ("Alarm gelöscht.", "de", None),
+    "system/alarm_skipped_de.wav": ("Alarm übersprungen.", "de", None),
+    "system/alarms_off_de.wav": ("Alarme deaktiviert.", "de", None),
+    "system/alarms_on_de.wav": ("Alarme aktiviert.", "de", None),
+    "system/battery_crit_de.wav": ("Batterie kritisch. System wird heruntergefahren.", "de", None),
+    "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
+    "system/menu_de.wav": ("Hauptmenü.", "de", None),
+    "system/timer_confirm_de.wav": ("Timer gestartet.", "de", None),
+    "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
+    "system/timer_set_de.wav": ("Timer gesetzt.", "de", None),
 }
 
 # Static Files to Copy (Source Path relative to template, Destination relative to SD Root)
 STATIC_COPY_MAP = {
-    # Sound Effects
-    "system/beep.wav": "system/beep.wav",
-    "system/click.wav": "system/click.wav",
-    "system/dialtone_0.wav": "system/dialtone_0.wav",
-    "system/dialtone_1.wav": "system/dialtone_1.wav",
-    "system/busy_tone.wav": "system/busy_tone.wav",
-    "system/computing.wav": "system/computing.wav",
-    "system/error_tone.wav": "system/error_tone.wav",
-    "system/startup.wav": "system/startup.wav",
-    "system/fallback_alarm.wav": "system/fallback_alarm.wav",
-    "system/battery_low.wav": "system/battery_low.wav",
+    # Ringtones are handled separately via folder copy
 }
 
 # Time Announcements (Range Definitions)
 TIME_CONFIG = {
     "hours": range(0, 24), # 0-23
-    "minutes": range(0, 60), # 0-59
+    "minutes": range(0, 301), # 0-300 (Extended for Timer)
     "days": range(1, 32), # 1-31
     "months": range(0, 12), # 0-11
     "weekdays": range(0, 7), # 0-6
     "years": range(2025, 2036) # 2025-2035
 }
 
+def generate_tones(base_dir):
+    """Generates standard system tones and sound effects (US standard + Extras)."""
+    print("Generating system tones (US Standard + Extras)...")
+    system_dir = base_dir / "system"
+    system_dir.mkdir(parents=True, exist_ok=True)
+
+    # Helper: Save tone
+    def save(seg, name):
+        seg.export(system_dir / name, format="wav")
+        print(f"  Generated {system_dir}/{name}")
+
+    # 1. Dial Tone (US): 350Hz + 440Hz continuous
+    tone_len = 10000 
+    dt_350 = Sine(350).to_audio_segment(duration=tone_len)
+    dt_440 = Sine(440).to_audio_segment(duration=tone_len)
+    dial_tone = dt_350.overlay(dt_440).apply_gain(-3.0) 
+    save(dial_tone, "dial_tone.wav")
+
+    # 2. Busy Tone (US): 480Hz + 620Hz, 0.5s on, 0.5s off
+    busy_on = (Sine(480).to_audio_segment(duration=500)
+               .overlay(Sine(620).to_audio_segment(duration=500))
+               .apply_gain(-3.0))
+    busy_off = AudioSegment.silent(duration=500)
+    busy_tone = (busy_on + busy_off) * 6
+    save(busy_tone, "busy_tone.wav")
+
+    # 3. Error Tone (Fast Busy): 480Hz + 620Hz, 0.25s on, 0.25s off
+    err_on = (Sine(480).to_audio_segment(duration=250)
+              .overlay(Sine(620).to_audio_segment(duration=250))
+              .apply_gain(-3.0))
+    err_off = AudioSegment.silent(duration=250)
+    error_tone = (err_on + err_off) * 6
+    save(error_tone, "error_tone.wav")
+
+    # 4. Beep (Simple 1000Hz)
+    beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-5.0)
+    save(beep, "beep.wav")
+    
+    # 5. Click (User Interaction)
+    click = Sine(2500).to_audio_segment(duration=30).apply_gain(-10.0).fade_out(10)
+    save(click, "click.wav")
+
+    # 6. Computing (Random "Thinking" Sound)
+    computing = AudioSegment.silent(duration=0)
+    for _ in range(15):
+        freq = random.choice([400, 600, 800, 1200, 1500, 2000])
+        dur = random.randint(30, 80)
+        tone = Square(freq).to_audio_segment(duration=dur).apply_gain(-15.0)
+        silence = AudioSegment.silent(duration=random.randint(10, 50))
+        computing += tone + silence
+    save(computing, "computing.wav")
+
+    # 7. Startup Sound (Arpeggio C-E-G-C)
+    note_dur = 150
+    start_c = Sine(261.63).to_audio_segment(duration=note_dur).fade_in(10).fade_out(10)
+    start_e = Sine(329.63).to_audio_segment(duration=note_dur).fade_in(10).fade_out(10)
+    start_g = Sine(392.00).to_audio_segment(duration=note_dur).fade_in(10).fade_out(10)
+    start_c2 = Sine(523.25).to_audio_segment(duration=400).fade_in(10).fade_out(200)
+    startup = (start_c + start_e + start_g + start_c2).apply_gain(-4.0)
+    save(startup, "startup.wav")
+    
+    # 8. Fallback Alarm (Annoying Beep)
+    fb_on = Square(800).to_audio_segment(duration=400).apply_gain(-5.0)
+    fb_off = AudioSegment.silent(duration=400)
+    fallback = (fb_on + fb_off) * 10
+    save(fallback, "fallback_alarm.wav")
+    
+    # 9. Battery Low (Descending)
+    bat_1 = Sine(880).to_audio_segment(duration=300).apply_gain(-5.0)
+    bat_2 = Sine(440).to_audio_segment(duration=600).fade_out(200).apply_gain(-5.0)
+    battery = bat_1 + bat_2
+    save(battery, "battery_low.wav")
+
 def generate_time_announcements():
     """Generates time announcement files for DE and EN."""
     
     # German (Thorsten)
-    model_de = "de_DE-thorsten-high.onnx"
+    model_de = None
     # English (Jenny)
-    model_en = "en_GB-jenny_dioco-medium.onnx"
+    model_en = None
     
     base_dir = SD_ROOT / "time"
     (base_dir / "de").mkdir(parents=True, exist_ok=True)
@@ -205,26 +271,39 @@ def check_piper_status():
         print("        Check 'utils/piper/' and 'utils/piper_voices/'")
         exit(1) # Strict mode
 
-def generate_with_piper(text, lang, output_path, model_name=None):
-    """Generates audio using local Piper binary."""
+def generate_speech(text, lang, output_path, model_name=None):
+    """Generates audio using Piper (local) or gTTS (online) if model is None."""
     
-    if not model_name:
-        # Default selection if not specified
-        if lang == 'de':
-             model_name = random.choice(PIPER_MODELS_DE)
-        else:
-             model_name = random.choice(PIPER_MODELS_EN)
+    # CASE 1: Use gTTS if no specific Piper model is requested
+    if model_name is None:
+        try:
+            # Use 'com' for English (US) and 'de' for German
+            tld = 'de' if lang == 'de' else 'com'
+            tts = gTTS(text=text, lang=lang, tld=tld, slow=False)
             
+            # gTTS saves MP3. We must convert to WAV if output is WAV.
+            temp_mp3 = str(output_path) + ".mp3"
+            tts.save(temp_mp3)
+            
+            # Convert
+            sound = AudioSegment.from_mp3(temp_mp3)
+            sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
+            sound.export(str(output_path), format="wav")
+            
+            if os.path.exists(temp_mp3):
+                os.remove(temp_mp3)
+                
+            return True
+        except Exception as e:
+            if 'temp_mp3' in locals() and os.path.exists(temp_mp3):
+                os.remove(temp_mp3)
+            raise Exception(f"gTTS failed: {e}")
+
+    # CASE 2: Use Piper
     model_path = PIPER_VOICES_DIR / model_name
     
     if not model_path.exists():
-        # Fallback to Jenny or Thorsten High if random selection failed?
-        if lang == 'de' and (PIPER_VOICES_DIR / "de_DE-thorsten-high.onnx").exists():
-            model_path = PIPER_VOICES_DIR / "de_DE-thorsten-high.onnx"
-        elif (PIPER_VOICES_DIR / "en_GB-jenny_dioco-medium.onnx").exists():
-             model_path = PIPER_VOICES_DIR / "en_GB-jenny_dioco-medium.onnx"
-        else:
-             raise FileNotFoundError(f"Model {model_name} not found.")
+         raise FileNotFoundError(f"Piper Model {model_name} not found at {model_path}")
     
     cmd = [
         str(PIPER_BIN),
@@ -305,7 +384,7 @@ def process_single_file(args):
             chosen_model = rng.choice(PIPER_MODELS_EN)
         
         try:
-            generate_with_piper(line, lang, wav_temp, model_name=chosen_model)
+            generate_speech(line, lang, wav_temp, model_name=chosen_model)
             sound = AudioSegment.from_wav(str(wav_temp))
             if wav_temp.exists(): os.remove(wav_temp)
             
@@ -384,7 +463,7 @@ def generate_audio_cache():
         
         # Adjust max_workers based on your network/CPU comfort.
         # NOTE: severe rate-limiting by Google if too high (>5). Keeping it low for stability.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # We use as_completed to update progress immediately
             future_to_task = {executor.submit(process_single_file, task): task for task in tasks}
             
@@ -543,6 +622,43 @@ def generate_sd_card_structure(categories):
 
     print(f"\nDone! SD Card content generated in: {SD_ROOT}")
 
+def generate_tones(base_dir):
+    """
+    Generates standard telephony tones (Dial tone, Busy signal, etc.)
+    """
+    print("\n\n--- Generating Telephony Tones ---")
+    target_dir = base_dir / "system"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    
+    # helper
+    def save(seg, name):
+        out_path = target_dir / name
+        seg = seg.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
+        seg.export(str(out_path), format="wav")
+        print(f"  [GEN] {name}")
+
+    # 1. Dial Tone 1 (German standard: 425Hz continuous)
+    # 10 seconds long
+    dial_tone = Sine(425).to_audio_segment(duration=10000).apply_gain(-3.0)
+    save(dial_tone, "dialtone_1.wav")
+
+    # 2. Busy Tone (425Hz, 480ms ON, 480ms OFF)
+    # Repeat for ~5 seconds -> (480+480) * 5 approx 5s
+    # 5000 / 960 = 5.2 cycles. Let's do 6 cycles.
+    tone_on = Sine(425).to_audio_segment(duration=480).apply_gain(-3.0)
+    tone_off = AudioSegment.silent(duration=480)
+    busy_cycle = tone_on + tone_off
+    busy_tone = busy_cycle * 6 
+    save(busy_tone, "busy_tone.wav")
+
+    # 3. Beep (1000Hz, 200ms)
+    beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-3.0)
+    save(beep, "beep.wav")
+
+    # 4. Error Tone (150Hz Sawtooth, 500ms)
+    error = Sawtooth(150).to_audio_segment(duration=500).apply_gain(-3.0)
+    save(error, "error_tone.wav")
+
 def generate_procedural_tones():
     """
     Generates synthesized ringtones and alarm sounds using Pydub generators.
@@ -617,20 +733,23 @@ def generate_system_sounds():
     print("\n\n--- Generating System Sounds & Time Announcements ---")
     
     # 1. Generate Static System Prompts
-    for rel_path, (text, lang, model) in SYSTEM_PROMPTS.items():
+    def process_system_prompt(item):
+        rel_path, (text, lang, model) = item
         out_path = SD_ROOT / rel_path
         out_path.parent.mkdir(parents=True, exist_ok=True)
         
         if not out_path.exists():
-            print(f"  [GEN] {rel_path}...")
+            # print(f"  [GEN] {rel_path}...")
             try:
-                generate_with_piper(text, lang, out_path, model_name=model)
-                # Convert to target format
-                sound = AudioSegment.from_wav(str(out_path))
-                sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-                sound.export(str(out_path), format="wav")
+                # generate_speech handles format conversion now
+                generate_speech(text, lang, out_path, model_name=model)
+                print(f"  [OK] {rel_path}")
             except Exception as e:
                 print(f"    [ERR] Failed to generate {rel_path}: {e}")
+
+    print(f"  [PLAN] Generating {len(SYSTEM_PROMPTS)} system prompts...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(process_system_prompt, SYSTEM_PROMPTS.items()))
 
     # 2. Generate Time Announcements
     time_tasks = generate_time_announcements()
@@ -651,7 +770,7 @@ def generate_system_sounds():
         # print(f"    -> {path.name}") 
         temp_path = path.with_suffix(".tmp.wav")
         try:
-             generate_with_piper(text, lang, temp_path, model_name=model)
+             generate_speech(text, lang, temp_path, model_name=model)
              sound = AudioSegment.from_wav(str(temp_path))
              sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
              sound.export(str(path), format="wav")
@@ -662,7 +781,7 @@ def generate_system_sounds():
              if temp_path.exists(): os.remove(temp_path)
              return False
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         list(executor.map(process_time_task, time_tasks))
 
 
@@ -693,16 +812,24 @@ def generate_system_sounds():
                  print(f"  [COPY] Font {font.name}")
                  shutil.copy2(font, dest_file)
 
-    # 4. Copy Ringtones (Whole folder)
-    ringtones_src = template_root / "ringtones"
+    # 4. Copy Ringtones (From multiple potential sources)
     ringtones_dest = SD_ROOT / "ringtones"
-    if ringtones_src.exists():
-        ringtones_dest.mkdir(parents=True, exist_ok=True)
-        for wav in ringtones_src.glob("*.wav"):
-            dest_file = ringtones_dest / wav.name
-            if not dest_file.exists():
-                print(f"  [COPY] Ringtone {wav.name}")
-                shutil.copy2(wav, dest_file)
+    ringtones_dest.mkdir(parents=True, exist_ok=True)
+    
+    # Check both root/ringtones and effects/ringtones
+    ringtone_sources = [
+        PROJECT_ROOT / "ringtones",
+        PROJECT_ROOT / "effects" / "ringtones"
+    ]
+    
+    for r_src in ringtone_sources:
+        if r_src.exists():
+            print(f"  [SCAN] Checking {r_src}...")
+            for wav in r_src.glob("*.wav"):
+                dest_file = ringtones_dest / wav.name
+                if not dest_file.exists():
+                    print(f"  [COPY] Ringtone {wav.name}")
+                    shutil.copy2(wav, dest_file)
     
     print("System sounds update complete.")
 
@@ -712,6 +839,7 @@ def main():
         categories = generate_audio_cache()
         generate_sd_card_structure(categories)
         generate_procedural_tones()
+        generate_tones(SD_ROOT)
         generate_system_sounds()
     except KeyboardInterrupt:
         print("\nAborted.")

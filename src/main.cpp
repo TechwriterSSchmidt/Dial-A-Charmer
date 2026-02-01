@@ -77,10 +77,8 @@ unsigned long offHookTime = 0;
 // Note: PCM5100A is a "dumb" DAC and doesn't report I2C status. We assume it's working.
 
 // --- Background Scan Globals ---
-int bgScanPersonaIndex = 1;
-static File bgScanDir;
-bool bgScanActive = false;
-bool bgScanPhonebookChanged = false;
+// REMOVED: Scan-on-Demand (Replaced by Hot-Reload)
+// (Variables bgScanDir, bgScanActive, etc. removed)
 
 // --- Ringing State (UI) ---
 bool isAlarmRinging = false;
@@ -113,11 +111,13 @@ Playlist mainPlaylist; // For Dial 0
 // --- Persistence Helpers ---
 // CHANGED: Use v3 filenames to force cache invalidation (fixes mp3_group vs persona path mismatch)
 String getStoredPlaylistPath(int category) {
-    return "/playlists/cat_" + String(category) + "_v3.m3u";
+    String lang = settings.getLanguage();
+    return "/playlists/cat_" + String(category) + "_" + lang + "_v3.m3u";
 }
 
 String getStoredIndexPath(int category) {
-    return "/playlists/cat_" + String(category) + "_v3.idx";
+    String lang = settings.getLanguage();
+    return "/playlists/cat_" + String(category) + "_" + lang + "_v3.idx";
 }
 
 void ensurePlaylistDir();
@@ -243,156 +243,26 @@ bool loadPlaylistFromSD(int category, Playlist &pl) {
     return true;
 }
 
-void scanDirectoryToPlaylist(String path, int categoryId) {
-    if (!sdAvailable) return;
-    File dir = SD.open(path);
-    if(!dir || !dir.isDirectory()) {
-         Serial.print("Dir missing: "); Serial.println(path);
-         return;
-    }
-    
-    Serial.printf("Scanning dir: %s for Cat %d\n", path.c_str(), categoryId);
-
-    File file = dir.openNextFile();
-    int fileCount = 0;
-    while(file) {
-        esp_task_wdt_reset(); // Prevent WDT Reset during long directory scans
-        if(!file.isDirectory()) {
-            String fname = String(file.name());
-            if(fname.endsWith(".wav") && fname.indexOf("._") == -1) {
-                // Construct full path
-                String fullPath = path;
-                if(!fullPath.endsWith("/")) fullPath += "/";
-                if(fname.startsWith("/")) fname = fname.substring(1); 
-                fullPath += fname;
-                
-                // Debug every 10 files
-                if (fileCount % 10 == 0) Serial.printf("."); 
-
-                // Add to specific category ONLY
-                categories[categoryId].tracks.push_back(fullPath);
-                fileCount++;
-            }
-        }
-        file = dir.openNextFile();
-    }
-    Serial.printf("\nDone scanning. Found %d files.\n", fileCount);
-}
-
-void startPersonaScan() {
-    if (!sdAvailable) return;
-    Serial.println("[BG] Starting Background Persona Scan...");
-    
-    // --- Instant "Fortune" Detection ---
-    if (SD.exists("/persona_05/fortune.txt")) {
-        Serial.println("[BG] Detected Fortune Cookie Mode!");
-        // Force Switch to Category Mode
-        phonebook.addEntry("5", "Fortune Cookie", "FUNCTION", "COMPLIMENT_CAT", "5");
-    } 
-    // Removed duplicate fallback logic for Mix on 5. Mix is now on 6.
-    
-    bgScanPersonaIndex = 1;
-    bgScanActive = true;
-    bgScanPhonebookChanged = false;
-    // ensure bgScanDir is closed if it was left open
-    if(bgScanDir) bgScanDir.close();
-}
 
 
-void handlePersonaScan() {
-    if (!bgScanActive || !sdAvailable) return;
 
-    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(20)) != pdTRUE) return; // try later if busy
 
-    // Safety: Reset WDT during SD operations
-    esp_task_wdt_reset();
 
-    // Process a chunk of work
-    // State 0: Open Dir if needed
-    if (!bgScanDir) {
-        if (bgScanPersonaIndex > 5) {
-            // FINISHED
-            bgScanActive = false;
-            if (bgScanPhonebookChanged) {
-                Serial.println("[BG] Saving updated Phonebook names...");
-                phonebook.saveChanges();
-            } else {
-                Serial.println("[BG] Scan finished. No changes.");
-            }
-            xSemaphoreGive(sdMutex);
-            return;
-        }
-        
-        String path = "/persona_0" + String(bgScanPersonaIndex);
-        bgScanDir = SD.open(path);
-        if (!bgScanDir || !bgScanDir.isDirectory()) {
-            if(bgScanDir) bgScanDir.close();
-            bgScanPersonaIndex++;
-            xSemaphoreGive(sdMutex);
-            return; // Next loop will handle next index
-        }
-        Serial.printf("[BG] Scanning %s...\n", path.c_str());
-    }
-
-    // State 1: Read ONE file
-    File file = bgScanDir.openNextFile();
-    if (file) {
-        String fname = String(file.name());
-        
-        // Clean filename (some FS return full path)
-        int lastSlash = fname.lastIndexOf('/');
-        if (lastSlash >= 0) fname = fname.substring(lastSlash + 1);
-
-        if (!file.isDirectory() && fname.endsWith(".txt") && !fname.startsWith(".") && fname.indexOf("._") == -1) {
-            // Found TXT! Update and Move on
-            String name = fname.substring(0, fname.length() - 4);
-            
-            // Special handling for fortune.txt to capitalize it
-            if (name.equalsIgnoreCase("fortune")) {
-                name = "Fortune";
-            }
-
-            Serial.printf("[BG] Found Name: %s\n", name.c_str());
-            
-            String key = phonebook.findKeyByValueAndParam("COMPLIMENT_CAT", String(bgScanPersonaIndex));
-            
-            if (key != "") {
-                PhonebookEntry e = phonebook.getEntry(key);
-                if (e.name != name) {
-                    phonebook.addEntry(key, name, "FUNCTION", "COMPLIMENT_CAT", String(bgScanPersonaIndex));
-                    bgScanPhonebookChanged = true;
-                }
-            } else {
-                phonebook.addEntry(String(bgScanPersonaIndex), name, "FUNCTION", "COMPLIMENT_CAT", String(bgScanPersonaIndex));
-                bgScanPhonebookChanged = true;
-            }
-            
-            // Optimization: Found the name, stop scanning this folder
-            bgScanDir.close(); 
-            bgScanPersonaIndex++;
-        }
-    } else {
-        // End of Directory
-        bgScanDir.close();
-        bgScanPersonaIndex++;
-    }
-
-    xSemaphoreGive(sdMutex);
-}
 
 void initPlaylists() {
     categories.clear();
     mainPlaylist.tracks.clear();
     mainPlaylist.index = 0;
     
-    Serial.println("Initializing Playlists (Fast Load)...");
+    String lang = settings.getLanguage();
+    Serial.printf("Initializing Playlists for Language: %s\n", lang.c_str());
     
     // Categories 1-5
     for (int i = 1; i <= 5; i++) {
         bool loaded = loadPlaylistFromSD(i, categories[i]);
         if (!loaded) {
-            Serial.printf("Cat %d: M3U not found. Empty until re-indexed (Dial 95).\n", i);
-            categories[i].tracks.clear(); // Ensure empty
+            Serial.printf("Cat %d: Playlist not found (%s). Empty.\n", i, getStoredPlaylistPath(i).c_str());
+            categories[i].tracks.clear(); 
         } else {
              Serial.printf("Cat %d: Loaded %d tracks.\n", i, categories[i].tracks.size());
         }
@@ -403,9 +273,10 @@ void initPlaylists() {
     mainPlaylist.virtualTracks.clear();
     mainPlaylist.index = 0;
     
-    bool loadedVirtual = loadVirtualPlaylistFromSD(mainPlaylist);
+    bool loadedVirtual = loadVirtualPlaylistFromSD(mainPlaylist); // Loads 'cat_0'
     if (!loadedVirtual) {
-        // Try to aggregate if categories have content
+        // Build Mix from loaded categories
+        Serial.println("Main: Building virtual mix from loaded categories...");
         for (int i = 1; i <= 5; i++) {
             for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
                 mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
@@ -414,99 +285,16 @@ void initPlaylists() {
         if (!mainPlaylist.virtualTracks.empty()) {
              auto rng = std::default_random_engine(esp_random());
              std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
-             Serial.printf("Main: Built from loaded cats (%d items)\n", mainPlaylist.virtualTracks.size());
         }
-    } else {
-         Serial.printf("Main: Loaded from SD (%d items)\n", mainPlaylist.virtualTracks.size());
     }
     
+    // Restore Progress
     if (!mainPlaylist.virtualTracks.empty()) {
         mainPlaylist.index = loadProgressFromSD(0, mainPlaylist.virtualTracks.size());
+        Serial.printf("Main: Ready with %d tracks (Index: %d)\n", mainPlaylist.virtualTracks.size(), mainPlaylist.index);
     }
 }
 
-void scanAllContent() {
-    if (!sdAvailable) return;
-    
-    Serial.println("Starting Force Re-Index (Code 95)...");
-
-    // 1. Audio Warning
-    String lang = settings.getLanguage();
-    String warningMsg = (lang == "de") ? Path::REINDEX_WARNING_DE : Path::REINDEX_WARNING_EN;
-    
-    // Fallback to computing sound if file missing, otherwise play warning
-    if (SD.exists(warningMsg)) {
-         playSound(warningMsg, true);
-    } else {
-         playSound(Path::COMPUTING, true); 
-    }
-    
-    // Allow Audio to start and play (Wait for duration of typical warning ~3s)
-    unsigned long startWait = millis();
-    while (millis() - startWait < 4000) { 
-        if (audio->isRunning()) audio->loop(); 
-        delay(10);
-    }
-    
-    // 2. Disable Webserver
-    if (webServerTaskHandle) vTaskSuspend(webServerTaskHandle);
-    
-    // 3. Scan
-    categories.clear();
-    mainPlaylist.tracks.clear();
-    
-    for (int i = 1; i <= 5; i++) {
-        String subfolder = "persona_0" + String(i);
-        categories[i].tracks.clear();
-        categories[i].index = 0;
-        
-        Serial.printf("Scanning Cat %d...\n", i);
-        
-        if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(10000)) == pdTRUE) {
-            scanDirectoryToPlaylist("/" + subfolder, i);
-            xSemaphoreGive(sdMutex);
-        }
-        
-        // Shuffle & Save
-        auto rng = std::default_random_engine(esp_random());
-        std::shuffle(categories[i].tracks.begin(), categories[i].tracks.end(), rng);
-        
-        if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
-            savePlaylistToSD(i, categories[i]);
-            saveProgressToSD(i, 0);
-            xSemaphoreGive(sdMutex);
-        }
-    }
-    
-    // Rebuild Main
-    mainPlaylist.isVirtual = true;
-    mainPlaylist.virtualTracks.clear();
-    mainPlaylist.index = 0;
-    
-    for (int i = 1; i <= 5; i++) {
-        for (size_t idx = 0; idx < categories[i].tracks.size(); idx++) {
-            mainPlaylist.virtualTracks.push_back({(uint8_t)i, (uint16_t)idx});
-        }
-    }
-    
-    if (!mainPlaylist.virtualTracks.empty()) {
-        auto rng = std::default_random_engine(esp_random());
-        std::shuffle(mainPlaylist.virtualTracks.begin(), mainPlaylist.virtualTracks.end(), rng);
-        
-        if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
-            saveVirtualPlaylistToSD(mainPlaylist);
-            xSemaphoreGive(sdMutex);
-        }
-    }
-    
-    // 4. Enable Webserver
-    if (webServerTaskHandle) vTaskResume(webServerTaskHandle);
-    
-    Serial.println("Re-Index Complete.");
-    
-    // 5. Done Sound
-    playSound(Path::READY_SND, true);
-}
 
 String getNextTrack(int category) {
     Playlist* target = nullptr;
@@ -1253,8 +1041,11 @@ void handleDialedNumber(String numberStr) {
          executePhonebookFunction("SKIP_NEXT_ALARM", "");
          return;
     }
-    if (numberStr == "095") { // Force Re-Index
-        scanAllContent();
+    if (numberStr == "095") { // System Reboot
+        Serial.println("Command 095: Rebooting...");
+        playSound(Path::BEEP, true);
+        delay(1000); 
+        ESP.restart();
         return;
     }
 
@@ -1802,26 +1593,32 @@ void setup() {
     Serial.printf("Current Hook State: %s\n", dial.isOffHook() ? "OFF HOOK" : "ON HOOK");
 
     setAudioOutput(OUT_SPEAKER);
-    std::vector<String> bootSequence;
-    if (sdAvailable) {
-        if (SD.exists(Path::STARTUP_SND)) bootSequence.push_back(Path::STARTUP_SND);
-        if (SD.exists(Path::READY_SND)) bootSequence.push_back(Path::READY_SND);
-    }
-    if (!bootSequence.empty()) {
-        playSequence(bootSequence, true);
-        Serial.println("Boot sequence started on SPEAKER (Output 2)");
+    
+    // Localization of System Ready Sound
+    String readySnd = "/system/system_ready_" + settings.getLanguage() + ".wav";
+    
+    if (sdAvailable && SD.exists(readySnd)) {
+        playSound(readySnd, true);
+        Serial.println("Boot sequence: Played System Ready on SPEAKER");
     } else {
-        playSound(Path::BEEP, true); // Speaker
-        Serial.println("Initial Beep played on SPEAKER (Output 2)");
+        playSound(Path::BEEP, true); 
+        Serial.println("Boot sequence: Beep (Ready sound missing)");
     }
-
-    // Start Background Scan for updated Persona Names
-    startPersonaScan();
 }
 
 void loop() {
     // Reset Watchdog
     esp_task_wdt_reset();
+
+    // Check for Language Change (Hot-Swap Playlists)
+    static String lastLang = "";
+    if (lastLang == "") lastLang = settings.getLanguage(); // Init
+    
+    if (settings.getLanguage() != lastLang) {
+        Serial.printf("Language Change Detected (%s -> %s). Reloading Playlists...\n", lastLang.c_str(), settings.getLanguage().c_str());
+        lastLang = settings.getLanguage();
+        if (sdAvailable) initPlaylists();
+    }
 
     // Apply volume changes immediately
     static int lastVol = -1;
@@ -1909,7 +1706,6 @@ void loop() {
     }
 
     timeManager.loop();
-    handlePersonaScan(); // Run BG Task (now mutex-guarded)
     
     // --- Buffered Dialing Logic ---
     if (dialBuffer.length() > 0) {
