@@ -421,6 +421,16 @@ void WebManager::handlePreviewApi(AsyncWebServerRequest* request) {
     if (request->hasArg("type") && request->hasArg("id")) {
         String type = request->arg("type");
         String id = request->arg("id");
+        
+        // If ID is numeric (Index from Dropdown), resolve to Filename
+        int idx = id.toInt();
+        if (idx > 0) {
+             if (type == "ring" && idx <= (int)cachedRingtones.size()) {
+                 id = cachedRingtones[idx-1];
+             }
+             // Add "sys" / "dt" mapping if needed, but usually they use string names
+        }
+
         resetApTimer();
 #if DEBUG_AUDIO
         Serial.printf("[Web][Preview] type=%s id=%s\n", type.c_str(), id.c_str());
@@ -573,6 +583,7 @@ String WebManager::getSettingsHtml() {
     String html = "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width, initial-scale=1'>";
     html += COMMON_CSS; // Use Shared Resource
     html += "<script>function sl(v){fetch('/save?lang='+v,{method:'POST'}).then(r=>location.reload());}</script>"; // Save Lang
+    html += "<script>function prev(t,i){fetch('/api/preview?type='+t+'&id='+i);}</script>"; // Audio Preview
     html += "</head><body>";
     html += "<h2>" + t_title + "</h2>";
 
@@ -634,7 +645,7 @@ String WebManager::getSettingsHtml() {
         
         // Tone Select
         html += "<div style='flex-grow:1; margin-left:15px;'>";
-        html += "<select name='alm_t_" + String(i) + "' style='width:100%;'>";
+        html += "<select name='alm_t_" + String(i) + "' style='width:100%;' onchange='prev(\"ring\",this.value)'>";
         html += getSdFileOptions(Path::RINGTONES, settings.getAlarmTone(i));
         esp_task_wdt_reset();
         html += "</select>";
