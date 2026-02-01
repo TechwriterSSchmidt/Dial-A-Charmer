@@ -12,3 +12,5 @@ utils/piper/
 utils/piper_voices/
 utils/*.txt
 *.txt
+sd_card_content/
+compliments/audio_cache/
