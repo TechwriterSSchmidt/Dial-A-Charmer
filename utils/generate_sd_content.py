@@ -7,10 +7,12 @@ import concurrent.futures
 import threading
 import time
 import subprocess
+import base64
 from pathlib import Path
 from gtts import gTTS
 from pydub import AudioSegment
 from pydub.generators import Sine, Square, Sawtooth, Pulse
+from google import genai
 
 # Configuration
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -18,6 +20,16 @@ SOURCE_DIR = PROJECT_ROOT / "compliments"
 CACHE_DIR = SOURCE_DIR / "audio_cache"
 SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
+
+# Initialize Gemini Client
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+gemini_client = None
+if GEMINI_API_KEY:
+    try:
+        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+        print("[INFO] Gemini API Client initialized for Native Audio TTS.")
+    except Exception as e:
+        print(f"[ERROR] Failed to initialize Gemini Client: {e}")
 
 # Piper Configuration
 PIPER_BIN = PROJECT_ROOT / "utils/piper/piper/piper"
@@ -43,8 +55,10 @@ PIPER_MODELS_DE = [
 
 # System Prompts Configuration
 # Format: "path/to/file.wav": ("Text to speak", "Language Code", "Specific Model Name or None")
+# Note: If model is None, it defaults to Gemini (if API key present) or gTTS.
+# You can also use "gemini:VoiceName" (e.g. "gemini:Puck", "gemini:Charon", "gemini:Kore", "gemini:Fenrir", "gemini:Aoede")
 SYSTEM_PROMPTS = {
-    # English System Messages (Jenny)
+    # English System Messages (Using Piper/Jenny for consistency as per user choice)
     "system/snooze_active_en.wav": ("Snooze active.", "en", "en_GB-jenny_dioco-medium.onnx"),
     "system/system_ready_en.wav": ("System ready.", "en", "en_GB-jenny_dioco-medium.onnx"),
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", "en_GB-jenny_dioco-medium.onnx"),
@@ -64,25 +78,25 @@ SYSTEM_PROMPTS = {
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", "en_GB-jenny_dioco-medium.onnx"),
     "system/timer_set_en.wav": ("Timer set.", "en", "en_GB-jenny_dioco-medium.onnx"),
     
-    # German System Messages (Google TTS preferred for DE System)
-    "system/snooze_active_de.wav": ("Snooze aktiv.", "de", None), # None = Use gTTS
-    "system/system_ready_de.wav": ("System bereit.", "de", None),
-    "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
-    "system/timer_stopped_de.wav": ("Timer abgebrochen.", "de", None),
-    "system/alarm_stopped_de.wav": ("Alarm abgebrochen.", "de", None),
-    "system/reindex_warning_de.wav": ("Bitte warten. Inhalte werden neu indexiert.", "de", None),
-    "system/alarm_active_de.wav": ("Alarm aktiv.", "de", None),
-    "system/alarm_confirm_de.wav": ("Alarm bestätigt.", "de", None),
-    "system/alarm_deleted_de.wav": ("Alarm gelöscht.", "de", None),
-    "system/alarm_skipped_de.wav": ("Alarm übersprungen.", "de", None),
-    "system/alarms_off_de.wav": ("Alarme deaktiviert.", "de", None),
-    "system/alarms_on_de.wav": ("Alarme aktiviert.", "de", None),
-    "system/battery_crit_de.wav": ("Batterie kritisch. System wird heruntergefahren.", "de", None),
-    "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
-    "system/menu_de.wav": ("Hauptmenü.", "de", None),
-    "system/timer_confirm_de.wav": ("Timer gestartet.", "de", None),
-    "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
-    "system/timer_set_de.wav": ("Timer gesetzt.", "de", None),
+    # German System Messages (Gemini Kore: friendly but impatient female voice)
+    "system/snooze_active_de.wav": ("(freundlich und erotisch-rauchig) Snooze aktiv.", "de", "gemini:Kore"),
+    "system/system_ready_de.wav": ("(freundlich und erotisch-rauchig) System bereit.", "de", "gemini:Kore"),
+    "system/time_unavailable_de.wav": ("(freundlich und erotisch-rauchig) Zeit-Synchronisation fehlgeschlagen.", "de", "gemini:Kore"),
+    "system/timer_stopped_de.wav": ("(freundlich und erotisch-rauchig) Timer abgebrochen.", "de", "gemini:Kore"),
+    "system/alarm_stopped_de.wav": ("(freundlich und erotisch-rauchig) Alarm abgebrochen.", "de", "gemini:Kore"),
+    "system/reindex_warning_de.wav": ("(freundlich und erotisch-rauchig) Bitte warten. Inhalte werden neu indexiert.", "de", "gemini:Kore"),
+    "system/alarm_active_de.wav": ("(freundlich und erotisch-rauchig) Alarm aktiv.", "de", "gemini:Kore"),
+    "system/alarm_confirm_de.wav": ("(freundlich und erotisch-rauchig) Alarm bestätigt.", "de", "gemini:Kore"),
+    "system/alarm_deleted_de.wav": ("(freundlich und erotisch-rauchig) Alarm gelöscht.", "de", "gemini:Kore"),
+    "system/alarm_skipped_de.wav": ("(freundlich und erotisch-rauchig) Alarm übersprungen.", "de", "gemini:Kore"),
+    "system/alarms_off_de.wav": ("(freundlich und erotisch-rauchig) Alarme deaktiviert.", "de", "gemini:Kore"),
+    "system/alarms_on_de.wav": ("(freundlich und erotisch-rauchig) Alarme aktiviert.", "de", "gemini:Kore"),
+    "system/battery_crit_de.wav": ("(freundlich und erotisch-rauchig) Batterie kritisch. System wird heruntergefahren.", "de", "gemini:Kore"),
+    "system/error_msg_de.wav": ("(freundlich und erotisch-rauchig) Ein Fehler ist aufgetreten.", "de", "gemini:Kore"),
+    "system/menu_de.wav": ("(freundlich und erotisch-rauchig) Hauptmenü.", "de", "gemini:Kore"),
+    "system/timer_confirm_de.wav": ("(freundlich und erotisch-rauchig) Timer gestartet.", "de", "gemini:Kore"),
+    "system/timer_deleted_de.wav": ("(freundlich und erotisch-rauchig) Timer gelöscht.", "de", "gemini:Kore"),
+    "system/timer_set_de.wav": ("(freundlich und erotisch-rauchig) Timer gesetzt.", "de", "gemini:Kore"),
 }
 
 # Static Files to Copy (Source Path relative to template, Destination relative to SD Root)
@@ -176,10 +190,12 @@ def generate_tones(base_dir):
 def generate_time_announcements():
     """Generates time announcement files for DE and EN."""
     
-    # German (Thorsten)
-    model_de = None
-    # English (Jenny)
-    model_en = None
+    # German (Gemini Kore: friendly but impatient female voice)
+    model_de = "gemini:Kore"
+    inst_de = "(freundlich und erotisch-rauchig) "
+    # English (Piper/Jenny)
+    model_en = "en_GB-jenny_dioco-medium.onnx"
+    inst_en = ""
     
     base_dir = SD_ROOT / "time"
     (base_dir / "de").mkdir(parents=True, exist_ok=True)
@@ -195,8 +211,8 @@ def generate_time_announcements():
 
     # Hours
     for h in TIME_CONFIG["hours"]:
-        add_task(f"{h}", "de", base_dir / f"de/h_{h}.wav", model_de)
-        add_task(f"{h}", "en", base_dir / f"en/h_{h}.wav", model_en)
+        add_task(f"{inst_de}{h}", "de", base_dir / f"de/h_{h}.wav", model_de)
+        add_task(f"{inst_en}{h}", "en", base_dir / f"en/h_{h}.wav", model_en)
 
     # Minutes
     for m in TIME_CONFIG["minutes"]:
@@ -204,49 +220,46 @@ def generate_time_announcements():
         # Format "m_XX.wav" (always 2 digits? or 1? template had m_00)
         # We will generate m_00 to m_59
         fname = f"m_{m:02d}.wav"
-        add_task(f"{m}", "de", base_dir / f"de/{fname}", model_de)
-        add_task(f"{m}", "en", base_dir / f"en/{fname}", model_en)
+        add_task(f"{inst_de}{m}", "de", base_dir / f"de/{fname}", model_de)
+        add_task(f"{inst_en}{m}", "en", base_dir / f"en/{fname}", model_en)
 
     # Days
     for d in TIME_CONFIG["days"]:
-        add_task(f"{d}.", "de", base_dir / f"de/day_{d}.wav", model_de) # Ordinal in DE? "erster"? 
-        # Actually Piper might read "1." as "Erster". Let's try explicit text if needed.
-        # But simple number might suffice for "Der erste"? No, usually "Der Eins" is wrong.
-        # Let's trust Piper's norm for "1."
-        add_task(f"{d}", "en", base_dir / f"en/day_{d}.wav", model_en) # "1st"?
+        add_task(f"{inst_de}{d}.", "de", base_dir / f"de/day_{d}.wav", model_de) # Ordinal in DE? "erster"? 
+        add_task(f"{inst_en}{d}", "en", base_dir / f"en/day_{d}.wav", model_en) # "1st"?
 
     # Months
     months_de = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
     months_en = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     
     for i in TIME_CONFIG["months"]:
-        add_task(months_de[i], "de", base_dir / f"de/month_{i}.wav", model_de)
-        add_task(months_en[i], "en", base_dir / f"en/month_{i}.wav", model_en)
+        add_task(f"{inst_de}{months_de[i]}", "de", base_dir / f"de/month_{i}.wav", model_de)
+        add_task(f"{inst_en}{months_en[i]}", "en", base_dir / f"en/month_{i}.wav", model_en)
 
     # Weekdays
     wday_de = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"]
     wday_en = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     
     for i in TIME_CONFIG["weekdays"]:
-         add_task(wday_de[i], "de", base_dir / f"de/wday_{i}.wav", model_de)
-         add_task(wday_en[i], "en", base_dir / f"en/wday_{i}.wav", model_en)
+         add_task(f"{inst_de}{wday_de[i]}", "de", base_dir / f"de/wday_{i}.wav", model_de)
+         add_task(f"{inst_en}{wday_en[i]}", "en", base_dir / f"en/wday_{i}.wav", model_en)
 
     # Years
     for y in TIME_CONFIG["years"]:
-        add_task(f"{y}", "de", base_dir / f"de/year_{y}.wav", model_de)
-        add_task(f"{y}", "en", base_dir / f"en/year_{y}.wav", model_en)
+        add_task(f"{inst_de}{y}", "de", base_dir / f"de/year_{y}.wav", model_de)
+        add_task(f"{inst_en}{y}", "en", base_dir / f"en/year_{y}.wav", model_en)
 
     # Specials
-    add_task("Uhr", "de", base_dir / "de/uhr.wav", model_de)
-    add_task("Es ist", "de", base_dir / "de/intro.wav", model_de)
-    add_task("Heute ist", "de", base_dir / "de/date_intro.wav", model_de)
-    add_task("Sommerzeit", "de", base_dir / "de/dst_summer.wav", model_de)
-    add_task("Winterzeit", "de", base_dir / "de/dst_winter.wav", model_de)
+    add_task(f"{inst_de}Uhr", "de", base_dir / "de/uhr.wav", model_de)
+    add_task(f"{inst_de}Es ist", "de", base_dir / "de/intro.wav", model_de)
+    add_task(f"{inst_de}Heute ist", "de", base_dir / "de/date_intro.wav", model_de)
+    add_task(f"{inst_de}Sommerzeit", "de", base_dir / "de/dst_summer.wav", model_de)
+    add_task(f"{inst_de}Winterzeit", "de", base_dir / "de/dst_winter.wav", model_de)
     
-    add_task("It is", "en", base_dir / "en/intro.wav", model_en)
-    add_task("Today is", "en", base_dir / "en/date_intro.wav", model_en)
-    add_task("Summer time", "en", base_dir / "en/dst_summer.wav", model_en)
-    add_task("Winter time", "en", base_dir / "en/dst_winter.wav", model_en)
+    add_task(f"{inst_en}It is", "en", base_dir / "en/intro.wav", model_en)
+    add_task(f"{inst_en}Today is", "en", base_dir / "en/date_intro.wav", model_en)
+    add_task(f"{inst_en}Summer time", "en", base_dir / "en/dst_summer.wav", model_en)
+    add_task(f"{inst_en}Winter time", "en", base_dir / "en/dst_winter.wav", model_en)
 
     return tasks
 
@@ -272,10 +285,69 @@ def check_piper_status():
         exit(1) # Strict mode
 
 def generate_speech(text, lang, output_path, model_name=None):
-    """Generates audio using Piper (local) or gTTS (online) if model is None."""
+    """Generates audio using Gemini (online), Piper (local) or gTTS (online fallback)."""
     
-    # CASE 1: Use gTTS if no specific Piper model is requested
-    if model_name is None:
+    # CASE 0: Use Gemini if API Key is available and no specific Piper model is requested
+    # OR if model_name starts with 'gemini:'
+    effective_model = model_name
+    use_gemini = False
+    gemini_voice = "Puck" # Default high-quality voice
+    
+    if effective_model is None and gemini_client:
+        use_gemini = True
+    elif isinstance(effective_model, str) and effective_model.startswith("gemini:"):
+        use_gemini = True
+        gemini_voice = effective_model.split(":")[1]
+        effective_model = None
+
+    if use_gemini and gemini_client:
+        try:
+            # Using current stable model with Native Audio/TTS support
+            response = gemini_client.models.generate_content(
+                model='gemini-2.0-flash',
+                contents=text,
+                config={
+                    'speech_config': {'voice_config': {'prebuilt_voice_config': {'voice_name': gemini_voice}}},
+                }
+            )
+            
+            audio_data = None
+            mime_type = "audio/wav" # Default assumption
+            
+            if response.candidates and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data:
+                        audio_data = part.inline_data.data
+                        mime_type = part.inline_data.mime_type
+                        break
+            
+            if audio_data:
+                # Some models return MP3 data even if WAV is expected, or vice-versa
+                suffix = ".mp3" if "mpeg" in mime_type else ".wav"
+                temp_audio = str(output_path) + suffix
+                
+                with open(temp_audio, "wb") as f:
+                    f.write(audio_data)
+                
+                # Convert to standard format
+                if ".mp3" in suffix:
+                    sound = AudioSegment.from_mp3(temp_audio)
+                else:
+                    sound = AudioSegment.from_file(temp_audio)
+                
+                sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
+                sound.export(str(output_path), format="wav")
+                
+                if os.path.exists(temp_audio):
+                    os.remove(temp_audio)
+                return True
+            else:
+                safe_print(f"  [WARN] Gemini returned no audio for: {text[:30]}...")
+        except Exception as e:
+            safe_print(f"  [ERROR] Gemini TTS failed: {e}. Falling back...")
+
+    # CASE 1: Use gTTS if no specific Piper model is requested (and Gemini failed or not available)
+    if effective_model is None:
         try:
             # Use 'com' for English (US) and 'de' for German
             tld = 'de' if lang == 'de' else 'com'
@@ -300,10 +372,10 @@ def generate_speech(text, lang, output_path, model_name=None):
             raise Exception(f"gTTS failed: {e}")
 
     # CASE 2: Use Piper
-    model_path = PIPER_VOICES_DIR / model_name
+    model_path = PIPER_VOICES_DIR / effective_model
     
     if not model_path.exists():
-         raise FileNotFoundError(f"Piper Model {model_name} not found at {model_path}")
+         raise FileNotFoundError(f"Piper Model {effective_model} not found at {model_path}")
     
     cmd = [
         str(PIPER_BIN),
@@ -463,7 +535,7 @@ def generate_audio_cache():
         
         # Adjust max_workers based on your network/CPU comfort.
         # NOTE: severe rate-limiting by Google if too high (>5). Keeping it low for stability.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
             # We use as_completed to update progress immediately
             future_to_task = {executor.submit(process_single_file, task): task for task in tasks}
             
@@ -533,6 +605,16 @@ def generate_sd_card_structure(categories):
     for i, cat in enumerate(sorted_cats):
         langs = ", ".join(categories[cat])
         print(f"  {i+1}. {cat} ({langs})")
+
+    # Clean up old playlists before regenerating
+    playlist_dir = SD_ROOT / "playlists"
+    if playlist_dir.exists():
+        for old_pl in playlist_dir.glob("cat_*_v3.m3u"):
+            try:
+                old_pl.unlink()
+                print(f"  [DEL] Old playlist: {old_pl.name}")
+            except Exception as e:
+                print(f"  [WARN] Could not delete {old_pl.name}: {e}")
         
     for persona_idx in range(1, 6):
         default_name = ""
@@ -614,7 +696,11 @@ def generate_sd_card_structure(categories):
                     else:
                         # Clean up old playlist if it exists? 
                         # Or ensure we don't leave stale ones?
-                        pass
+                        pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
+                        pl_path = playlist_dir / pl_filename
+                        if pl_path.exists():
+                            pl_path.unlink()
+                            print(f"     Removed Playlist: {pl_filename} (0 tracks)")
 
                 break
             else:
@@ -748,7 +834,7 @@ def generate_system_sounds():
                 print(f"    [ERR] Failed to generate {rel_path}: {e}")
 
     print(f"  [PLAN] Generating {len(SYSTEM_PROMPTS)} system prompts...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         list(executor.map(process_system_prompt, SYSTEM_PROMPTS.items()))
 
     # 2. Generate Time Announcements
@@ -781,7 +867,7 @@ def generate_system_sounds():
              if temp_path.exists(): os.remove(temp_path)
              return False
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
         list(executor.map(process_time_task, time_tasks))
 
 
