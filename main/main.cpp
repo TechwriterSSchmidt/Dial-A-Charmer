@@ -37,8 +37,17 @@ audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
 std::string dial_buffer = "";
 int64_t last_digit_time = 0;
 const int DIAL_TIMEOUT_MS = 2000;
+const int PERSONA_PAUSE_MS = 1500;
+const int DIALTONE_SILENCE_MS = 1000;
 bool is_playing = false;
 bool g_output_mode_handset = false; // False = Speaker, True = Handset
+bool g_off_hook = false;
+bool g_line_busy = false;
+bool g_persona_playback_active = false;
+bool g_any_digit_dialed = false;
+int64_t g_off_hook_start_ms = 0;
+int64_t g_last_playback_finished_ms = 0;
+bool g_last_playback_was_dialtone = false;
 
 // Helpers
 void stop_playback(); // forward decl
@@ -48,6 +57,7 @@ static float g_gain_left = 0.5f;
 static float g_gain_right = 0.5f;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
+static volatile bool g_key3_pressed = false;
 
 static int gain_open(audio_element_handle_t self)
 {
@@ -164,6 +174,9 @@ void play_file(const char* path) {
     }
 
     
+    // Track last playback type
+    g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dialtone_1.wav") == 0);
+
     // Force Output Selection immediately after run logic
     update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
@@ -176,13 +189,42 @@ void play_file(const char* path) {
     is_playing = true;
 }
 
+void wait_for_dialtone_silence_if_needed() {
+    if (!g_last_playback_was_dialtone) {
+        return;
+    }
+
+    int64_t now = esp_timer_get_time() / 1000;
+    if (is_playing) {
+        stop_playback();
+        g_last_playback_finished_ms = now;
+    }
+
+    int64_t elapsed = now - g_last_playback_finished_ms;
+    if (elapsed < DIALTONE_SILENCE_MS) {
+        vTaskDelay(pdMS_TO_TICKS(DIALTONE_SILENCE_MS - elapsed));
+    }
+
+    g_last_playback_was_dialtone = false;
+}
+
+void play_busy_tone() {
+    g_line_busy = true;
+    stop_playback();
+    play_file("/sdcard/system/busy_tone.wav");
+}
+
 void process_phonebook_function(PhonebookEntry entry) {
     if (entry.type == "FUNCTION") {
         if (entry.value == "COMPLIMENT_CAT") {
             // Parameter is "1", "2", etc. Map to persona_0X
             std::string folder = "/sdcard/persona_0" + entry.parameter + "/de";
             std::string file = get_random_file(folder);
-            if (!file.empty()) play_file(file.c_str());
+            if (!file.empty()) {
+                wait_for_dialtone_silence_if_needed();
+                g_persona_playback_active = true;
+                play_file(file.c_str());
+            }
             else play_file("/sdcard/system/error_msg_de.wav");
         }
         else if (entry.value == "COMPLIMENT_MIX") {
@@ -190,7 +232,11 @@ void process_phonebook_function(PhonebookEntry entry) {
             int persona = (esp_random() % 5) + 1;
             std::string folder = "/sdcard/persona_0" + std::to_string(persona) + "/de";
             std::string file = get_random_file(folder);
-            if (!file.empty()) play_file(file.c_str()); 
+            if (!file.empty()) {
+                wait_for_dialtone_silence_if_needed();
+                g_persona_playback_active = true;
+                play_file(file.c_str());
+            }
         }
         else if (entry.value == "ANNOUNCE_TIME") {
             play_file("/sdcard/system/time_unavailable_de.wav");
@@ -224,11 +270,16 @@ void stop_playback() {
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
         is_playing = false;
+        g_last_playback_finished_ms = esp_timer_get_time() / 1000;
     }
 }
 
 // Callbacks
 void on_dial_complete(int number) {
+    if (g_line_busy) {
+        return;
+    }
+    g_any_digit_dialed = true;
     ESP_LOGI(TAG, "--- DIALED DIGIT: %d ---", number);
     dial_buffer += std::to_string(number);
     last_digit_time = esp_timer_get_time() / 1000; // Update timestamp (ms)
@@ -241,15 +292,24 @@ void on_hook_change(bool off_hook) {
     g_output_mode_handset = off_hook;
     update_audio_output();
 
+    g_off_hook = off_hook;
+
     if (off_hook) {
         // Receiver Picked Up
         dial_buffer = "";
+        g_line_busy = false;
+        g_persona_playback_active = false;
+        g_any_digit_dialed = false;
+        g_off_hook_start_ms = esp_timer_get_time() / 1000;
         // Play dial tone
         play_file("/sdcard/system/dialtone_1.wav");
     } else {
         // Receiver Hung Up
         stop_playback();
         dial_buffer = "";
+        g_line_busy = false;
+        g_persona_playback_active = false;
+        g_any_digit_dialed = false;
     }
 }
 
@@ -259,6 +319,17 @@ void input_task(void *pvParameters) {
     while(1) {
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
+
+        if (APP_PIN_KEY3 >= 0) {
+            int level = gpio_get_level((gpio_num_t)APP_PIN_KEY3);
+            bool pressed = APP_KEY3_ACTIVE_LOW ? (level == 0) : (level == 1);
+            if (pressed != g_key3_pressed) {
+                g_key3_pressed = pressed;
+                g_gain_right = pressed ? 0.0f : 0.5f;
+                g_gain_left = 0.5f;
+                ESP_LOGI(TAG, "Key3 %s -> Right gain=%0.2f", pressed ? "pressed" : "released", g_gain_right);
+            }
+        }
         
         // Yield to IDLE task to reset WDT using vTaskDelay
         // Ensure strictly positive delay to allow IDLE task to run
@@ -292,6 +363,12 @@ extern "C" void app_main(void)
         gpio_set_direction((gpio_num_t)APP_PIN_DIAL_MODE, GPIO_MODE_INPUT);
         int level = gpio_get_level((gpio_num_t)APP_PIN_DIAL_MODE);
         ESP_LOGI(TAG, "Startup Mode Pin Level: %d (Expected Active Low: %s)", level, APP_DIAL_MODE_ACTIVE_LOW ? "Yes" : "No");
+    }
+
+    // Key3 for gain test
+    if (APP_PIN_KEY3 >= 0) {
+        gpio_set_direction((gpio_num_t)APP_PIN_KEY3, GPIO_MODE_INPUT);
+        gpio_set_pull_mode((gpio_num_t)APP_PIN_KEY3, APP_KEY3_ACTIVE_LOW ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
     }
 
     dial.onDialComplete(on_dial_complete);
@@ -429,6 +506,15 @@ extern "C" void app_main(void)
             }
         }
 
+        // Busy tone after 5s off-hook without dialing
+        if (g_off_hook && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
+            int64_t now = esp_timer_get_time() / 1000;
+            if ((now - g_off_hook_start_ms) > 5000) {
+                ESP_LOGI(TAG, "Idle timeout -> busy tone");
+                play_busy_tone();
+            }
+        }
+
         if (ret != ESP_OK) {
             continue;
         }
@@ -460,6 +546,16 @@ extern "C" void app_main(void)
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
                     ESP_LOGI(TAG, "Audio Finished.");
                     stop_playback();
+                    if (g_persona_playback_active && g_off_hook) {
+                        g_persona_playback_active = false;
+                        ESP_LOGI(TAG, "Persona finished -> busy tone (pause)");
+                        vTaskDelay(pdMS_TO_TICKS(PERSONA_PAUSE_MS));
+                        play_busy_tone();
+                        continue;
+                    }
+                    if (g_line_busy && g_off_hook) {
+                        play_busy_tone();
+                    }
                 }
             }
         }

@@ -8,6 +8,10 @@
 #define APP_PIN_HOOK       19  
 #define APP_PIN_EXTRA_BTN  18  
 
+// Key3 (Audio mute test)
+#define APP_PIN_KEY3       19
+#define APP_KEY3_ACTIVE_LOW true
+
 // Dial Mode: "Closed to GND" during dialing -> LOW. So Active Low.
 #define APP_DIAL_MODE_ACTIVE_LOW true 
 
