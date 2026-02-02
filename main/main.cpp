@@ -1,6 +1,10 @@
 #include <string.h>
 #include <string>
+#include <vector>
+#include <dirent.h>
+#include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -35,7 +39,44 @@ const int DIAL_TIMEOUT_MS = 2000;
 bool is_playing = false;
 
 // Helpers
+std::string get_random_file(std::string folderPath) {
+    std::vector<std::string> files;
+    DIR *dir;
+    struct dirent *ent;
+    
+    ESP_LOGI(TAG, "Scanning folder: %s", folderPath.c_str());
+    if ((dir = opendir(folderPath.c_str())) != NULL) {
+        while ((ent = readdir(dir)) != NULL) {
+            if (ent->d_type == DT_REG) { // Regular file
+                std::string fname = ent->d_name;
+                if (fname.find(".wav") != std::string::npos) {
+                    files.push_back(folderPath + "/" + fname);
+                }
+            }
+        }
+        closedir(dir);
+    } else {
+        ESP_LOGE(TAG, "Could not open directory: %s", folderPath.c_str());
+        return "";
+    }
+
+    if (files.empty()) {
+        ESP_LOGW(TAG, "No WAV files found in %s", folderPath.c_str());
+        return "";
+    }
+
+    // Pick random
+    int idx = esp_random() % files.size();
+    ESP_LOGI(TAG, "Selected %d of %d: %s", idx, files.size(), files[idx].c_str());
+    return files[idx];
+}
+
 void play_file(const char* path) {
+    if (path == NULL || strlen(path) == 0) {
+        ESP_LOGE(TAG, "Invalid file path to play");
+        return;
+    }
+
     ESP_LOGI(TAG, "Requesting playback: %s", path);
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
@@ -44,6 +85,49 @@ void play_file(const char* path) {
     audio_element_set_uri(fatfs_stream, path);
     audio_pipeline_run(pipeline);
     is_playing = true;
+}
+
+void process_phonebook_function(PhonebookEntry entry) {
+    if (entry.type == "FUNCTION") {
+        if (entry.value == "COMPLIMENT_CAT") {
+            // Parameter is "1", "2", etc. Map to persona_0X
+            std::string folder = "/sdcard/persona_0" + entry.parameter + "/de";
+            std::string file = get_random_file(folder);
+            if (!file.empty()) play_file(file.c_str());
+            else play_file("/sdcard/system/error_msg_de.wav");
+        }
+        else if (entry.value == "COMPLIMENT_MIX") {
+            // Pick random persona 1-5
+            int persona = (esp_random() % 5) + 1;
+            std::string folder = "/sdcard/persona_0" + std::to_string(persona) + "/de";
+            std::string file = get_random_file(folder);
+            if (!file.empty()) play_file(file.c_str()); 
+        }
+        else if (entry.value == "ANNOUNCE_TIME") {
+            play_file("/sdcard/system/time_unavailable_de.wav");
+        }
+        else if (entry.value == "REBOOT") {
+             ESP_LOGW(TAG, "Rebooting system...");
+             play_file("/sdcard/system/system_ready_de.wav"); // Ack before reboot
+             vTaskDelay(pdMS_TO_TICKS(2000));
+             esp_restart();
+        }
+        else if (entry.value == "VOICE_MENU") {
+            play_file("/sdcard/system/menu_de.wav");
+        }
+        else {
+            ESP_LOGW(TAG, "Unknown Function: %s", entry.value.c_str());
+            play_file("/sdcard/system/error_msg_de.wav");
+        }
+    } 
+    else if (entry.type == "TTS" || entry.type == "AUDIO") {
+        // Direct file mapping
+        if (entry.value.rfind("/", 0) == 0) {
+            play_file(entry.value.c_str());
+        } else {
+             ESP_LOGW(TAG, "Invalid path: %s", entry.value.c_str());
+        }
+    }
 }
 
 void stop_playback() {
@@ -77,10 +161,18 @@ void on_hook_change(bool off_hook) {
 
 // Input Task
 void input_task(void *pvParameters) {
-    ESP_LOGI(TAG, "Input Task Started");
+    ESP_LOGI(TAG, "Input Task Started. Priority: %d", uxTaskPriorityGet(NULL));
     while(1) {
         dial.loop();
-        vTaskDelay(pdMS_TO_TICKS(10)); // Poll every 10ms
+        // Yield to IDLE task to reset WDT using vTaskDelay
+        vTaskDelay(pdMS_TO_TICKS(5)); 
+        
+        /* Debug Mode Pin state every 5 seconds (Commented out to reduce load)
+        static int64_t last_debug = 0;
+        if (esp_timer_get_time() - last_debug > 5000000) {
+            last_debug = esp_timer_get_time();
+        } 
+        */
     }
 }
 
@@ -99,8 +191,8 @@ extern "C" void app_main(void)
     dial.onDialComplete(on_dial_complete);
     dial.onHookChange(on_hook_change);
     
-    // Start Input Task
-    xTaskCreate(input_task, "input_task", 4096, &dial, 5, NULL);
+    // Start Input Task with Higher Priority (10) to avoid starvation by Audio
+    xTaskCreate(input_task, "input_task", 4096, &dial, 10, NULL);
 
     // --- 2. Audio Board Init ---
     ESP_LOGI(TAG, "Starting Audio Board...");
@@ -188,16 +280,8 @@ extern "C" void app_main(void)
                 // Lookup
                 if (phonebook.hasEntry(dial_buffer)) {
                      PhonebookEntry entry = phonebook.getEntry(dial_buffer);
-                     ESP_LOGI(TAG, "Playing Entry: %s", entry.name.c_str());
-                     
-                     // If value starts with "/", treat as file.
-                     if (entry.value.rfind("/", 0) == 0) {
-                         play_file(entry.value.c_str());
-                     } else {
-                         // Fallback check: is it a special command?
-                         // For now, assume anything else is a file path too.
-                         play_file(entry.value.c_str());
-                     }
+                     ESP_LOGI(TAG, "Phonebook Match: %s (%s)", entry.name.c_str(), entry.value.c_str());
+                     process_phonebook_function(entry);
                 } else {
                     ESP_LOGI(TAG, "Number %s not found.", dial_buffer.c_str());
                     play_file("/sdcard/system/call_terminated.wav");
@@ -214,7 +298,7 @@ extern "C" void app_main(void)
         if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT) {
             // Handle Music Info (Sample Rate)
             if (msg.source == (void *)wav_decoder && msg.cmd == AEL_MSG_CMD_REPORT_MUSIC_INFO) {
-                audio_element_info_t music_info = {0};
+                audio_element_info_t music_info = {};
                 audio_element_getinfo(wav_decoder, &music_info);
                 ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d", 
                     music_info.sample_rates, music_info.channels, music_info.bits);

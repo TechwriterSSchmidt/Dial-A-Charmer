@@ -50,9 +50,19 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
 
     // Check Pulse Pin
     int pulse_level = gpio_get_level(_instance->_pulse_pin);
+    
     // Logic: Count only on transition to INACTIVE level?
     // Original: bool pulseInactive = (read == (ACTIVE_LOW ? HIGH : LOW)); -> (read == HIGH)
     // If pulseInactive is true, we debounce and count.
+    
+    // Simplified logic: Count Falling Edges if Active Low
+    // OR we can just check if state is "active" (dialing pulse)
+    
+    // We already have interrupts for "ANYEDGE" but let's just count pulses 
+    // on the stable state. 
+    // Actually, Rotary Dial pulses are ~60ms break / 40ms make. 
+    // We trust the original Arduino logic:
+    // "if (read == HIGH && (now - _last_pulse_time > 50)) count++" (Active Low)
     
     bool pulse_is_inactive_state = (pulse_level == (DIAL_PULSE_ACTIVE_LOW ? 1 : 0));
     if (!pulse_is_inactive_state) return;
@@ -161,8 +171,10 @@ void RotaryDial::loop() {
                 _dialing = false;
                 int digit = _pulse_count;
                 if (digit > 0) {
-                    if (digit > 9) digit = 0;
-                     if (digit == 10) digit = 0;
+                     // 10 pulses = 0
+                    if (digit == 10) digit = 0;
+                    if (digit > 9) digit = 0; // Sanity check
+                    
                      if (_dial_callback) _dial_callback(digit);
                 }
                 _pulse_count = 0;
