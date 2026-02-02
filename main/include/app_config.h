@@ -26,6 +26,20 @@
 // Power Amplifier
 #define APP_PIN_PA_ENABLE  21
 
+// Timer alarm loop duration (minutes)
+#define APP_TIMER_ALARM_LOOP_MINUTES 5
+
+// Timing settings (ms)
+#define APP_DIAL_TIMEOUT_MS 2000
+#define APP_PERSONA_PAUSE_MS 1500
+#define APP_DIALTONE_SILENCE_MS 1000
+#define APP_BUSY_TIMEOUT_MS 5000
+
+// Software gain defaults
+#define APP_GAIN_DEFAULT_LEFT 0.5f
+#define APP_GAIN_DEFAULT_RIGHT 0.5f
+#define APP_GAIN_RAMP_MS 40
+
 
 // SD Card
 #define APP_PIN_SD_CS      13

@@ -36,9 +36,9 @@ audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
 // Logic State
 std::string dial_buffer = "";
 int64_t last_digit_time = 0;
-const int DIAL_TIMEOUT_MS = 2000;
-const int PERSONA_PAUSE_MS = 1500;
-const int DIALTONE_SILENCE_MS = 1000;
+const int DIAL_TIMEOUT_MS = APP_DIAL_TIMEOUT_MS;
+const int PERSONA_PAUSE_MS = APP_PERSONA_PAUSE_MS;
+const int DIALTONE_SILENCE_MS = APP_DIALTONE_SILENCE_MS;
 bool is_playing = false;
 bool g_output_mode_handset = false; // False = Speaker, True = Handset
 bool g_off_hook = false;
@@ -48,16 +48,43 @@ bool g_any_digit_dialed = false;
 int64_t g_off_hook_start_ms = 0;
 int64_t g_last_playback_finished_ms = 0;
 bool g_last_playback_was_dialtone = false;
+bool g_timer_active = false;
+int g_timer_minutes = 0;
+int64_t g_timer_end_ms = 0;
+bool g_timer_announce_pending = false;
+bool g_timer_intro_playing = false;
+int g_timer_announce_minutes = 0;
+bool g_timer_alarm_active = false;
+int64_t g_timer_alarm_end_ms = 0;
 
 // Helpers
 void stop_playback(); // forward decl
+void play_file(const char* path); // forward decl
+static void start_timer_minutes(int minutes) {
+    // Override any existing timer or pending timer announcements
+    g_timer_active = true;
+    g_timer_minutes = minutes;
+    g_timer_end_ms = (esp_timer_get_time() / 1000) + (int64_t)minutes * 60 * 1000;
+    g_timer_announce_pending = false;
+    g_timer_intro_playing = false;
+}
+
+static void announce_timer_minutes(int minutes) {
+    char path[128];
+    if (minutes < 10) {
+        snprintf(path, sizeof(path), "/sdcard/time/de/m_0%d.wav", minutes);
+    } else {
+        snprintf(path, sizeof(path), "/sdcard/time/de/m_%d.wav", minutes);
+    }
+    play_file(path);
+}
 
 // Software gain (no register writes) with soft ramp to reduce clicks
-static float g_gain_left_target = 0.5f;
-static float g_gain_right_target = 0.5f;
+static float g_gain_left_target = APP_GAIN_DEFAULT_LEFT;
+static float g_gain_right_target = APP_GAIN_DEFAULT_RIGHT;
 static float g_gain_left_cur = 0.0f;
 static float g_gain_right_cur = 0.0f;
-static int g_gain_ramp_ms = 80;
+static int g_gain_ramp_ms = APP_GAIN_RAMP_MS;
 static int g_gain_sample_rate = 44100;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
@@ -248,6 +275,13 @@ void play_busy_tone() {
     play_file("/sdcard/system/busy_tone.wav");
 }
 
+void play_timer_alarm() {
+    g_timer_alarm_active = true;
+    g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
+    stop_playback();
+    play_file("/sdcard/ringtones/digital_alarm.wav");
+}
+
 void process_phonebook_function(PhonebookEntry entry) {
     if (entry.type == "FUNCTION") {
         if (entry.value == "COMPLIMENT_CAT") {
@@ -335,11 +369,19 @@ void on_hook_change(bool off_hook) {
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
         g_off_hook_start_ms = esp_timer_get_time() / 1000;
+        if (g_timer_alarm_active) {
+            g_timer_alarm_active = false;
+        }
         // Play dial tone
         play_file("/sdcard/system/dialtone_1.wav");
     } else {
         // Receiver Hung Up
         stop_playback();
+        if (g_timer_active) {
+            g_timer_active = false;
+            ESP_LOGI(TAG, "Timer reset by hangup");
+            play_file("/sdcard/system/timer_stopped_de.wav");
+        }
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -359,8 +401,8 @@ void input_task(void *pvParameters) {
             bool pressed = APP_KEY3_ACTIVE_LOW ? (level == 0) : (level == 1);
             if (pressed != g_key3_pressed) {
                 g_key3_pressed = pressed;
-                g_gain_right_target = pressed ? 0.0f : 0.5f;
-                g_gain_left_target = 0.5f;
+                g_gain_right_target = pressed ? 0.0f : APP_GAIN_DEFAULT_RIGHT;
+                g_gain_left_target = APP_GAIN_DEFAULT_LEFT;
                 ESP_LOGI(TAG, "Key3 %s -> Right gain=%0.2f", pressed ? "pressed" : "released", g_gain_right_target);
             }
         }
@@ -526,14 +568,35 @@ extern "C" void app_main(void)
             if ((now - last_digit_time) > DIAL_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Dial Timeout. Processing Number: %s", dial_buffer.c_str());
                 
-                // Lookup
-                if (phonebook.hasEntry(dial_buffer)) {
-                     PhonebookEntry entry = phonebook.getEntry(dial_buffer);
-                     ESP_LOGI(TAG, "Phonebook Match: %s (%s)", entry.name.c_str(), entry.value.c_str());
-                     process_phonebook_function(entry);
+                // On-hook -> Timer mode (1-3 digits, up to 500 minutes)
+                if (!g_off_hook) {
+                    if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
+                        int minutes = atoi(dial_buffer.c_str());
+                        if (minutes >= 1 && minutes <= 500) {
+                            ESP_LOGI(TAG, "Timer set: %d minutes", minutes);
+                            start_timer_minutes(minutes);
+                            g_timer_announce_minutes = minutes;
+                            g_timer_announce_pending = true;
+                            g_timer_intro_playing = true;
+                            play_file("/sdcard/system/timer_set_de.wav");
+                        } else {
+                            ESP_LOGW(TAG, "Invalid timer value: %d", minutes);
+                            play_file("/sdcard/system/error_tone.wav");
+                        }
+                    } else {
+                        ESP_LOGW(TAG, "Timer requires 1-3 digits. Got: %s", dial_buffer.c_str());
+                        play_file("/sdcard/system/error_tone.wav");
+                    }
                 } else {
-                    ESP_LOGI(TAG, "Number %s not found.", dial_buffer.c_str());
-                    play_file("/sdcard/system/call_terminated.wav");
+                    // Lookup
+                    if (phonebook.hasEntry(dial_buffer)) {
+                         PhonebookEntry entry = phonebook.getEntry(dial_buffer);
+                         ESP_LOGI(TAG, "Phonebook Match: %s (%s)", entry.name.c_str(), entry.value.c_str());
+                         process_phonebook_function(entry);
+                    } else {
+                        ESP_LOGI(TAG, "Number %s not found.", dial_buffer.c_str());
+                        play_file("/sdcard/system/call_terminated.wav");
+                    }
                 }
                 
                 dial_buffer = ""; // Reset buffer
@@ -543,9 +606,19 @@ extern "C" void app_main(void)
         // Busy tone after 5s off-hook without dialing
         if (g_off_hook && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
             int64_t now = esp_timer_get_time() / 1000;
-            if ((now - g_off_hook_start_ms) > 5000) {
+            if ((now - g_off_hook_start_ms) > APP_BUSY_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Idle timeout -> busy tone");
                 play_busy_tone();
+            }
+        }
+
+        // Timer alarm check
+        if (g_timer_active && !g_timer_alarm_active) {
+            int64_t now = esp_timer_get_time() / 1000;
+            if (now >= g_timer_end_ms) {
+                ESP_LOGI(TAG, "Timer expired -> alarm");
+                g_timer_active = false;
+                play_timer_alarm();
             }
         }
 
@@ -580,6 +653,21 @@ extern "C" void app_main(void)
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
                     ESP_LOGI(TAG, "Audio Finished.");
                     stop_playback();
+                    if (g_timer_intro_playing && g_timer_announce_pending) {
+                        g_timer_intro_playing = false;
+                        g_timer_announce_pending = false;
+                        announce_timer_minutes(g_timer_announce_minutes);
+                        continue;
+                    }
+                    if (g_timer_alarm_active) {
+                        int64_t now = esp_timer_get_time() / 1000;
+                        if (now < g_timer_alarm_end_ms) {
+                            play_file("/sdcard/ringtones/digital_alarm.wav");
+                        } else {
+                            g_timer_alarm_active = false;
+                        }
+                        continue;
+                    }
                     if (g_persona_playback_active && g_off_hook) {
                         g_persona_playback_active = false;
                         ESP_LOGI(TAG, "Persona finished -> busy tone (pause)");
@@ -587,7 +675,7 @@ extern "C" void app_main(void)
                         play_busy_tone();
                         continue;
                     }
-                    if (g_line_busy && g_off_hook) {
+                    if (g_line_busy && g_off_hook && !g_timer_alarm_active) {
                         play_busy_tone();
                     }
                 }
