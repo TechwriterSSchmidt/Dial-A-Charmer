@@ -95,3 +95,28 @@ esp_err_t audio_board_sdcard_init(esp_periph_set_handle_t set, periph_sdcard_mod
     esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
     return esp_periph_start(set, sdcard_handle);
 }
+
+esp_err_t audio_board_select_output(bool use_handset)
+{
+    // Register 0x1D (29): DAC Control 26
+    // Bit 2: DAC Left Mute (1=Mute, 0=Normal)
+    // Bit 1: DAC Right Mute (1=Mute, 0=Normal)
+    // We want to MUTE the UNUSED channel.
+    
+    uint8_t reg_addr = 0x1D; 
+    uint8_t val = 0;
+    
+    if (use_handset) {
+        // Handset: Use Left (Lout). Mute Right.
+        val = 0x02; // Bit 1 set
+        ESP_LOGI(TAG, "Audio Output: HANDSET (Lout)");
+    } else {
+        // Base: Use Right (Rout). Mute Left.
+        val = 0x04; // Bit 2 set
+        ESP_LOGI(TAG, "Audio Output: SPEAKER (Rout)");
+    }
+    
+    // Attempt to use es8388_write_reg directly
+    // If this fails specifically during link, it means the driver is hidden.
+    return es8388_write_reg(reg_addr, val);
+}

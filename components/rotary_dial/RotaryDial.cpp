@@ -4,7 +4,7 @@
 #include "rom/ets_sys.h" 
 
 // Hardcoded configs for component independence
-#define DIAL_DEBOUNCE_PULSE_MS 50
+#define DIAL_DEBOUNCE_PULSE_MS 40
 #define DIAL_TIMEOUT_MS 700
 #define DIAL_MODE_ACTIVE_LOW true
 #define DIAL_PULSE_ACTIVE_LOW true
@@ -36,6 +36,34 @@ RotaryDial::RotaryDial(int pulse_pin, int hook_pin, int extra_btn_pin, int mode_
     _btn_callback = nullptr;
     
     _instance = this;
+    _mode_active_low = DIAL_MODE_ACTIVE_LOW;
+    _pulse_active_low = DIAL_PULSE_ACTIVE_LOW;
+}
+
+void RotaryDial::setModeActiveLow(bool active_low) {
+    _mode_active_low = active_low;
+}
+
+void RotaryDial::setPulseActiveLow(bool active_low) {
+    _pulse_active_low = active_low;
+}
+
+void RotaryDial::debugLoop() {
+    static int last_pulse_val = -1;
+    static int last_mode_val = -1;
+    
+    int pulse = gpio_get_level(_pulse_pin);
+    int mode = -1;
+    if ((int)_mode_pin >= 0) mode = gpio_get_level(_mode_pin);
+
+    bool changed = false;
+    if (pulse != last_pulse_val) { last_pulse_val = pulse; changed = true; }
+    if (mode != last_mode_val) { last_mode_val = mode; changed = true; }
+
+    if (changed) {
+        // Direct print (ets_printf) to avoid logging overhead and buffering
+        ets_printf("RAW CHANGE -> P(5):%d | M(23):%d | Time:%lld\n", pulse, mode, MILLIS());
+    }
 }
 
 void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
@@ -44,7 +72,7 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
     // Check Mode Pin if used
     if ((int)_instance->_mode_pin >= 0) {
         int mode_level = gpio_get_level(_instance->_mode_pin);
-        bool mode_active = (mode_level == (DIAL_MODE_ACTIVE_LOW ? 0 : 1));
+        bool mode_active = (mode_level == (_instance->_mode_active_low ? 0 : 1));
         if (!mode_active) return;
     }
 
@@ -64,7 +92,7 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
     // We trust the original Arduino logic:
     // "if (read == HIGH && (now - _last_pulse_time > 50)) count++" (Active Low)
     
-    bool pulse_is_inactive_state = (pulse_level == (DIAL_PULSE_ACTIVE_LOW ? 1 : 0));
+    bool pulse_is_inactive_state = (pulse_level == (_instance->_pulse_active_low ? 1 : 0));
     if (!pulse_is_inactive_state) return;
 
     int64_t now_ms = MILLIS();
@@ -147,7 +175,7 @@ void RotaryDial::loop() {
     // --- Dial Logic ---
     if ((int)_mode_pin >= 0) {
         int mode_level = gpio_get_level(_mode_pin);
-        bool mode_active = (mode_level == (DIAL_MODE_ACTIVE_LOW ? 0 : 1));
+        bool mode_active = (mode_level == (_mode_active_low ? 0 : 1));
         
         static bool last_raw_mode = false;
         static bool stable_mode_active = false;
@@ -164,18 +192,22 @@ void RotaryDial::loop() {
 
         if (stable_mode_active) {
             _dialing = true;
-            _last_pulse_time = now;
+            // _last_pulse_time = now; // Removed to prevent Debounce Race Condition
         } else {
             if (_dialing) {
                 // Falling Edge
                 _dialing = false;
-                int digit = _pulse_count;
-                if (digit > 0) {
-                     // 10 pulses = 0
+                
+                int raw_pulses = _pulse_count;
+                // Standard Logic: pulses = digit. 10 pulses -> 0.
+                if (raw_pulses > 0) {
+                    int digit = raw_pulses;
                     if (digit == 10) digit = 0;
-                    if (digit > 9) digit = 0; // Sanity check
                     
-                     if (_dial_callback) _dial_callback(digit);
+                    // Sanity check: Only send valid digits 0-9
+                    if (digit <= 9) { 
+                        if (_dial_callback) _dial_callback(digit);
+                    }
                 }
                 _pulse_count = 0;
             }

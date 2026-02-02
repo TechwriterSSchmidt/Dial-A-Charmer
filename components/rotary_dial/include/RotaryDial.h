@@ -26,6 +26,12 @@ public:
     bool isButtonDown();
     bool isDialing() const;
 
+    void setModeActiveLow(bool active_low);
+    void setPulseActiveLow(bool active_low);
+    
+    // Debug method
+    void debugLoop();
+
 private:
     gpio_num_t _pulse_pin;
     gpio_num_t _hook_pin;
@@ -36,6 +42,8 @@ private:
     int64_t _last_pulse_time;
     volatile bool _dialing;
     volatile bool _new_pulse;
+    bool _mode_active_low;
+    bool _pulse_active_low;
 
     // Hook
     bool _off_hook;

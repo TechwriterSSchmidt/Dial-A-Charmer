@@ -37,8 +37,16 @@ std::string dial_buffer = "";
 int64_t last_digit_time = 0;
 const int DIAL_TIMEOUT_MS = 2000;
 bool is_playing = false;
+bool g_output_mode_handset = false; // False = Speaker, True = Handset
 
 // Helpers
+void stop_playback(); // forward decl
+
+void update_audio_output() {
+    // Re-apply the current output selection
+    // This is needed because some ADF driver events might reset the mute registers
+    audio_board_select_output(g_output_mode_handset);
+}
 std::string get_random_file(std::string folderPath) {
     std::vector<std::string> files;
     DIR *dir;
@@ -77,6 +85,14 @@ void play_file(const char* path) {
         return;
     }
 
+    if (pipeline == NULL) {
+        ESP_LOGE(TAG, "Audio Pipeline not initialized yet, cannot play: %s", path);
+        return;
+    }
+
+    
+    // Force Output Selection immediately after run logic
+    update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
@@ -147,6 +163,11 @@ void on_dial_complete(int number) {
 
 void on_hook_change(bool off_hook) {
     ESP_LOGI(TAG, "--- HOOK STATE: %s ---", off_hook ? "OFF HOOK (Active/Pickup)" : "ON HOOK (Idle/Hangup)");
+    
+    // Switch Audio Output
+    g_output_mode_handset = off_hook;
+    update_audio_output();
+
     if (off_hook) {
         // Receiver Picked Up
         dial_buffer = "";
@@ -163,16 +184,12 @@ void on_hook_change(bool off_hook) {
 void input_task(void *pvParameters) {
     ESP_LOGI(TAG, "Input Task Started. Priority: %d", uxTaskPriorityGet(NULL));
     while(1) {
-        dial.loop();
-        // Yield to IDLE task to reset WDT using vTaskDelay
-        vTaskDelay(pdMS_TO_TICKS(5)); 
+        dial.loop(); // Normal Logic restored
+        // dial.debugLoop(); // DEBUG LOGIC DISABLED
         
-        /* Debug Mode Pin state every 5 seconds (Commented out to reduce load)
-        static int64_t last_debug = 0;
-        if (esp_timer_get_time() - last_debug > 5000000) {
-            last_debug = esp_timer_get_time();
-        } 
-        */
+        // Yield to IDLE task to reset WDT using vTaskDelay
+        // Ensure strictly positive delay to allow IDLE task to run
+        vTaskDelay(pdMS_TO_TICKS(10)); 
     }
 }
 
@@ -186,13 +203,22 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
 
     // --- 1. Input Initialization ---
-    ESP_LOGI(TAG, "Initializing Rotary Dial...");
+    ESP_LOGI(TAG, "Initializing Rotary Dial (Mode Pin: %d)...", APP_PIN_DIAL_MODE);
     dial.begin();
+    dial.setModeActiveLow(APP_DIAL_MODE_ACTIVE_LOW); 
+    dial.setPulseActiveLow(APP_DIAL_PULSE_ACTIVE_LOW); 
+    
+    // Debug Mode Pin State
+    if (APP_PIN_DIAL_MODE >= 0) {
+        gpio_set_direction((gpio_num_t)APP_PIN_DIAL_MODE, GPIO_MODE_INPUT);
+        int level = gpio_get_level((gpio_num_t)APP_PIN_DIAL_MODE);
+        ESP_LOGI(TAG, "Startup Mode Pin Level: %d (Expected Active Low: %s)", level, APP_DIAL_MODE_ACTIVE_LOW ? "Yes" : "No");
+    }
+
     dial.onDialComplete(on_dial_complete);
     dial.onHookChange(on_hook_change);
     
-    // Start Input Task with Higher Priority (10) to avoid starvation by Audio
-    xTaskCreate(input_task, "input_task", 4096, &dial, 10, NULL);
+    // Input Task will be started after Audio initialization to prevent crashes
 
     // --- 2. Audio Board Init ---
     ESP_LOGI(TAG, "Starting Audio Board...");
@@ -259,10 +285,18 @@ extern "C" void app_main(void)
     // Start Codec
     audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_DECODE, AUDIO_HAL_CTRL_START);
 
+    // Default Output: Base Speaker (Rout)
+    audio_board_select_output(false);
+
     // Play Startup Sound
     ESP_LOGI(TAG, "Playing Startup Sound...");
     audio_element_set_uri(fatfs_stream, "/sdcard/system/system_ready_en.wav");
     audio_pipeline_run(pipeline);
+
+    // --- Start Input Task Last ---
+    // Start Input Task with Higher Priority (10) to avoid starvation by Audio
+    // Started here to ensure 'pipeline' is initialized before any callback tries to stop it
+    xTaskCreate(input_task, "input_task", 4096, &dial, 10, NULL);
 
     // --- 5. Main Event Loop ---
     while (1) {
@@ -303,6 +337,15 @@ extern "C" void app_main(void)
                 ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d", 
                     music_info.sample_rates, music_info.channels, music_info.bits);
                 i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, music_info.channels);
+                
+                // Enforce output selection
+                update_audio_output();
+            }
+            
+            // Handle Playback State Changes
+            if (msg.cmd == AEL_MSG_CMD_RESUME) {
+                 // Playback started/resumed -> Enforce output
+                 update_audio_output();
             }
             
             // Handle Stop

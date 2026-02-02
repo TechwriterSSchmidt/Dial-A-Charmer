@@ -51,6 +51,14 @@ audio_hal_handle_t audio_board_codec_init(void);
 audio_board_handle_t audio_board_get_handle(void);
 
 /**
+ * @brief Select Output Channel (Left/Handset or Right/Base)
+ * @param use_handset If true, enables Left (Lout) and mutes Right (Rout).
+ *                    If false, enables Right (Rout) and mutes Left (Lout).
+ * @return ESP_OK on success
+ */
+esp_err_t audio_board_select_output(bool use_handset);
+
+/**
  * @brief Deinitialize the audio board
  * @param audio_board The audio board handle
  * @return ESP_OK
