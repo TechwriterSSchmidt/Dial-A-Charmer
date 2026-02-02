@@ -52,9 +52,13 @@ bool g_last_playback_was_dialtone = false;
 // Helpers
 void stop_playback(); // forward decl
 
-// Software gain (no register writes)
-static float g_gain_left = 0.5f;
-static float g_gain_right = 0.5f;
+// Software gain (no register writes) with soft ramp to reduce clicks
+static float g_gain_left_target = 0.5f;
+static float g_gain_right_target = 0.5f;
+static float g_gain_left_cur = 0.0f;
+static float g_gain_right_cur = 0.0f;
+static int g_gain_ramp_ms = 80;
+static int g_gain_sample_rate = 44100;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
 static volatile bool g_key3_pressed = false;
@@ -79,14 +83,32 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
     audio_element_info_t info = {};
     audio_element_getinfo(self, &info);
     int channels = info.channels > 0 ? info.channels : 2;
+    if (info.sample_rates > 0) {
+        g_gain_sample_rate = info.sample_rates;
+    }
 
     int16_t *samples = (int16_t *)in_buffer;
     int sample_count = r / sizeof(int16_t);
 
+    int ramp_samples = (g_gain_sample_rate * g_gain_ramp_ms) / 1000;
+    if (ramp_samples < 1) {
+        ramp_samples = 1;
+    }
+    float step_l = (g_gain_left_target - g_gain_left_cur) / (float)ramp_samples;
+    float step_r = (g_gain_right_target - g_gain_right_cur) / (float)ramp_samples;
+
     if (channels == 2) {
         for (int i = 0; i + 1 < sample_count; i += 2) {
-            float l = (float)samples[i] * g_gain_left;
-            float rch = (float)samples[i + 1] * g_gain_right;
+            g_gain_left_cur += step_l;
+            g_gain_right_cur += step_r;
+            if ((step_l > 0.0f && g_gain_left_cur > g_gain_left_target) || (step_l < 0.0f && g_gain_left_cur < g_gain_left_target)) {
+                g_gain_left_cur = g_gain_left_target;
+            }
+            if ((step_r > 0.0f && g_gain_right_cur > g_gain_right_target) || (step_r < 0.0f && g_gain_right_cur < g_gain_right_target)) {
+                g_gain_right_cur = g_gain_right_target;
+            }
+            float l = (float)samples[i] * g_gain_left_cur;
+            float rch = (float)samples[i + 1] * g_gain_right_cur;
             if (l > 32767.0f) l = 32767.0f;
             if (l < -32768.0f) l = -32768.0f;
             if (rch > 32767.0f) rch = 32767.0f;
@@ -108,9 +130,17 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
 
         int16_t *out = (int16_t *)g_stereo_buf;
         for (int i = 0, o = 0; i < sample_count; ++i, o += 2) {
+            g_gain_left_cur += step_l;
+            g_gain_right_cur += step_r;
+            if ((step_l > 0.0f && g_gain_left_cur > g_gain_left_target) || (step_l < 0.0f && g_gain_left_cur < g_gain_left_target)) {
+                g_gain_left_cur = g_gain_left_target;
+            }
+            if ((step_r > 0.0f && g_gain_right_cur > g_gain_right_target) || (step_r < 0.0f && g_gain_right_cur < g_gain_right_target)) {
+                g_gain_right_cur = g_gain_right_target;
+            }
             float v = (float)samples[i];
-            float l = v * g_gain_left;
-            float rch = v * g_gain_right;
+            float l = v * g_gain_left_cur;
+            float rch = v * g_gain_right_cur;
             if (l > 32767.0f) l = 32767.0f;
             if (l < -32768.0f) l = -32768.0f;
             if (rch > 32767.0f) rch = 32767.0f;
@@ -174,6 +204,10 @@ void play_file(const char* path) {
     }
 
     
+    // Soft fade-in to reduce clicks
+    g_gain_left_cur = 0.0f;
+    g_gain_right_cur = 0.0f;
+
     // Track last playback type
     g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dialtone_1.wav") == 0);
 
@@ -325,9 +359,9 @@ void input_task(void *pvParameters) {
             bool pressed = APP_KEY3_ACTIVE_LOW ? (level == 0) : (level == 1);
             if (pressed != g_key3_pressed) {
                 g_key3_pressed = pressed;
-                g_gain_right = pressed ? 0.0f : 0.5f;
-                g_gain_left = 0.5f;
-                ESP_LOGI(TAG, "Key3 %s -> Right gain=%0.2f", pressed ? "pressed" : "released", g_gain_right);
+                g_gain_right_target = pressed ? 0.0f : 0.5f;
+                g_gain_left_target = 0.5f;
+                ESP_LOGI(TAG, "Key3 %s -> Right gain=%0.2f", pressed ? "pressed" : "released", g_gain_right_target);
             }
         }
         
