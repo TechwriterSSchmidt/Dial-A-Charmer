@@ -32,7 +32,9 @@ audio_board_handle_t audio_board_init(void)
     if (PA_ENABLE_GPIO >= 0) {
         gpio_reset_pin((gpio_num_t)PA_ENABLE_GPIO);
         gpio_set_direction((gpio_num_t)PA_ENABLE_GPIO, GPIO_MODE_OUTPUT);
-        gpio_set_level((gpio_num_t)PA_ENABLE_GPIO, 0); // Default OFF
+        // FORCE PA ALWAYS ON (High) to avoid cut-offs and wake-up lag
+        gpio_set_level((gpio_num_t)PA_ENABLE_GPIO, 1);
+        ESP_LOGI(TAG, "PA Enable Pin (GPIO %d) set to HIGH (Always On)", PA_ENABLE_GPIO);
     }
     
     board_handle->audio_hal = audio_board_codec_init();
@@ -60,8 +62,7 @@ audio_hal_handle_t audio_board_codec_init(void)
         return NULL;
     }
     
-    // Enable PA after codec init if needed, or controlled by application
-    // audio_gpio_set_pa_gpio(PA_ENABLE_GPIO, true); // Optionally turn on here
+    // No manual codec register writes here (restore minimal defaults from the 440Hz test)
     
     return board_handle->audio_hal;
 }
@@ -98,25 +99,12 @@ esp_err_t audio_board_sdcard_init(esp_periph_set_handle_t set, periph_sdcard_mod
 
 esp_err_t audio_board_select_output(bool use_handset)
 {
-    // Register 0x1D (29): DAC Control 26
-    // Bit 2: DAC Left Mute (1=Mute, 0=Normal)
-    // Bit 1: DAC Right Mute (1=Mute, 0=Normal)
-    // We want to MUTE the UNUSED channel.
-    
-    uint8_t reg_addr = 0x1D; 
-    uint8_t val = 0;
-    
+    // Sinus test baseline: no manual ES8388 register writes
     if (use_handset) {
-        // Handset: Use Left (Lout). Mute Right.
-        val = 0x02; // Bit 1 set
-        ESP_LOGI(TAG, "Audio Output: HANDSET (Lout)");
+        ESP_LOGI(TAG, "Audio Output: HANDSET (default codec routing)");
     } else {
-        // Base: Use Right (Rout). Mute Left.
-        val = 0x04; // Bit 2 set
-        ESP_LOGI(TAG, "Audio Output: SPEAKER (Rout)");
+        ESP_LOGI(TAG, "Audio Output: SPEAKER (default codec routing)");
     }
     
-    // Attempt to use es8388_write_reg directly
-    // If this fails specifically during link, it means the driver is hidden.
-    return es8388_write_reg(reg_addr, val);
+    return ESP_OK;
 }

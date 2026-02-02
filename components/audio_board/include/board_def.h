@@ -9,7 +9,7 @@
 #define SD_CARD_INTR_SEL GPIO_SEL_NC
 #define SD_CARD_OPEN_FILE_NUM_MAX 5
 
-#define HEADPHONE_DETECT GPIO_NUM_5
+#define HEADPHONE_DETECT GPIO_NUM_39
 #define PA_ENABLE_GPIO GPIO_NUM_21
 
 // Added definitions for Ai-Thinker v2.2

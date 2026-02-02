@@ -22,5 +22,6 @@
 // Power Amplifier
 #define APP_PIN_PA_ENABLE  21
 
+
 // SD Card
 #define APP_PIN_SD_CS      13

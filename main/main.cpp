@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <dirent.h>
+#include <stdlib.h>
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_random.h"
@@ -30,7 +31,7 @@ static const char *TAG = "DIAL_A_CHARMER_ESP";
 // Global Objects
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
 audio_pipeline_handle_t pipeline;
-audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer;
+audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
 
 // Logic State
 std::string dial_buffer = "";
@@ -41,6 +42,78 @@ bool g_output_mode_handset = false; // False = Speaker, True = Handset
 
 // Helpers
 void stop_playback(); // forward decl
+
+// Software gain (no register writes)
+static float g_gain_left = 0.5f;
+static float g_gain_right = 0.5f;
+static uint8_t *g_stereo_buf = NULL;
+static size_t g_stereo_buf_size = 0;
+
+static int gain_open(audio_element_handle_t self)
+{
+    return ESP_OK;
+}
+
+static int gain_close(audio_element_handle_t self)
+{
+    return ESP_OK;
+}
+
+static audio_element_err_t gain_process(audio_element_handle_t self, char *in_buffer, int in_len)
+{
+    int r = audio_element_input(self, in_buffer, in_len);
+    if (r <= 0) {
+        return (audio_element_err_t)r;
+    }
+
+    audio_element_info_t info = {};
+    audio_element_getinfo(self, &info);
+    int channels = info.channels > 0 ? info.channels : 2;
+
+    int16_t *samples = (int16_t *)in_buffer;
+    int sample_count = r / sizeof(int16_t);
+
+    if (channels == 2) {
+        for (int i = 0; i + 1 < sample_count; i += 2) {
+            float l = (float)samples[i] * g_gain_left;
+            float rch = (float)samples[i + 1] * g_gain_right;
+            if (l > 32767.0f) l = 32767.0f;
+            if (l < -32768.0f) l = -32768.0f;
+            if (rch > 32767.0f) rch = 32767.0f;
+            if (rch < -32768.0f) rch = -32768.0f;
+            samples[i] = (int16_t)l;
+            samples[i + 1] = (int16_t)rch;
+        }
+    } else {
+        // Mono -> duplicate to stereo with per-channel gain
+        size_t needed = r * 2;
+        if (g_stereo_buf_size < needed) {
+            free(g_stereo_buf);
+            g_stereo_buf = (uint8_t *)malloc(needed);
+            g_stereo_buf_size = g_stereo_buf ? needed : 0;
+        }
+        if (!g_stereo_buf) {
+            return (audio_element_err_t)-1;
+        }
+
+        int16_t *out = (int16_t *)g_stereo_buf;
+        for (int i = 0, o = 0; i < sample_count; ++i, o += 2) {
+            float v = (float)samples[i];
+            float l = v * g_gain_left;
+            float rch = v * g_gain_right;
+            if (l > 32767.0f) l = 32767.0f;
+            if (l < -32768.0f) l = -32768.0f;
+            if (rch > 32767.0f) rch = 32767.0f;
+            if (rch < -32768.0f) rch = -32768.0f;
+            out[o] = (int16_t)l;
+            out[o + 1] = (int16_t)rch;
+        }
+
+        return (audio_element_err_t)audio_element_output(self, (char *)g_stereo_buf, (int)needed);
+    }
+
+    return (audio_element_err_t)audio_element_output(self, in_buffer, r);
+}
 
 void update_audio_output() {
     // Re-apply the current output selection
@@ -202,6 +275,12 @@ extern "C" void app_main(void)
     }
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
 
+    audio_board_handle_t board_handle = audio_board_init();
+    if (!board_handle) {
+        ESP_LOGE(TAG, "Audio board init failed");
+        return;
+    }
+
     // --- 1. Input Initialization ---
     ESP_LOGI(TAG, "Initializing Rotary Dial (Mode Pin: %d)...", APP_PIN_DIAL_MODE);
     dial.begin();
@@ -222,7 +301,6 @@ extern "C" void app_main(void)
 
     // --- 2. Audio Board Init ---
     ESP_LOGI(TAG, "Starting Audio Board...");
-    audio_board_handle_t board_handle = audio_board_init();
     
     // Enable Power Amplifier (GPIO21)
     gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
@@ -264,7 +342,32 @@ extern "C" void app_main(void)
     wav_cfg.stack_in_ext = false; // Disable PSRAM stack to avoid FreeRTOS patch requirement
     wav_decoder = wav_decoder_init(&wav_cfg);
 
+    #ifdef __GNUC__
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+    #endif
+    audio_element_cfg_t gain_cfg = DEFAULT_AUDIO_ELEMENT_CONFIG();
+    #ifdef __GNUC__
+    #pragma GCC diagnostic pop
+    #endif
+    gain_cfg.open = gain_open;
+    gain_cfg.close = gain_close;
+    gain_cfg.process = gain_process;
+    gain_cfg.task_stack = 4096;
+    gain_cfg.task_prio = 5;
+    gain_cfg.stack_in_ext = false;
+    gain_element = audio_element_init(&gain_cfg);
+
+    #ifdef __GNUC__
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+    #endif
     i2s_stream_cfg_t i2s_cfg = I2S_STREAM_CFG_DEFAULT();
+    #ifdef __GNUC__
+    #pragma GCC diagnostic pop
+    #endif
+    i2s_cfg.pdm_tx_cfg = {};
+    i2s_cfg.pdm_rx_cfg = {};
     i2s_cfg.type = AUDIO_STREAM_WRITER;
     i2s_cfg.stack_in_ext = false; // Use internal RAM
     i2s_cfg.std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO; // Duplicate Mono to Stereo
@@ -272,10 +375,11 @@ extern "C" void app_main(void)
 
     audio_pipeline_register(pipeline, fatfs_stream, "file");
     audio_pipeline_register(pipeline, wav_decoder, "wav");
+    audio_pipeline_register(pipeline, gain_element, "gain");
     audio_pipeline_register(pipeline, i2s_writer, "i2s");
 
-    const char *link_tag[3] = {"file", "wav", "i2s"};
-    audio_pipeline_link(pipeline, &link_tag[0], 3);
+    const char *link_tag[4] = {"file", "wav", "gain", "i2s"};
+    audio_pipeline_link(pipeline, &link_tag[0], 4);
 
     // Event Config
     audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
@@ -334,9 +438,12 @@ extern "C" void app_main(void)
             if (msg.source == (void *)wav_decoder && msg.cmd == AEL_MSG_CMD_REPORT_MUSIC_INFO) {
                 audio_element_info_t music_info = {};
                 audio_element_getinfo(wav_decoder, &music_info);
-                ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d", 
-                    music_info.sample_rates, music_info.channels, music_info.bits);
-                i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, music_info.channels);
+                // Propagate decoder info to gain element (so it knows input channels)
+                audio_element_setinfo(gain_element, &music_info);
+                int out_channels = (music_info.channels == 1) ? 2 : music_info.channels;
+                ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d (out_ch=%d)", 
+                    music_info.sample_rates, music_info.channels, music_info.bits, out_channels);
+                i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, out_channels);
                 
                 // Enforce output selection
                 update_audio_output();
