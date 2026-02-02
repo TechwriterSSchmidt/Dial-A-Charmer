@@ -52,7 +52,13 @@ void PhonebookManager::begin() {
         Serial.println("Migrating old system code 95 to 095...");
         removeEntry("95"); // Auto-cleanup old code
     }
-    ensure("095", "Re-Index/Update SD", "FUNCTION", "REINDEX_SD"); // Triggers scanAllContent()
+    // Fix: Rename legacy Re-Index entry to Reboot if present
+    if (hasEntry("095") && _entries["095"].name.startsWith("Re-Index")) {
+        _entries["095"].name = "System Reboot";
+        _entries["095"].value = "REBOOT";
+        changed = true;
+    }
+    ensure("095", "System Reboot", "FUNCTION", "REBOOT"); // Triggers ESP.restart()
 
     if (changed) {
         save();
