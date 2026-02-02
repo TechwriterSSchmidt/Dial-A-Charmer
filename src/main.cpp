@@ -95,7 +95,8 @@ unsigned long lastDialTime = 0;
 
 // --- Playlist Management ---
 struct Playlist {
-    std::vector<String> tracks;
+    // UPDATED: Store raw pointers to PSRAM instead of String objects to save Internal RAM
+    std::vector<char*> tracks;
     
     // Virtual Playlist Support (Reference to other playlists)
     struct TrackRef { uint8_t cat; uint16_t idx; };
@@ -103,6 +104,40 @@ struct Playlist {
     bool isVirtual = false;
 
     int index = 0;
+
+    // Helper to add track with PSRAM preference
+    void addTrack(String s) {
+        size_t len = s.length() + 1;
+        char* buf = nullptr;
+        if (psramFound()) {
+            buf = (char*)heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
+        }
+        // Fallback to internal ram if PSRAM fails/missing
+        if (!buf) { 
+            buf = (char*)malloc(len);
+        }
+
+        if (buf) {
+            strcpy(buf, s.c_str());
+            tracks.push_back(buf);
+        }
+    }
+
+    // Helper to safely retrieve String
+    String getTrack(int i) {
+        if (i >= 0 && i < (int)tracks.size()) {
+            return String(tracks[i]);
+        }
+        return "";
+    }
+
+    // Explicit cleanup to prevent memory leaks (since we use raw pointers)
+    void freeTracks() {
+        for (char* ptr : tracks) {
+            free(ptr);
+        }
+        tracks.clear();
+    }
 };
 
 std::map<int, Playlist> categories; // 1=Trump, 2=Badran, 3=Yoda, 4=Neutral
@@ -110,6 +145,21 @@ Playlist mainPlaylist; // For Dial 0
 
 // --- Persistence Helpers ---
 // CHANGED: Use v3 filenames to force cache invalidation (fixes mp3_group vs persona path mismatch)
+
+// Helper: Thread-safe SD Exists check
+bool safeSDExists(String path) {
+    if (!sdAvailable) return false;
+    bool exists = false;
+    // Warte maximal 200ms auf den Mutex
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+        exists = SD.exists(path);
+        xSemaphoreGive(sdMutex);
+    } else {
+        Serial.printf("[SD] Timeout checking exists: %s\n", path.c_str());
+    }
+    return exists;
+}
+
 String getStoredPlaylistPath(int category) {
     String lang = settings.getLanguage();
     return "/playlists/cat_" + String(category) + "_" + lang + "_v3.m3u";
@@ -125,12 +175,22 @@ void ensurePlaylistDir();
 int loadProgressFromSD(int category, size_t maxSize) {
     if (!sdAvailable || maxSize == 0) return 0;
     String idxPath = getStoredIndexPath(category);
-    if (!SD.exists(idxPath)) return 0;
-    File fIdx = SD.open(idxPath);
-    if (!fIdx) return 0;
-    String idxStr = fIdx.readStringUntil('\n');
-    fIdx.close();
-    int idx = idxStr.toInt();
+    
+    int idx = 0;
+    
+    // Protect SD Read
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        if (SD.exists(idxPath)) {
+            File fIdx = SD.open(idxPath);
+            if (fIdx) {
+                String idxStr = fIdx.readStringUntil('\n');
+                fIdx.close();
+                idx = idxStr.toInt();
+            }
+        }
+        xSemaphoreGive(sdMutex);
+    }
+    
     if (idx < 0 || (size_t)idx >= maxSize) return 0;
     return idx;
 }
@@ -139,109 +199,153 @@ void saveVirtualPlaylistToSD(Playlist &pl) {
     if (!sdAvailable) return;
     ensurePlaylistDir();
     String path = getStoredPlaylistPath(0);
-    SD.remove(path);
-    File f = SD.open(path, FILE_WRITE);
-    if (!f) return;
-    for (const auto &ref : pl.virtualTracks) {
-        f.print(ref.cat);
-        f.print(',');
-        f.println(ref.idx);
+    
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        SD.remove(path);
+        File f = SD.open(path, FILE_WRITE);
+        if (f) {
+            for (const auto &ref : pl.virtualTracks) {
+                f.print(ref.cat);
+                f.print(',');
+                f.println(ref.idx);
+            }
+            f.close();
+        }
+        xSemaphoreGive(sdMutex);
     }
-    f.close();
 }
 
 bool loadVirtualPlaylistFromSD(Playlist &pl) {
     if (!sdAvailable) return false;
     String path = getStoredPlaylistPath(0);
-    if (!SD.exists(path)) return false;
-    File f = SD.open(path);
-    if (!f) return false;
-
+    
+    bool result = false;
     pl.virtualTracks.clear();
-    bool invalid = false;
-    while (f.available()) {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() == 0) continue;
-        int comma = line.indexOf(',');
-        if (comma < 0) { invalid = true; break; }
-        int cat = line.substring(0, comma).toInt();
-        int idx = line.substring(comma + 1).toInt();
-        if (cat < 1 || cat > 5 || categories.find(cat) == categories.end()) { invalid = true; break; }
-        if (idx < 0 || (size_t)idx >= categories[cat].tracks.size()) { invalid = true; break; }
-        pl.virtualTracks.push_back({(uint8_t)cat, (uint16_t)idx});
-    }
-    f.close();
 
-    if (invalid || pl.virtualTracks.empty()) {
-        pl.virtualTracks.clear();
-        return false;
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+        if (SD.exists(path)) {
+            File f = SD.open(path);
+            if (f) {
+                bool invalid = false;
+                while (f.available()) {
+                    String line = f.readStringUntil('\n');
+                    line.trim();
+                    if (line.length() == 0) continue;
+                    int comma = line.indexOf(',');
+                    if (comma < 0) { invalid = true; break; }
+                    int cat = line.substring(0, comma).toInt();
+                    int idx = line.substring(comma + 1).toInt();
+                    if (cat < 1 || cat > 5 || categories.find(cat) == categories.end()) { invalid = true; break; }
+                    if (idx < 0 || (size_t)idx >= categories[cat].tracks.size()) { invalid = true; break; }
+                    pl.virtualTracks.push_back({(uint8_t)cat, (uint16_t)idx});
+                }
+                f.close();
+                if (!invalid && !pl.virtualTracks.empty()) result = true;
+            }
+        }
+        xSemaphoreGive(sdMutex);
     }
-    return true;
+    
+    if (!result) pl.virtualTracks.clear();
+    return result;
+}
+
+void printHeapStats(const char* label) {
+    if (psramFound()) {
+        Serial.printf("[%s] Free Internal: %d | Free PSRAM: %d | Total Free: %d\n", 
+            label, 
+            heap_caps_get_free_size(MALLOC_CAP_INTERNAL), 
+            heap_caps_get_free_size(MALLOC_CAP_SPIRAM), 
+            ESP.getFreeHeap());
+    } else {
+         Serial.printf("[%s] Free Heap: %d | Max Block: %d\n", label, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    }
 }
 
 void ensurePlaylistDir() {
     if (!sdAvailable) return;
-    if (!SD.exists("/playlists")) SD.mkdir("/playlists");
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+        if (!SD.exists("/playlists")) SD.mkdir("/playlists");
+        xSemaphoreGive(sdMutex);
+    }
 }
 
 void savePlaylistToSD(int category, Playlist &pl) {
     if (!sdAvailable) return;
     ensurePlaylistDir();
     String path = getStoredPlaylistPath(category);
-    SD.remove(path);
-    File f = SD.open(path, FILE_WRITE);
-    if (!f) return;
-    for (const auto &track : pl.tracks) {
-        f.println(track);
+    
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        SD.remove(path);
+        File f = SD.open(path, FILE_WRITE);
+        if (f) {
+            // CHANGED: Loop over char* pointers
+            for (const auto &ptr : pl.tracks) {
+                f.println(ptr);
+            }
+            f.close();
+        }
+        xSemaphoreGive(sdMutex);
     }
-    f.close();
 }
 
 void saveProgressToSD(int category, int index) {
     if (!sdAvailable) return;
     ensurePlaylistDir();
     String path = getStoredIndexPath(category);
-    SD.remove(path);
-    File f = SD.open(path, FILE_WRITE);
-    if (f) {
-        f.println(index);
-        f.close();
+    
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+        SD.remove(path);
+        File f = SD.open(path, FILE_WRITE);
+        if (f) {
+            f.println(index);
+            f.close();
+        }
+        xSemaphoreGive(sdMutex);
     }
 }
 
 bool loadPlaylistFromSD(int category, Playlist &pl) {
     if (!sdAvailable) return false;
     String path = getStoredPlaylistPath(category);
-    if (!SD.exists(path)) return false;
+    bool result = false;
     
-    File f = SD.open(path);
-    if (!f) return false;
-    
-    pl.tracks.clear();
-    while (f.available()) {
-        String line = f.readStringUntil('\n');
-        line.trim();
-        if (line.length() > 0) pl.tracks.push_back(line);
-    }
-    f.close();
-    
-    // Load Index
-    String idxPath = getStoredIndexPath(category);
-    if (SD.exists(idxPath)) {
-        File fIdx = SD.open(idxPath);
-        if (fIdx) {
-            String idxStr = fIdx.readStringUntil('\n'); 
-            pl.index = idxStr.toInt();
-            // Sanity check
-            if (pl.index < 0 || (size_t)pl.index >= pl.tracks.size()) pl.index = 0;
-            fIdx.close();
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(2000)) == pdTRUE) {
+        if (SD.exists(path)) {
+            File f = SD.open(path);
+            if (f) {
+                pl.freeTracks(); // Clear old data first
+                // pl.tracks.reserve(50); // Reserve not critical for char*, vector resize is cheap (4 bytes)
+                while (f.available()) {
+                    String line = f.readStringUntil('\n');
+                    line.trim();
+                    if (line.length() > 0) pl.addTrack(line); // Changed to custom adder
+                }
+                f.close();
+                
+                // Load Index
+                String idxPath = getStoredIndexPath(category);
+                if (SD.exists(idxPath)) {
+                    File fIdx = SD.open(idxPath);
+                    if (fIdx) {
+                        String idxStr = fIdx.readStringUntil('\n'); 
+                        pl.index = idxStr.toInt();
+                        fIdx.close();
+                    }
+                } else {
+                    pl.index = 0;
+                }
+                
+                // Sanity check
+                if (pl.index < 0 || (size_t)pl.index >= pl.tracks.size()) pl.index = 0;
+                result = true;
+            }
         }
-    } else {
-        pl.index = 0;
+        xSemaphoreGive(sdMutex);
     }
-    return true;
+    return result;
 }
+
 
 
 
@@ -250,8 +354,15 @@ bool loadPlaylistFromSD(int category, Playlist &pl) {
 
 
 void initPlaylists() {
+    printHeapStats("Start initPlaylists");
+    
+    // Explicit cleanup for map values (since no destructor in struct)
+    for(auto &pair : categories) {
+        pair.second.freeTracks();
+    }
     categories.clear();
-    mainPlaylist.tracks.clear();
+
+    mainPlaylist.freeTracks(); // Clear Main
     mainPlaylist.index = 0;
     
     String lang = settings.getLanguage();
@@ -334,7 +445,7 @@ String getNextTrack(int category) {
         Playlist::TrackRef ref = target->virtualTracks[target->index];
         // Validate Ref
         if (categories.find(ref.cat) != categories.end() && ref.idx < categories[ref.cat].tracks.size()) {
-            track = categories[ref.cat].tracks[ref.idx];
+            track = categories[ref.cat].getTrack(ref.idx); // Changed to getter
         } else {
             Serial.println("Invalid Virtual Track Reference!");
             track = Path::ERROR_TONE; // Fallback
@@ -343,13 +454,14 @@ String getNextTrack(int category) {
         // --- Standard Playlist Logic ---
         if ((size_t)target->index >= target->tracks.size()) {
             Serial.printf("Playlist %d finished! Reshuffling...\n", category);
+            // Shuffle raw pointers (std::shuffle works on vector<char*>)
             auto rng = std::default_random_engine(esp_random());
             std::shuffle(target->tracks.begin(), target->tracks.end(), rng);
             target->index = 0;
             
             savePlaylistToSD(category, *target);
         }
-        track = target->tracks[target->index];
+        track = target->getTrack(target->index); // Changed to getter
     }
     
     // Increment and Save Progress
@@ -402,7 +514,12 @@ void audioTaskCode(void * parameter) {
     bool lastRunning = false;
     
     for(;;) {
-        audio->loop();
+        // PROTECT audio->loop()!
+        if (xSemaphoreTake(sdMutex, 5 / portTICK_PERIOD_MS) == pdTRUE) {
+            audio->loop();
+            xSemaphoreGive(sdMutex);
+        }
+
         isAudioBusy = audio->isRunning();
 #if DEBUG_AUDIO
         if (isAudioBusy != lastRunning) {
@@ -889,7 +1006,7 @@ void startSnooze() {
     String lang = settings.getLanguage();
     String path = "/system/snooze_active_" + lang + ".wav";
     // Check if exists, fallback?
-    if (SD.exists(path)) {
+    if (safeSDExists(path)) {
         playSound(path, false); 
     }
 }
@@ -956,7 +1073,7 @@ void executePhonebookFunction(String func, String param) {
     else if (func == "VOICE_MENU") {
         // Plays /system/menu_de.wav or /system/menu_en.wav
         String path = "/system/menu_" + lang + ".wav";
-        if (SD.exists(path)) {
+        if (safeSDExists(path)) {
             playSound(path, false);
         } else {
             // Fallback TTS
@@ -992,7 +1109,7 @@ void executePhonebookFunction(String func, String param) {
         String fName = alarmsEnabled ? "alarms_on" : "alarms_off";
         String path = "/system/" + fName + "_" + lang + ".wav";
         
-        if (SD.exists(path)) {
+        if (safeSDExists(path)) {
             playSound(path, false);
         } else {
             String msg;
@@ -1012,7 +1129,7 @@ void executePhonebookFunction(String func, String param) {
         String fName = newState ? "alarm_skipped" : "alarm_active";
         String path = "/system/" + fName + "_" + lang + ".wav";
         
-        if (SD.exists(path)) {
+        if (safeSDExists(path)) {
             playSound(path, false);
         } else {
             String msg;
@@ -1119,8 +1236,8 @@ void speakTimerConfirm(int minutes) {
     else numFile = "/time/" + lang + "/m_" + String(minutes) + ".wav";
     
     std::vector<String> seq;
-    if(SD.exists(confirmFile)) seq.push_back(confirmFile);
-    if(SD.exists(numFile)) seq.push_back(numFile);
+    if(safeSDExists(confirmFile)) seq.push_back(confirmFile);
+    if(safeSDExists(numFile)) seq.push_back(numFile);
     
     playSequence(seq, true); // true = Speaker
 }
@@ -1130,11 +1247,11 @@ void speakAlarmConfirm(int h, int m) {
     String confirmFile = (lang == "de") ? "/system/alarm_confirm_de.wav" : "/system/alarm_confirm_en.wav";
     
     std::vector<String> seq;
-    if(SD.exists(confirmFile)) seq.push_back(confirmFile);
+    if(safeSDExists(confirmFile)) seq.push_back(confirmFile);
     
     // Hour
     String hFile = "/time/" + lang + "/h_" + String(h) + ".wav";
-    if (SD.exists(hFile)) seq.push_back(hFile);
+    if (safeSDExists(hFile)) seq.push_back(hFile);
     
     // Minute
     // Simple logic: If minute > 0, speak it.
@@ -1142,7 +1259,7 @@ void speakAlarmConfirm(int h, int m) {
         String mFile;
         if (m < 10) mFile = "/time/" + lang + "/m_0" + String(m) + ".wav";
         else mFile = "/time/" + lang + "/m_" + String(m) + ".wav";
-        if (SD.exists(mFile)) seq.push_back(mFile);
+        if (safeSDExists(mFile)) seq.push_back(mFile);
     }
     
     playSequence(seq, true); // Speaker
@@ -1201,6 +1318,8 @@ void processBufNumber(String numberStr) {
     }
 }
 
+// --- HELPER FUNCTIONS ---
+
 void onDial(int number) {
     if (isLineBusy) {
         // Serial.println("Ignored Digit (Line Busy)");
@@ -1258,7 +1377,7 @@ void onHook(bool offHook) {
             }
             
             // Try playing file
-            if (SD.exists(path)) {
+            if (safeSDExists(path)) {
                 playSound(path, false);
             } else {
                 // Fallback TTS (less likely to work nicely mid-action but logic kept)
@@ -1369,25 +1488,30 @@ unsigned long lastActivityTime = 0;
 
 // --- HELPER DIAL TONE ---
 String getSystemFileByIndex(int index) {
-    File dir = SD.open("/system");
-    if(!dir || !dir.isDirectory()) return "";
-    
-    std::vector<String> files;
-    File file = dir.openNextFile();
-    while(file){
-        if(!file.isDirectory()) {
-            String name = file.name();
-            if (!name.startsWith(".")) files.push_back(name);
+    // PROTECT Directory Listing
+    String result = "";
+    if (xSemaphoreTake(sdMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        File dir = SD.open("/system");
+        if(dir && dir.isDirectory()) {
+            std::vector<String> files;
+            File file = dir.openNextFile();
+            while(file){
+                if(!file.isDirectory()) {
+                    String name = file.name();
+                    if (!name.startsWith(".")) files.push_back(name);
+                }
+                file = dir.openNextFile();
+            }
+            std::sort(files.begin(), files.end());
+            
+            // Index is 1-based (from settings dropdown)
+            if (index > 0 && index <= files.size()) {
+                result = "/system/" + files[index - 1];
+            }
         }
-        file = dir.openNextFile();
+        xSemaphoreGive(sdMutex);
     }
-    std::sort(files.begin(), files.end());
-    
-    // Index is 1-based (from settings dropdown)
-    if (index > 0 && index <= files.size()) {
-        return "/system/" + files[index - 1];
-    }
-    return "";
+    return result;
 }
 
 void playDialTone() {
@@ -1416,7 +1540,7 @@ void playDialTone() {
         // settings.setDialTone(2); 
     }
 
-    if (dt == "" || !SD.exists(dt)) {
+    if (dt == "" || !safeSDExists(dt)) {
         dt = "/system/dialtone_1.wav";
     }
 
@@ -1444,7 +1568,14 @@ void stopDialTone() {
 
 void setup() {
     Serial.begin(CONF_SERIAL_BAUD);
-    
+    // Print Initial Memory State
+    Serial.printf("\n[BOOT] Total RAM: %d, Free: %d, Max Block: %d\n", ESP.getHeapSize(), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    if (psramFound()) {
+       Serial.printf("[BOOT] PSRAM Size: %d, Free: %d\n", ESP.getPsramSize(), ESP.getFreePsram());
+    } else {
+       Serial.println("[BOOT] No PSRAM detected (or not enabled)");
+    }
+
     // --- WATCHDOG INIT ---
     // Initialize WDT with timeout and panic (reset) enabled
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -1536,8 +1667,10 @@ void setup() {
         }
     #endif
 
-    // 1. Init SD via SD_MMC (1-bit, 5MHz)
-    if(!SD.begin("/sdcard", true, false, 5000000)){
+    // 1. Init SD via SD_MMC (1-bit Mode Forced)
+    // Using 1-bit mode (pin D2, CMD, CLK) to reduce signal noise. 
+    // Frequency argument removed to use default defaults.
+    if(!SD.begin("/sdcard", true)){
         Serial.println("SD Card Mount Failed (SD_MMC)");
         ledManager.setMode(LedManager::SOS);
         sdAvailable = false;
@@ -1588,7 +1721,7 @@ void setup() {
     // Localization of System Ready Sound
     String readySnd = "/system/system_ready_" + settings.getLanguage() + ".wav";
     
-    if (sdAvailable && SD.exists(readySnd)) {
+    if (sdAvailable && safeSDExists(readySnd)) {
         playSound(readySnd, true);
         Serial.println("Boot sequence: Played System Ready on SPEAKER");
     } else {
