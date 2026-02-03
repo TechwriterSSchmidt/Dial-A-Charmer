@@ -353,6 +353,17 @@ void on_dial_complete(int number) {
     last_digit_time = esp_timer_get_time() / 1000; // Update timestamp (ms)
 }
 
+void on_button_press() {
+    ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
+    // Handle Timer/Alarm Mute
+    if (g_timer_alarm_active) {
+        ESP_LOGI(TAG, "Stopping Timer Alarm via Key 5");
+        g_timer_alarm_active = false;
+        stop_playback();
+        play_file("/sdcard/system/alarm_stopped_de.wav");
+    }
+}
+
 void on_hook_change(bool off_hook) {
     ESP_LOGI(TAG, "--- HOOK STATE: %s ---", off_hook ? "OFF HOOK (Active/Pickup)" : "ON HOOK (Idle/Hangup)");
     
@@ -377,11 +388,6 @@ void on_hook_change(bool off_hook) {
     } else {
         // Receiver Hung Up
         stop_playback();
-        if (g_timer_active) {
-            g_timer_active = false;
-            ESP_LOGI(TAG, "Timer reset by hangup");
-            play_file("/sdcard/system/timer_stopped_de.wav");
-        }
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -449,6 +455,7 @@ extern "C" void app_main(void)
 
     dial.onDialComplete(on_dial_complete);
     dial.onHookChange(on_hook_change);
+    dial.onButtonPress(on_button_press);
     
     // Input Task will be started after Audio initialization to prevent crashes
 
@@ -456,8 +463,10 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Starting Audio Board...");
     
     // Enable Power Amplifier (GPIO21)
+    // Anti-Pop: Wait for Codec/I2S to stabilize before enabling PA
+    vTaskDelay(pdMS_TO_TICKS(APP_PA_ENABLE_DELAY_MS));
     gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
-    ESP_LOGI(TAG, "Power Amplifier enabled on GPIO %d", APP_PIN_PA_ENABLE);
+    ESP_LOGI(TAG, "Power Amplifier enabled on GPIO %d (Anti-Pop Delay: %d ms)", APP_PIN_PA_ENABLE, APP_PA_ENABLE_DELAY_MS);
     
     audio_hal_set_volume(board_handle->audio_hal, 60); // Set volume
 

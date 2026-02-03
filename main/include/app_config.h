@@ -8,7 +8,7 @@
 #define APP_PIN_HOOK       19  
 #define APP_PIN_EXTRA_BTN  18  
 
-// Key3 (Audio mute test)
+// Key3 (handset button)
 #define APP_PIN_KEY3       19
 #define APP_KEY3_ACTIVE_LOW true
 
@@ -16,15 +16,15 @@
 #define APP_DIAL_MODE_ACTIVE_LOW true 
 
 // Pulse: "Closed to GND" (Low) when idle. Opens (High) for pulse.
-// Logic counts when input matches the "Active Low" setting logic:
-// (level == (active_low ? 1 : 0)).
-// We want to count HIGH (1). So we set this to true.
+// Logic counts when input matches the "Active Low" setting logic
 #define APP_DIAL_PULSE_ACTIVE_LOW true
 
 #define APP_HOOK_ACTIVE_LOW  true 
 
 // Power Amplifier
 #define APP_PIN_PA_ENABLE  21
+#define APP_PA_ENABLE_DELAY_MS 250 // Wait for DAC/I2S voltage to stabilize
+#define APP_PA_DISABLE_DELAY_MS 50
 
 // Timer alarm loop duration (minutes)
 #define APP_TIMER_ALARM_LOOP_MINUTES 5

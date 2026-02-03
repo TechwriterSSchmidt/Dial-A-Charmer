@@ -172,6 +172,23 @@ void RotaryDial::loop() {
         _last_hook_debounce = now;
     }
 
+    // --- Button Logic ---
+    int btn_level = gpio_get_level(_btn_pin);
+    bool current_btn_down = (btn_level == 0);
+
+    if (current_btn_down != _btn_state) {
+        if (now - _last_btn_debounce > 50) {
+            _btn_state = current_btn_down;
+            // Trigger callback on Press (falling edge -> state becomes true)
+            if (_btn_state && _btn_callback) {
+                _btn_callback();
+            }
+            _last_btn_debounce = now;
+        }
+    } else {
+        _last_btn_debounce = now;
+    }
+
     // --- Dial Logic ---
     if ((int)_mode_pin >= 0) {
         int mode_level = gpio_get_level(_mode_pin);
