@@ -23,12 +23,12 @@ h2 {
     font-family: 'AA Triple', serif;
     text-align: center;
     text-transform: uppercase;
-    letter-spacing: 6px; /* Art Deco Spacing */
+    letter-spacing: 3px; /* Art Deco Spacing */
     color: #d4af37; /* Metallic Gold */
     border-bottom: 2px solid #d4af37;
-    margin-bottom: 35px;
-    padding-bottom: 15px;
-    font-weight: bold;
+    margin-bottom: 40px;
+    padding-bottom: 25px;
+    font-weight: normal;
     font-size: 2.2rem;
 }
 h3 {
@@ -39,7 +39,7 @@ h3 {
     text-transform: uppercase;
     letter-spacing: 3px;
     border-bottom: 1px solid #333;
-    padding-bottom: 15px;
+    padding-bottom: 25px;
     font-weight: bold;
 }
 label {
@@ -150,3 +150,64 @@ a:hover { color: #fff; border-bottom: 1px solid #fff; }
 
 /* Setup Page */
 .setup-body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; text-align: center; }
+
+/* Alarm Card Layout */
+.alarm-card {
+  background: rgba(26, 26, 26, 0.8);
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.alarm-day {
+    flex: 1;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #d4af37;
+    text-align: left;
+    text-transform: uppercase;
+    font-family: 'AA Triple', serif;
+}
+
+.alarm-time-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.alarm-time {
+  background: #f0e6d2;
+  border: 1px solid #d4af37;
+  color: #111;
+  font-family: 'Plaisir', serif;
+  font-size: 1.2rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  width: 5rem;
+  text-align: center;
+}
+
+input.alarm-time-input {
+    width: 175px; /* Increased width (~25% more than 140px) */
+    margin-top: 0;
+    padding: 8px;
+    font-size: 1.2rem;
+    height: 40px;
+    font-weight: bold;
+}
+
+select.alarm-sound-select {
+    width: 175px; /* Matches alarm-time-input width */
+    margin-top: 0;
+    padding: 8px; /* Correct padding */
+    font-size: 0.9rem;
+    height: 40px; /* Match height */ 
+    font-weight: bold;
+}

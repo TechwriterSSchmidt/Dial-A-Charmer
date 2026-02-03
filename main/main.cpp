@@ -26,6 +26,7 @@
 #include "RotaryDial.h"
 #include "PhonebookManager.h"
 #include "WebManager.h"
+#include "TimeManager.h" // Added TimeManager
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 
@@ -57,6 +58,7 @@ bool g_timer_intro_playing = false;
 int g_timer_announce_minutes = 0;
 bool g_timer_alarm_active = false;
 int64_t g_timer_alarm_end_ms = 0;
+std::string g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
 
 // Helpers
 void stop_playback(); // forward decl
@@ -90,6 +92,11 @@ static int g_gain_sample_rate = 44100;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
 static volatile bool g_key3_pressed = false;
+// Alarm Fade Logic
+static bool g_alarm_fade_active = false;
+static float g_alarm_fade_factor = 1.0f; 
+static int64_t g_alarm_fade_start_time = 0;
+const int64_t ALARM_FADE_DURATION_MS = 60000; // 60 Seconds ramp up
 
 static int gain_open(audio_element_handle_t self)
 {
@@ -280,8 +287,25 @@ void play_timer_alarm() {
     g_timer_alarm_active = true;
     g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
     stop_playback();
-    play_file("/sdcard/ringtones/digital_alarm.wav");
+    // Play the currently selected alarm (Daily or Default)
+    if (g_current_alarm_file.empty()) {
+        g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
+    }
+    play_file(g_current_alarm_file.c_str());
 }
+
+static int get_snooze_minutes() {
+    nvs_handle_t my_handle;
+    int32_t val = 5; // Default
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        nvs_get_i32(my_handle, "snooze_min", &val);
+        nvs_close(my_handle);
+    }
+    if (val < 1) val = 1;
+    if (val > 60) val = 60;
+    return (int)val;
+}
+
 
 void process_phonebook_function(PhonebookEntry entry) {
     if (entry.type == "FUNCTION") {
@@ -358,10 +382,22 @@ void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
     // Handle Timer/Alarm Mute
     if (g_timer_alarm_active) {
-        ESP_LOGI(TAG, "Stopping Timer Alarm via Key 5");
+        ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
         g_timer_alarm_active = false;
         stop_playback();
-        play_file("/sdcard/system/alarm_stopped_de.wav");
+        
+        int snooze = get_snooze_minutes();
+        ESP_LOGI(TAG, "Snoozing for %d minutes", snooze);
+        
+        // Start Timer (Silent, no announcement)
+        start_timer_minutes(snooze);
+        // Important: start_timer_minutes sets g_timer_intro_playing=false by default (line 69 impl)
+        // But main loop might override if it was dialed. Here we just call the helper strictly.
+        // We need to ensure we don't accidentally trigger the "Timer Set" voice.
+        // The helper "start_timer_minutes" sets:
+        // g_timer_announce_pending = false;
+        // g_timer_intro_playing = false;
+        // So calling it here is SAFE and SILENT.
     }
 }
 
@@ -396,29 +432,67 @@ void on_hook_change(bool off_hook) {
     }
 }
 
-// Input Task
 void input_task(void *pvParameters) {
     ESP_LOGI(TAG, "Input Task Started. Priority: %d", uxTaskPriorityGet(NULL));
     while(1) {
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
 
+        // Calculate Target Gain Base
+        float target_left = APP_GAIN_DEFAULT_LEFT;
+        float target_right = APP_GAIN_DEFAULT_RIGHT;
+
         if (APP_PIN_KEY3 >= 0) {
             int level = gpio_get_level((gpio_num_t)APP_PIN_KEY3);
             bool pressed = APP_KEY3_ACTIVE_LOW ? (level == 0) : (level == 1);
             if (pressed != g_key3_pressed) {
                 g_key3_pressed = pressed;
-                g_gain_right_target = pressed ? 0.0f : APP_GAIN_DEFAULT_RIGHT;
-                g_gain_left_target = APP_GAIN_DEFAULT_LEFT;
-                ESP_LOGI(TAG, "Key3 %s -> Right gain=%0.2f", pressed ? "pressed" : "released", g_gain_right_target);
+                ESP_LOGI(TAG, "Key3 %s", pressed ? "pressed" : "released");
+            }
+            if (g_key3_pressed) {
+                target_right = 0.0f; // Mute Right on Key3
             }
         }
         
+        // Apply Alarm Fade Factor
+        if (g_timer_alarm_active && g_alarm_fade_active) {
+            int64_t now = esp_timer_get_time() / 1000;
+            if (now < g_alarm_fade_start_time) g_alarm_fade_start_time = now;
+            
+            int64_t elapsed = now - g_alarm_fade_start_time;
+            if (elapsed < 0) elapsed = 0;
+            if (elapsed > ALARM_FADE_DURATION_MS) {
+                g_alarm_fade_factor = 1.0f;
+            } else {
+                g_alarm_fade_factor = (float)elapsed / (float)ALARM_FADE_DURATION_MS;
+            }
+            // Ensure strictly minimum volume so it's audible
+            if (g_alarm_fade_factor < 0.05f) g_alarm_fade_factor = 0.05f;
+            
+            target_left *= g_alarm_fade_factor;
+            target_right *= g_alarm_fade_factor;
+        }
+
+        g_gain_left_target = target_left;
+        g_gain_right_target = target_right;
+        
         // Yield to IDLE task to reset WDT using vTaskDelay
         // Ensure strictly positive delay to allow IDLE task to run
-        vTaskDelay(pdMS_TO_TICKS(10)); 
+        vTaskDelay(pdMS_TO_TICKS(50)); 
     }
 }
+
+// System Monitor Task
+#if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
+void monitor_task(void *pvParameters) {
+    ESP_LOGI(TAG, "System Monitor Task Started");
+    while(1) {
+        ESP_LOGI(TAG, "MONITOR: Heap: %6d bytes (Free) / %6d bytes (Min Free)", 
+                 (int)esp_get_free_heap_size(), (int)esp_get_minimum_free_heap_size());
+        vTaskDelay(pdMS_TO_TICKS(SYSTEM_MONITOR_INTERVAL_MS));
+    }
+}
+#endif
 
 extern "C" void app_main(void)
 {
@@ -428,6 +502,10 @@ extern "C" void app_main(void)
         err = nvs_flash_init();
     }
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
+
+    #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
+    xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
+    #endif
 
     audio_board_handle_t board_handle = audio_board_init();
     if (!board_handle) {
@@ -555,6 +633,9 @@ extern "C" void app_main(void)
     audio_element_set_uri(fatfs_stream, "/sdcard/system/system_ready_en.wav");
     audio_pipeline_run(pipeline);
 
+    // Initialize TimeManager (SNTP)
+    TimeManager::init();
+    
     // --- Start Input Task Last ---
     // Start Input Task with Higher Priority (10) to avoid starvation by Audio
     // Started here to ensure 'pipeline' is initialized before any callback tries to stop it
@@ -562,6 +643,45 @@ extern "C" void app_main(void)
 
     // --- 5. Main Event Loop ---
     while (1) {
+        // --- Regular Tasks ---
+        // Check Daily Alarm
+        if (TimeManager::checkAlarm()) {
+             ESP_LOGI(TAG, "Daily Alarm Triggered! Starting Ring...");
+             if (!g_timer_alarm_active) {
+                 // Reuse the timer alarm logic for simplicity
+                 g_timer_alarm_active = true;
+                 g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (60 * 1000); // Ring for 60s
+                 
+                 // Stop anything currently playing
+                 audio_pipeline_stop(pipeline);
+                 audio_pipeline_wait_for_stop(pipeline);
+                 audio_pipeline_terminate(pipeline);
+                 
+                 // Get specifics for today
+                 struct tm now_tm = TimeManager::getCurrentTime();
+                 DayAlarm today = TimeManager::getAlarm(now_tm.tm_wday);
+                 
+                 // Handle Fade
+                 g_alarm_fade_active = today.volumeRamp;
+                 if (g_alarm_fade_active) {
+                     g_alarm_fade_start_time = esp_timer_get_time() / 1000;
+                     g_alarm_fade_factor = 0.05f;
+                 } else {
+                     g_alarm_fade_factor = 1.0f;
+                 }
+
+                 char path[128];
+                 if (!today.ringtone.empty()) {
+                     snprintf(path, sizeof(path), "/sdcard/ringtones/%s", today.ringtone.c_str());
+                 } else {
+                     snprintf(path, sizeof(path), "/sdcard/ringtones/digital_alarm.wav");
+                 }
+                 
+                 g_current_alarm_file = std::string(path);
+                 play_file(g_current_alarm_file.c_str());
+             }
+        }
+
         audio_event_iface_msg_t msg;
         
         // Listen with 100ms timeout to allow polling logic
@@ -579,6 +699,9 @@ extern "C" void app_main(void)
                         int minutes = atoi(dial_buffer.c_str());
                         if (minutes >= 1 && minutes <= 500) {
                             ESP_LOGI(TAG, "Timer set: %d minutes", minutes);
+                            // Reset alarm file to default for kitchen timer
+                            g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
+                            
                             start_timer_minutes(minutes);
                             g_timer_announce_minutes = minutes;
                             g_timer_announce_pending = true;
@@ -667,7 +790,7 @@ extern "C" void app_main(void)
                     if (g_timer_alarm_active) {
                         int64_t now = esp_timer_get_time() / 1000;
                         if (now < g_timer_alarm_end_ms) {
-                            play_file("/sdcard/ringtones/digital_alarm.wav");
+                            play_file(g_current_alarm_file.c_str());
                         } else {
                             g_timer_alarm_active = false;
                         }

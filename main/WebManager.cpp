@@ -1,6 +1,9 @@
 #include "WebManager.h"
+#include "TimeManager.h" // Added TimeManager
 #include <string.h>
 #include <sys/param.h>
+#include <dirent.h>
+#include <sys/types.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_wifi.h"
@@ -15,6 +18,9 @@
 #include "PhonebookManager.h"
 #include "cJSON.h"
 #include "lwip/sockets.h"
+
+// External reference to play_file from main.cpp
+extern void play_file(const char* path);
 
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
@@ -158,6 +164,51 @@ static esp_err_t api_phonebook_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_ringtones_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    cJSON *root = cJSON_CreateArray();
+    
+    DIR *dir = opendir("/sdcard/ringtones");
+    if (dir) {
+        struct dirent *ent;
+        while ((ent = readdir(dir)) != NULL) {
+	    // Filter for common audio files
+            if (strstr(ent->d_name, ".wav") || strstr(ent->d_name, ".mp3")) {
+                cJSON_AddItemToArray(root, cJSON_CreateString(ent->d_name));
+            }
+        }
+        closedir(dir);
+    }
+    
+    const char *json_str = cJSON_PrintUnformatted(root);
+    httpd_resp_send(req, json_str, strlen(json_str));
+    free((void*)json_str);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
+static esp_err_t api_preview_handler(httpd_req_t *req) {
+    char buf[128];
+    if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK) {
+        char param[64];
+        if (httpd_query_key_value(buf, "file", param, sizeof(param)) == ESP_OK) {
+            // Basic security check: no parent directory traversal
+            if (strstr(param, "..") == NULL && (strstr(param, ".wav") || strstr(param, ".mp3"))) {
+                char filepath[128];
+                snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
+                
+                ESP_LOGI(TAG, "Preview request: %s", filepath);
+                play_file(filepath); 
+                
+                httpd_resp_send(req, "OK", 2);
+                return ESP_OK;
+            }
+        }
+    }
+    httpd_resp_send_404(req);
+    return ESP_FAIL;
+}
+
 static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     cJSON *root = cJSON_CreateObject();
@@ -194,6 +245,27 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     uint8_t vol = 60;
     if (err == ESP_OK) nvs_get_u8(my_handle, "volume", &vol);
     cJSON_AddNumberToObject(root, "volume", vol);
+
+    // Snooze Time
+    int32_t snooze = 5;
+    if (err == ESP_OK) nvs_get_i32(my_handle, "snooze_min", &snooze);
+    cJSON_AddNumberToObject(root, "snooze_min", snooze);
+    
+    // --- Alarms ---
+    cJSON *alarms = cJSON_CreateArray();
+    for (int i=0; i<7; i++) {
+        DayAlarm a = TimeManager::getAlarm(i);
+        cJSON *itm = cJSON_CreateObject();
+        cJSON_AddNumberToObject(itm, "d", i);
+        cJSON_AddNumberToObject(itm, "h", a.hour);
+        cJSON_AddNumberToObject(itm, "m", a.minute);
+        cJSON_AddBoolToObject(itm, "en", a.active);
+        cJSON_AddBoolToObject(itm, "rmp", a.volumeRamp);
+        cJSON_AddStringToObject(itm, "snd", a.ringtone.c_str());
+        cJSON_AddItemToArray(alarms, itm);
+    }
+    cJSON_AddItemToObject(root, "alarms", alarms);
+    // --------------
     
     if (err == ESP_OK) nvs_close(my_handle);
 
@@ -249,6 +321,40 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_u8(my_handle, "volume", (uint8_t)item->valueint);
         }
 
+        item = cJSON_GetObjectItem(root, "snooze_min");
+        if (cJSON_IsNumber(item)) {
+            nvs_set_i32(my_handle, "snooze_min", item->valueint);
+        }
+
+        // --- Alarms ---
+        cJSON *alarms_arr = cJSON_GetObjectItem(root, "alarms");
+        if (cJSON_IsArray(alarms_arr)) {
+            cJSON *elem;
+            cJSON_ArrayForEach(elem, alarms_arr) {
+                cJSON *d = cJSON_GetObjectItem(elem, "d");
+                cJSON *h = cJSON_GetObjectItem(elem, "h");
+                cJSON *m = cJSON_GetObjectItem(elem, "m");
+                cJSON *en = cJSON_GetObjectItem(elem, "en");
+                cJSON *rmp = cJSON_GetObjectItem(elem, "rmp");
+                cJSON *snd = cJSON_GetObjectItem(elem, "snd");
+                
+                if (cJSON_IsNumber(d) && cJSON_IsNumber(h) && cJSON_IsNumber(m)) {
+                    bool active = false;
+                    bool ramp = false;
+                    if (cJSON_IsBool(en)) active = cJSON_IsTrue(en);
+                    if (cJSON_IsNumber(en)) active = (en->valueint == 1);
+                    
+                    if (cJSON_IsBool(rmp)) ramp = cJSON_IsTrue(rmp);
+                    if (cJSON_IsNumber(rmp)) ramp = (rmp->valueint == 1);
+
+                    const char* ringtone = (snd && cJSON_IsString(snd)) ? snd->valuestring : "";
+                    TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, ringtone);
+                }
+            }
+        }
+        // --------------
+
+
         nvs_commit(my_handle);
         nvs_close(my_handle);
     }
@@ -267,11 +373,17 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
-    wifi_scan_config_t scan_config = { 0 };
-    scan_config.show_hidden = true;
-    scan_config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-    scan_config.scan_time.active.min = 100;
-    scan_config.scan_time.active.max = 300;
+    wifi_scan_config_t scan_config = {
+        .ssid = NULL,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true,
+        .scan_type = WIFI_SCAN_TYPE_ACTIVE,
+        .scan_time = {
+            .active = { .min = 100, .max = 300 },
+            .passive = 100
+        }
+    };
 
     // Trigger scan (blocking)
     // Note: In strict AP mode, scan might not work on all ESP32 revisions without APSTA.
@@ -336,7 +448,15 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Handling URI: %s", file_path);
 
     // Map URIs to embedded files
-    if (strcmp(file_path, "/") == 0 || strcmp(file_path, "/index.html") == 0) {
+    // SPA Routing: Serve index.html for known client-side routes
+    if (strcmp(file_path, "/") == 0 || 
+        strcmp(file_path, "/index.html") == 0 ||
+        strcmp(file_path, "/alarm") == 0 ||
+        strcmp(file_path, "/settings") == 0 ||
+        strcmp(file_path, "/phonebook") == 0 ||
+        strcmp(file_path, "/advanced") == 0 ||
+        strcmp(file_path, "/setup") == 0) {
+            
         file_start = index_html_start;
         file_end = index_html_end;
         mime_type = "text/html";
@@ -378,6 +498,8 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         // SPECIAL ROUTING FOR FONTS
         // If URI starts with /fonts/, map to /sdcard/fonts/
         if (strncmp(file_path, "/fonts/", 7) == 0) {
+            snprintf(filepath, sizeof(filepath), "/sdcard%s", file_path);
+        } else if (strncmp(file_path, "/ringtones/", 11) == 0) {
             snprintf(filepath, sizeof(filepath), "/sdcard%s", file_path);
         } else {
             // Default: map to /sdcard/data/
@@ -552,6 +674,22 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &set_post_uri);
+
+        httpd_uri_t ringtones_uri = {
+            .uri       = "/api/ringtones",
+            .method    = HTTP_GET,
+            .handler   = api_ringtones_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &ringtones_uri);
+
+        httpd_uri_t preview_uri = {
+            .uri       = "/api/preview",
+            .method    = HTTP_GET,
+            .handler   = api_preview_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &preview_uri);
 
         // Files (Catch-all)
         // We register this last or use a greedy match
