@@ -4,7 +4,7 @@
 
 // Rotary Dial & Inputs
 #define APP_PIN_DIAL_PULSE 5   
-#define APP_PIN_DIAL_MODE  23  // Key 4 (Re-enabled)
+#define APP_PIN_DIAL_MODE  23
 #define APP_PIN_HOOK       19  
 #define APP_PIN_EXTRA_BTN  18  
 

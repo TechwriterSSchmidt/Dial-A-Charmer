@@ -1101,7 +1101,7 @@ def generate_system_sounds():
 
     # 3b. Copy Fonts (from Project Root)
     fonts_src = PROJECT_ROOT / "fonts"
-    fonts_dest = SD_ROOT / "system" / "fonts"
+    fonts_dest = SD_ROOT / "fonts"
     if fonts_src.exists():
          fonts_dest.mkdir(parents=True, exist_ok=True)
          for font in fonts_src.glob("*.*"):

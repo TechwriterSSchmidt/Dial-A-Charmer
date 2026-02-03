@@ -25,6 +25,7 @@
 #include "app_config.h"
 #include "RotaryDial.h"
 #include "PhonebookManager.h"
+#include "WebManager.h"
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 
@@ -434,31 +435,6 @@ extern "C" void app_main(void)
         return;
     }
 
-    // --- 1. Input Initialization ---
-    ESP_LOGI(TAG, "Initializing Rotary Dial (Mode Pin: %d)...", APP_PIN_DIAL_MODE);
-    dial.begin();
-    dial.setModeActiveLow(APP_DIAL_MODE_ACTIVE_LOW); 
-    dial.setPulseActiveLow(APP_DIAL_PULSE_ACTIVE_LOW); 
-    
-    // Debug Mode Pin State
-    if (APP_PIN_DIAL_MODE >= 0) {
-        gpio_set_direction((gpio_num_t)APP_PIN_DIAL_MODE, GPIO_MODE_INPUT);
-        int level = gpio_get_level((gpio_num_t)APP_PIN_DIAL_MODE);
-        ESP_LOGI(TAG, "Startup Mode Pin Level: %d (Expected Active Low: %s)", level, APP_DIAL_MODE_ACTIVE_LOW ? "Yes" : "No");
-    }
-
-    // Key3 for gain test
-    if (APP_PIN_KEY3 >= 0) {
-        gpio_set_direction((gpio_num_t)APP_PIN_KEY3, GPIO_MODE_INPUT);
-        gpio_set_pull_mode((gpio_num_t)APP_PIN_KEY3, APP_KEY3_ACTIVE_LOW ? GPIO_PULLUP_ONLY : GPIO_PULLDOWN_ONLY);
-    }
-
-    dial.onDialComplete(on_dial_complete);
-    dial.onHookChange(on_hook_change);
-    dial.onButtonPress(on_button_press);
-    
-    // Input Task will be started after Audio initialization to prevent crashes
-
     // --- 2. Audio Board Init ---
     ESP_LOGI(TAG, "Starting Audio Board...");
     
@@ -488,8 +464,28 @@ extern "C" void app_main(void)
     }
     ESP_LOGI(TAG, "SD Card mounted successfully");
 
+    // --- 1. Input Initialization (Moved to ensure ISR service order) ---
+    ESP_LOGI(TAG, "Initializing Rotary Dial (Mode Pin: %d)...", APP_PIN_DIAL_MODE);
+    dial.begin();
+    dial.setModeActiveLow(APP_DIAL_MODE_ACTIVE_LOW); 
+    dial.setPulseActiveLow(APP_DIAL_PULSE_ACTIVE_LOW); 
+    
+    // Debug Mode Pin State
+    if (APP_PIN_DIAL_MODE >= 0) {
+        gpio_set_direction((gpio_num_t)APP_PIN_DIAL_MODE, GPIO_MODE_INPUT);
+        int level = gpio_get_level((gpio_num_t)APP_PIN_DIAL_MODE);
+        ESP_LOGI(TAG, "Startup Mode Pin Level: %d (Expected Active Low: %s)", level, APP_DIAL_MODE_ACTIVE_LOW ? "Yes" : "No");
+    }
+
+    dial.onDialComplete(on_dial_complete);
+    dial.onHookChange(on_hook_change);
+    dial.onButtonPress(on_button_press);
+
     // Initialize Phonebook (Now that SD is ready)
     phonebook.begin();
+
+    // --- 3b. Web / Network ---
+    webManager.begin();
 
     // --- 4. Audio Pipeline Setup ---
     ESP_LOGI(TAG, "Creating audio pipeline...");

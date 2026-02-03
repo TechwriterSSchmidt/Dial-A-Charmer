@@ -1,5 +1,6 @@
 #include "RotaryDial.h"
 #include "esp_timer.h"
+#include "esp_log.h"
 #include "driver/gpio.h"
 #include "rom/ets_sys.h" 
 
@@ -128,10 +129,14 @@ void RotaryDial::begin() {
     }
 
     // Install ISR service
-    // It might be already installed by PERIPH or Audio Board, so we ignore INVALID_STATE
+    // It might be already installed by PERIPH or Audio Board, so we suppress the error log
+    esp_log_level_set("gpio", ESP_LOG_NONE); // Suppress "already installed" error
     esp_err_t err = gpio_install_isr_service(0);
+    esp_log_level_set("gpio", ESP_LOG_INFO); // Restore
+    
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        // ESP_LOGE("RotaryDial", "ISR Install Failed: %d", err);
+        // Only log real failures (not invalid state)
+        ESP_LOGE("RotaryDial", "ISR Install Failed: %d", err);
     }
     
     // Attach to Pulse
