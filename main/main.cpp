@@ -61,6 +61,7 @@ int g_timer_announce_minutes = 0;
 bool g_timer_alarm_active = false;
 int64_t g_timer_alarm_end_ms = 0;
 std::string g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
+bool g_startup_silence_playing = false;
 
 // Helpers
 void stop_playback(); // forward decl
@@ -664,7 +665,8 @@ extern "C" void app_main(void)
 
     // Play Startup Sound
     ESP_LOGI(TAG, "Playing Startup Sound...");
-    audio_element_set_uri(fatfs_stream, "/sdcard/system/system_ready_en.wav");
+    g_startup_silence_playing = true;
+    audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_200ms.wav");
     audio_pipeline_run(pipeline);
 
         // Initialize TimeManager (SNTP)
@@ -819,6 +821,11 @@ extern "C" void app_main(void)
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
                     ESP_LOGI(TAG, "Audio Finished.");
                     stop_playback();
+                    if (g_startup_silence_playing) {
+                        g_startup_silence_playing = false;
+                        play_file("/sdcard/system/system_ready_en.wav");
+                        continue;
+                    }
                     if (g_timer_intro_playing && g_timer_announce_pending) {
                         g_timer_intro_playing = false;
                         g_timer_announce_pending = false;

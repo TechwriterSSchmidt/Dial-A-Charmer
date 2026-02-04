@@ -361,7 +361,6 @@ function renderSettings() {
 
     return `
         <div class="card">
-            <h3>${t('alarm_title')}</h3>
             ${rows}
         </div>
     `;
@@ -419,7 +418,6 @@ function renderAdvanced() {
 
      return `
         <div class="card">
-            <h3>${t('config')}</h3>
 
             <!-- DATE & TIME PANEL -->
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
@@ -442,11 +440,11 @@ function renderAdvanced() {
                  
                  <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
                     <!-- Scan Button (Left) -->
-                    <button onclick="nav('/setup')" style="width:140px; padding:6px; background-color:#a52a2a; color:white; border:1px solid #a52a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; text-transform:uppercase;">SCAN</button>
+                    <button onclick="nav('/setup')" style="width:140px; padding:6px; background-color:#a52a2a; color:white; border:1px solid #a52a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; text-transform:uppercase; line-height:1.2;">SCAN</button>
                     
                     <!-- SSID Display (Right, styled like Select) -->
-                    <div style="text-align:right;">
-                        <select disabled style="padding:6px; width:140px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem; opacity:1;">
+                    <div style="text-align:right; display:flex; align-items:center;">
+                        <select disabled style="padding:6px; width:140px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem; opacity:1; line-height:1.2;">
                             <option>${state.settings.wifi_ssid || 'No Net'}</option>
                         </select>
                     </div>
