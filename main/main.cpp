@@ -727,7 +727,7 @@ extern "C" void app_main(void)
         // --- Logic: Check Dial Timeout ---
         if (!dial_buffer.empty()) {
             int64_t now = esp_timer_get_time() / 1000;
-            if ((now - last_digit_time) > DIAL_TIMEOUT_MS) {
+            if (!dial.isDialing() && (now - last_digit_time) > DIAL_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Dial Timeout. Processing Number: %s", dial_buffer.c_str());
                 
                 // On-hook -> Timer mode (1-3 digits, up to 500 minutes)
