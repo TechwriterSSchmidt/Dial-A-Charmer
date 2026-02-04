@@ -119,18 +119,9 @@ void RotaryDial::begin() {
     io_conf.pin_bit_mask = (1ULL << _hook_pin);
     gpio_config(&io_conf);
     
-    // Btn
-    if ((int)_btn_pin >= 0) {
+        // Btn
         io_conf.pin_bit_mask = (1ULL << _btn_pin);
-        // Only enable pullup if pin supports it (GPIO 0-33)
-        // GPIO 34-39 are input only, no pullup/pulldown
-        if (_btn_pin < 34) {
-             io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-        } else {
-             io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-        }
         gpio_config(&io_conf);
-    }
 
     if ((int)_mode_pin >= 0) {
         io_conf.pin_bit_mask = (1ULL << _mode_pin);

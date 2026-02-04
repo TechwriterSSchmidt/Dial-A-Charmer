@@ -522,27 +522,6 @@ void monitor_task(void *pvParameters) {
 }
 #endif
 
-// Helper to get WAV sample rate manually
-static int get_wav_sample_rate(const char* path) {
-    FILE* f = fopen(path, "rb");
-    if (!f) return 44100; // Default if open fails
-    
-    uint8_t header[28];
-    if (fread(header, 1, 28, f) < 28) {
-        fclose(f);
-        return 44100;
-    }
-    fclose(f);
-    
-    // Offset 24 is Sample Rate (4 bytes little endian)
-    int sample_rate = header[24] | (header[25] << 8) | (header[26] << 16) | (header[27] << 24);
-    
-    // Sanity check
-    if (sample_rate < 8000 || sample_rate > 96000) return 44100;
-    
-    return sample_rate;
-}
-
 extern "C" void app_main(void)
 {
     esp_err_t err = nvs_flash_init();
@@ -683,47 +662,13 @@ extern "C" void app_main(void)
     // Default Output: Base Speaker (Rout)
     audio_board_select_output(false);
 
-    // Initialize TimeManager (SNTP & RTC) before audio starts to avoid I2C/CPU contention
-    TimeManager::init();
-
     // Play Startup Sound
     ESP_LOGI(TAG, "Playing Startup Sound...");
-
-    int start_rate = get_wav_sample_rate("/sdcard/system/system_ready_en.wav");
-    ESP_LOGI(TAG, "Pre-detected startup sample rate: %d", start_rate);
-    
-    // Explicitly set I2S/Codec to correct rate
-    
-    // 1. Update Element Info so the open() or subsequent logic knows we are at 22k/44k
-    audio_element_info_t i2s_info = {};
-    audio_element_getinfo(i2s_writer, &i2s_info);
-    i2s_info.sample_rates = start_rate;
-    audio_element_setinfo(i2s_writer, &i2s_info);
-
-    // 2. Configure Hardware
-    i2s_stream_set_clk(i2s_writer, start_rate, 16, 2);
-    
-    // 3. Force Codec Resync
-    // The ES8388 PLL needs time to lock onto the MCLK/BCLK from I2s.
-    // We restart the codec to force a re-lock, enabling the output.
-    if (board_handle && board_handle->audio_hal) {
-         audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_STOP);
-         audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_START);
-         
-         // Start I2S clock (BCLK) immediately
-         // i2s_start((i2s_port_t)0); // Removed to avoid CONFLICT
-
-         // Wait for PLL lock (Increased to 600ms as 300ms was insufficient)
-         vTaskDelay(pdMS_TO_TICKS(600)); 
-    }
-    
-    // 3. Pre-roll Silence (Anti-Chipmunk)
-    // Send a tiny buffer of silence to flush the DMA and force clock sync before real audio starts
-    // NOTE: This usually requires the pipeline to be running, but we can try to "prime" the codec.
-    // Given ADF limitations, we will rely on the longer delay and order.
-    
     audio_element_set_uri(fatfs_stream, "/sdcard/system/system_ready_en.wav");
     audio_pipeline_run(pipeline);
+
+        // Initialize TimeManager (SNTP)
+        TimeManager::init();
     
     // --- Start Input Task Last ---
     // Start Input Task with Higher Priority (10) to avoid starvation by Audio
@@ -855,28 +800,9 @@ extern "C" void app_main(void)
                 audio_element_setinfo(gain_element, &music_info);
                 int out_channels = (music_info.channels == 1) ? 2 : music_info.channels;
                 
-                // Check if we need to update I2S to avoid glitches if already correct
-                audio_element_info_t i2s_info = {};
-                audio_element_getinfo(i2s_writer, &i2s_info);
-                
-                // Only reconfigure if rate differs significantly
-                if (i2s_info.sample_rates != music_info.sample_rates) {
-                    ESP_LOGI(TAG, "WAV info Update: rate=%d, ch=%d (out_ch=%d)", music_info.sample_rates, music_info.channels, out_channels);
-                    
-                    // Update I2S Element Info so next getinfo returns new rate
-                    audio_element_setinfo(i2s_writer, &music_info); 
-                    
-                    // Configure I2S Clock
-                    i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, out_channels);
-                    
-                    // Restart Codec (Fix for fast playback on A1S)
-                    if (board_handle && board_handle->audio_hal) {
-                        audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_STOP);
-                        audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_START);
-                    }
-                } else {
-                     ESP_LOGI(TAG, "WAV info match (%d Hz) - Skipping reconfig", music_info.sample_rates);
-                }
+                ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d (out_ch=%d)", 
+                    music_info.sample_rates, music_info.channels, music_info.bits, out_channels);
+                i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, out_channels);
                 
                 // Enforce output selection
                 update_audio_output();
