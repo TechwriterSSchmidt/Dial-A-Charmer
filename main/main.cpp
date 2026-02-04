@@ -19,6 +19,7 @@
 #include "periph_sdcard.h"
 #include "fatfs_stream.h"
 #include "i2s_stream.h"
+// #include "driver/i2s.h" // Removed to avoid CONFLICT with legacy driver used by ADF
 #include "wav_decoder.h"
 
 // App Includes
@@ -34,6 +35,7 @@ static const char *TAG = "DIAL_A_CHARMER_ESP";
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
 audio_pipeline_handle_t pipeline;
 audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
+audio_board_handle_t board_handle = NULL; // Globale Reference
 
 // Logic State
 std::string dial_buffer = "";
@@ -191,9 +193,32 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
 }
 
 void update_audio_output() {
+    if (!board_handle) return;
+
+    // Determine Effective Output Mode
+    // Force Base Speaker (false) if Alarm or Timer Announcement active
+    bool effective_handset = g_output_mode_handset;
+    if (g_timer_alarm_active || g_timer_announce_pending) {
+        effective_handset = false; 
+    }
+
     // Re-apply the current output selection
-    // This is needed because some ADF driver events might reset the mute registers
-    audio_board_select_output(g_output_mode_handset);
+    audio_board_select_output(effective_handset);
+
+    // Update Volume based on EFFECTIVE mode
+    nvs_handle_t my_handle;
+    uint8_t vol = 60; // Default Base Speaker
+    
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        if (effective_handset) {
+            if (nvs_get_u8(my_handle, "volume_handset", &vol) != ESP_OK) vol = 60;
+        } else {
+            if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = 60;
+        }
+        nvs_close(my_handle);
+    }
+    
+    audio_hal_set_volume(board_handle->audio_hal, vol);
 }
 std::string get_random_file(std::string folderPath) {
     std::vector<std::string> files;
@@ -287,6 +312,7 @@ void play_timer_alarm() {
     g_timer_alarm_active = true;
     g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
     stop_playback();
+    update_audio_output(); // Force Base Speaker
     // Play the currently selected alarm (Daily or Default)
     if (g_current_alarm_file.empty()) {
         g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
@@ -383,9 +409,9 @@ void on_button_press() {
     // Handle Timer/Alarm Mute
     if (g_timer_alarm_active) {
         ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
+        TimeManager::stopAlarm();
         g_timer_alarm_active = false;
-        stop_playback();
-        
+        stop_playback();        update_audio_output(); // Restore audio routing        
         int snooze = get_snooze_minutes();
         ESP_LOGI(TAG, "Snoozing for %d minutes", snooze);
         
@@ -418,7 +444,9 @@ void on_hook_change(bool off_hook) {
         g_any_digit_dialed = false;
         g_off_hook_start_ms = esp_timer_get_time() / 1000;
         if (g_timer_alarm_active) {
+            TimeManager::stopAlarm();
             g_timer_alarm_active = false;
+            update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
         }
         // Play dial tone
         play_file("/sdcard/system/dialtone_1.wav");
@@ -494,6 +522,27 @@ void monitor_task(void *pvParameters) {
 }
 #endif
 
+// Helper to get WAV sample rate manually
+static int get_wav_sample_rate(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return 44100; // Default if open fails
+    
+    uint8_t header[28];
+    if (fread(header, 1, 28, f) < 28) {
+        fclose(f);
+        return 44100;
+    }
+    fclose(f);
+    
+    // Offset 24 is Sample Rate (4 bytes little endian)
+    int sample_rate = header[24] | (header[25] << 8) | (header[26] << 16) | (header[27] << 24);
+    
+    // Sanity check
+    if (sample_rate < 8000 || sample_rate > 96000) return 44100;
+    
+    return sample_rate;
+}
+
 extern "C" void app_main(void)
 {
     esp_err_t err = nvs_flash_init();
@@ -507,7 +556,7 @@ extern "C" void app_main(void)
     xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
     #endif
 
-    audio_board_handle_t board_handle = audio_board_init();
+    board_handle = audio_board_init();
     if (!board_handle) {
         ESP_LOGE(TAG, "Audio board init failed");
         return;
@@ -519,8 +568,14 @@ extern "C" void app_main(void)
     // Enable Power Amplifier (GPIO21)
     // Anti-Pop: Wait for Codec/I2S to stabilize before enabling PA
     vTaskDelay(pdMS_TO_TICKS(APP_PA_ENABLE_DELAY_MS));
+#if APP_PIN_PA_ENABLE >= 0
+    // Ensure it is output
+    gpio_set_direction((gpio_num_t)APP_PIN_PA_ENABLE, GPIO_MODE_OUTPUT);
     gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
     ESP_LOGI(TAG, "Power Amplifier enabled on GPIO %d (Anti-Pop Delay: %d ms)", APP_PIN_PA_ENABLE, APP_PA_ENABLE_DELAY_MS);
+#else
+    ESP_LOGW(TAG, "Power Amplifier control DISABLED via config");
+#endif
     
     audio_hal_set_volume(board_handle->audio_hal, 60); // Set volume
 
@@ -628,13 +683,47 @@ extern "C" void app_main(void)
     // Default Output: Base Speaker (Rout)
     audio_board_select_output(false);
 
+    // Initialize TimeManager (SNTP & RTC) before audio starts to avoid I2C/CPU contention
+    TimeManager::init();
+
     // Play Startup Sound
     ESP_LOGI(TAG, "Playing Startup Sound...");
+
+    int start_rate = get_wav_sample_rate("/sdcard/system/system_ready_en.wav");
+    ESP_LOGI(TAG, "Pre-detected startup sample rate: %d", start_rate);
+    
+    // Explicitly set I2S/Codec to correct rate
+    
+    // 1. Update Element Info so the open() or subsequent logic knows we are at 22k/44k
+    audio_element_info_t i2s_info = {};
+    audio_element_getinfo(i2s_writer, &i2s_info);
+    i2s_info.sample_rates = start_rate;
+    audio_element_setinfo(i2s_writer, &i2s_info);
+
+    // 2. Configure Hardware
+    i2s_stream_set_clk(i2s_writer, start_rate, 16, 2);
+    
+    // 3. Force Codec Resync
+    // The ES8388 PLL needs time to lock onto the MCLK/BCLK from I2s.
+    // We restart the codec to force a re-lock, enabling the output.
+    if (board_handle && board_handle->audio_hal) {
+         audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_STOP);
+         audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_START);
+         
+         // Start I2S clock (BCLK) immediately
+         // i2s_start((i2s_port_t)0); // Removed to avoid CONFLICT
+
+         // Wait for PLL lock (Increased to 600ms as 300ms was insufficient)
+         vTaskDelay(pdMS_TO_TICKS(600)); 
+    }
+    
+    // 3. Pre-roll Silence (Anti-Chipmunk)
+    // Send a tiny buffer of silence to flush the DMA and force clock sync before real audio starts
+    // NOTE: This usually requires the pipeline to be running, but we can try to "prime" the codec.
+    // Given ADF limitations, we will rely on the longer delay and order.
+    
     audio_element_set_uri(fatfs_stream, "/sdcard/system/system_ready_en.wav");
     audio_pipeline_run(pipeline);
-
-    // Initialize TimeManager (SNTP)
-    TimeManager::init();
     
     // --- Start Input Task Last ---
     // Start Input Task with Higher Priority (10) to avoid starvation by Audio
@@ -657,6 +746,9 @@ extern "C" void app_main(void)
                  audio_pipeline_wait_for_stop(pipeline);
                  audio_pipeline_terminate(pipeline);
                  
+                 // Enable Base Speaker for Alarm
+                 update_audio_output();
+
                  // Get specifics for today
                  struct tm now_tm = TimeManager::getCurrentTime();
                  DayAlarm today = TimeManager::getAlarm(now_tm.tm_wday);
@@ -762,9 +854,29 @@ extern "C" void app_main(void)
                 // Propagate decoder info to gain element (so it knows input channels)
                 audio_element_setinfo(gain_element, &music_info);
                 int out_channels = (music_info.channels == 1) ? 2 : music_info.channels;
-                ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d (out_ch=%d)", 
-                    music_info.sample_rates, music_info.channels, music_info.bits, out_channels);
-                i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, out_channels);
+                
+                // Check if we need to update I2S to avoid glitches if already correct
+                audio_element_info_t i2s_info = {};
+                audio_element_getinfo(i2s_writer, &i2s_info);
+                
+                // Only reconfigure if rate differs significantly
+                if (i2s_info.sample_rates != music_info.sample_rates) {
+                    ESP_LOGI(TAG, "WAV info Update: rate=%d, ch=%d (out_ch=%d)", music_info.sample_rates, music_info.channels, out_channels);
+                    
+                    // Update I2S Element Info so next getinfo returns new rate
+                    audio_element_setinfo(i2s_writer, &music_info); 
+                    
+                    // Configure I2S Clock
+                    i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, out_channels);
+                    
+                    // Restart Codec (Fix for fast playback on A1S)
+                    if (board_handle && board_handle->audio_hal) {
+                        audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_STOP);
+                        audio_hal_ctrl_codec(board_handle->audio_hal, AUDIO_HAL_CODEC_MODE_BOTH, AUDIO_HAL_CTRL_START);
+                    }
+                } else {
+                     ESP_LOGI(TAG, "WAV info match (%d Hz) - Skipping reconfig", music_info.sample_rates);
+                }
                 
                 // Enforce output selection
                 update_audio_output();
@@ -792,7 +904,9 @@ extern "C" void app_main(void)
                         if (now < g_timer_alarm_end_ms) {
                             play_file(g_current_alarm_file.c_str());
                         } else {
+                            TimeManager::stopAlarm();
                             g_timer_alarm_active = false;
+                            update_audio_output(); // Restore routing
                         }
                         continue;
                     }

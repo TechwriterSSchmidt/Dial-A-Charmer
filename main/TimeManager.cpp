@@ -6,20 +6,169 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "driver/i2c_master.h"
+#include "app_config.h"
 
 static const char *TAG = "TIME_MANAGER";
 static bool _alarm_ringing = false;
 static int _last_triggered_day = -1; // To ensure we trigger only once per day
 
+// --- RTC DS3231 Implementation (IDF 5.x New Driver) ---
+#define I2C_PORT_NUM I2C_NUM_1
+#define DS3231_ADDR 0x68
+
+static i2c_master_bus_handle_t bus_handle = NULL;
+static i2c_master_dev_handle_t rtc_dev_handle = NULL;
+
+static uint8_t bcd2dec(uint8_t val) { return ((val / 16 * 10) + (val % 16)); }
+static uint8_t dec2bcd(uint8_t val) { return ((val / 10 * 16) + (val % 10)); }
+
+static void i2c_init_rtc() {
+#if defined(APP_PIN_RTC_SDA) && defined(APP_PIN_RTC_SCL)
+    i2c_master_bus_config_t i2c_mst_config = {};
+    i2c_mst_config.clk_source = I2C_CLK_SRC_DEFAULT;
+    i2c_mst_config.i2c_port = I2C_PORT_NUM;
+    i2c_mst_config.scl_io_num = (gpio_num_t)APP_PIN_RTC_SCL;
+    i2c_mst_config.sda_io_num = (gpio_num_t)APP_PIN_RTC_SDA;
+    i2c_mst_config.glitch_ignore_cnt = 7;
+    i2c_mst_config.flags.enable_internal_pullup = true; // Use internal pullup just in case
+
+    ESP_LOGI(TAG, "Initializing I2C Master (New Driver) on SDA:%d SCL:%d", APP_PIN_RTC_SDA, APP_PIN_RTC_SCL);
+    
+    esp_err_t err = i2c_new_master_bus(&i2c_mst_config, &bus_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "I2C New Master Bus Failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    i2c_device_config_t dev_cfg = {};
+    dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+    dev_cfg.device_address = DS3231_ADDR;
+    dev_cfg.scl_speed_hz = 100000;
+
+    err = i2c_master_bus_add_device(bus_handle, &dev_cfg, &rtc_dev_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "I2C Add Device Failed: %s", esp_err_to_name(err));
+    }
+#else
+    ESP_LOGE(TAG, "RTC Pins not defined!");
+#endif
+}
+
+static void rtc_write_time(struct tm *timeinfo) {
+    if (!timeinfo || !rtc_dev_handle) return;
+    
+    uint8_t data[8];
+    data[0] = 0x00; // Start Register
+    data[1] = dec2bcd(timeinfo->tm_sec);
+    data[2] = dec2bcd(timeinfo->tm_min);
+    data[3] = dec2bcd(timeinfo->tm_hour);
+    data[4] = dec2bcd(timeinfo->tm_wday + 1); // DS3231 1-7
+    data[5] = dec2bcd(timeinfo->tm_mday);
+    data[6] = dec2bcd(timeinfo->tm_mon + 1);
+    data[7] = dec2bcd(timeinfo->tm_year - 100);
+
+    esp_err_t ret = i2c_master_transmit(rtc_dev_handle, data, 8, -1);
+
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "DS3231 Updated Successfully");
+    } else {
+        ESP_LOGE(TAG, "DS3231 Write Failed: %s", esp_err_to_name(ret));
+    }
+}
+
+static void rtc_read_time() {
+    if (!rtc_dev_handle) return;
+    
+    uint8_t reg = 0x00;
+    uint8_t data[7];
+    
+    esp_err_t ret = i2c_master_transmit_receive(rtc_dev_handle, &reg, 1, data, 7, -1);
+
+    if (ret == ESP_OK) {
+        struct tm t = {0};
+        t.tm_sec  = bcd2dec(data[0]);
+        t.tm_min  = bcd2dec(data[1]);
+        t.tm_hour = bcd2dec(data[2]);
+        t.tm_wday = bcd2dec(data[3]) - 1;
+        t.tm_mday = bcd2dec(data[4]);
+        t.tm_mon  = bcd2dec(data[5] & 0x7F) - 1; 
+        t.tm_year = bcd2dec(data[6]) + 100;
+        t.tm_isdst = -1;
+
+        // Set System Time
+        time_t timestamp = mktime(&t);
+        struct timeval tv = { .tv_sec = timestamp, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        
+        ESP_LOGI(TAG, "System Time set from DS3231: %s", asctime(&t));
+    } else {
+         ESP_LOGE(TAG, "DS3231 Read Failed (or no RTC present)");
+    }
+}
+
+// Callback for SNTP
+void time_sync_notification_cb(struct timeval *tv) {
+    ESP_LOGI(TAG, "SNTP Synchronized. Updating RTC...");
+    time_t now;
+    struct tm timeinfo;
+    time(&now);
+    localtime_r(&now, &timeinfo);
+    rtc_write_time(&timeinfo);
+}
+
 void TimeManager::init() {
+    ESP_LOGI(TAG, "Initializing TimeManager (RTC + SNTP)...");
+
+    // 1. Init I2C & Try to load time from RTC
+    i2c_init_rtc();
+    rtc_read_time(); 
+
+    // 2. Start SNTP
     ESP_LOGI(TAG, "Initializing SNTP");
     esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
     esp_sntp_setservername(0, "pool.ntp.org");
+    sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     esp_sntp_init();
     
-    // Set Timezone to CET/CEST (Berlin)
-    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    // Set Timezone
+    std::string tz = getTimezone();
+    if (tz.empty()) tz = "CET-1CEST,M3.5.0,M10.5.0/3"; // Default Berlin
+    setenv("TZ", tz.c_str(), 1);
     tzset();
+}
+
+void TimeManager::setTimezone(const char* tz) {
+    if (!tz) return;
+    
+    nvs_handle_t my_handle;
+    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
+        nvs_set_str(my_handle, "time_zone", tz);
+        nvs_commit(my_handle);
+        nvs_close(my_handle);
+        
+        setenv("TZ", tz, 1);
+        tzset();
+        ESP_LOGI(TAG, "Timezone set to: %s", tz);
+        
+        // Update RTC time just in case (optional, but recalculates local time)
+        // struct tm now = getCurrentTime();
+        // rtc_write_time(&now); 
+    }
+}
+
+std::string TimeManager::getTimezone() {
+    std::string tz = "";
+    nvs_handle_t my_handle;
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        char val[64];
+        size_t len = sizeof(val);
+        if (nvs_get_str(my_handle, "time_zone", val, &len) == ESP_OK) {
+            tz = std::string(val);
+        }
+        nvs_close(my_handle);
+    }
+    return tz;
 }
 
 void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool volumeRamp, const char* ringtone) {

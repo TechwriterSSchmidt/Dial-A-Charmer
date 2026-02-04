@@ -5,8 +5,8 @@
 // Rotary Dial & Inputs
 #define APP_PIN_DIAL_PULSE 5   
 #define APP_PIN_DIAL_MODE  23
-#define APP_PIN_HOOK       19  
-#define APP_PIN_EXTRA_BTN  18  
+#define APP_PIN_HOOK       19 // Key 3 (IO19)
+#define APP_PIN_EXTRA_BTN  36 // Key 1 (IO36)
 
 // Key3 (handset button)
 #define APP_PIN_KEY3       19
@@ -22,9 +22,16 @@
 #define APP_HOOK_ACTIVE_LOW  true 
 
 // Power Amplifier
-#define APP_PIN_PA_ENABLE  21
+// GPIO 21 is safe to use for Amp because we moved SDA to 18
+#define APP_PIN_PA_ENABLE  21 
 #define APP_PA_ENABLE_DELAY_MS 250 // Wait for DAC/I2S voltage to stabilize
 #define APP_PA_DISABLE_DELAY_MS 50
+
+// RTC (DS3231)
+// Using GPIO 18 (Was Key 5 / Extra Btn) for SDA
+// Using GPIO 22 (Green LED) for SCL
+#define APP_PIN_RTC_SDA 18
+#define APP_PIN_RTC_SCL 22
 
 // Timer alarm loop duration (minutes)
 #define APP_TIMER_ALARM_LOOP_MINUTES 5

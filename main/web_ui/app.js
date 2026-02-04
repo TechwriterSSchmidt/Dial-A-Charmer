@@ -29,7 +29,10 @@ const TEXT = {
         save: "Speichern",
         active: "Aktiv", // New
         fade: "Ansteigend", // New
-        snooze: "Schlummerzeit" // New
+        snooze: "Schlummerzeit", // New
+        datetime: "Datum & Zeit",
+        timezone: "Zeitzone",
+        tz_save: "Zone speichern"
     },
     en: {
         title: "Dial-A-Charmer",
@@ -43,9 +46,24 @@ const TEXT = {
         save: "Save",
         active: "Active", // New
         fade: "Rising Volume", // New
-        snooze: "Snooze Time" // New
+        snooze: "Snooze Time", // New
+        datetime: "Date & Time",
+        timezone: "Timezone",
+        tz_save: "Save Zone"
     }
 };
+
+const TIMEZONES = [
+    { name: "Europe/Berlin", val: "CET-1CEST,M3.5.0,M10.5.0/3" },
+    { name: "Europe/London", val: "GMT0BST,M3.5.0/1,M10.5.0" },
+    { name: "Europe/Paris", val: "CET-1CEST,M3.5.0,M10.5.0/3" },
+    { name: "US/Eastern (New York)", val: "EST5EDT,M3.2.0,M11.1.0" },
+    { name: "US/Pacific (California)", val: "PST8PDT,M3.2.0,M11.1.0" },
+    { name: "US/Central", val: "CST6CDT,M3.2.0,M11.1.0" },
+    { name: "UTC", val: "UTC0" },
+    { name: "Asia/Tokyo", val: "JST-9" },
+    { name: "Australia/Sydney", val: "AEST-10AEDT,M10.1.0,M4.1.0/3" }
+];
 
 const API = {
     getSettings: () => fetch('/api/settings').then(r => r.json()),
@@ -103,17 +121,17 @@ function render() {
     const path = window.location.pathname;
     const app = document.getElementById('app');
     
-    // Determine title based on page
-    let pageTitleEntry = 'title';
-    if (path === '/alarm') {
-        pageTitleEntry = 'alarm_title'; 
-    }
-    
-    // Header / Title
+    // Header Logic
+    let pageTitle = "Dial-A-Charmer"; // Default Title
+    if (path === '/alarm') pageTitle = "Wecker";
+    else if (path === '/configuration') pageTitle = "Konfiguration";
+    else if (path === '/phonebook') pageTitle = t('pb');
+    else if (path === '/setup') pageTitle = "Setup";
+
+    // Header / Title (Dynamic + Version)
     let html = `
         <div style="text-align:center;">
-        <h2>${t(pageTitleEntry)}</h2>
-        <div style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem;">v2.0 ESP-IDF</div>
+        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v2.0 ESP-IDF</span></h2>
         </div>
     `;
 
@@ -121,10 +139,10 @@ function render() {
     if (path === '/' || path === '/index.html') {
         html += renderHome();
     } else if (path === '/phonebook') {
-        html += renderPhonebook(); // Async needs handling, but we fetch on load or here
+        html += renderPhonebook(); 
     } else if (path === '/alarm') {
         html += renderSettings();
-    } else if (path === '/advanced') {
+    } else if (path === '/configuration') {
         html += renderAdvanced();
     } else if (path === '/setup') {
         html += renderSetup();
@@ -178,7 +196,7 @@ function renderHome() {
         
         ${renderBtn(t('alarms'), '/alarm')}
         ${renderBtn(t('pb'), '/phonebook')}
-        ${renderBtn(t('config'), '/advanced')}
+        ${renderBtn(t('config'), '/configuration')}
         
     </div>
     `;
@@ -194,7 +212,7 @@ function renderFooter(activePage) {
         {k: 'home', h: '/'},
         {k: 'alarms', h: '/alarm'},
         {k: 'pb', h: '/phonebook'},
-        {k: 'config', h: '/advanced'}
+        {k: 'config', h: '/configuration'}
     ];
     
     const style = "color:#ffc107; text-decoration:underline; margin:0 6px; font-size:0.9rem; letter-spacing:0.5px; font-weight:normal; font-family: 'Plaisir', serif, sans-serif;";
@@ -286,32 +304,37 @@ function renderSettings() {
 
             rows += `
             <div class="alarm-card" style="flex-direction: column; align-items: flex-start;">
-                <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                <!-- Row 1: Day Name -->
+                <div style="width:100%; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px;">
                     <div class="alarm-day" style="font-family: 'Plaisir', serif;">${dayName}</div>
+                </div>
+
+                <!-- Row 2: Active (Left) - Time (Right) -->
+                <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom: 8px;">
+                     <div style="display:flex; align-items:center;">
+                        <label class="switch" title="${t('active')}">
+                            <input type="checkbox" id="check-${a.d}" ${checked}>
+                            <span class="slider"></span>
+                        </label>
+                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('active')}</span>
+                    </div>
                     <input type="time" value="${timeVal}" id="time-${a.d}" class="alarm-time-input">
                 </div>
-                <div style="margin-top: 10px; width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                     <label class="switch" title="${t('active')}">
-                        <input type="checkbox" id="check-${a.d}" ${checked}>
-                        <span class="slider"></span>
-                    </label>
-                    <span style='margin-left: 8px; font-size: 0.8rem; color: #888;'>${t('active')}</span>
-
-                    <div style="flex:1;"></div>
-                </div>
                 
-                <div style="margin-top: 10px; width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                    <label class="switch" style="transform: scale(0.8); margin-left: -5px;" title="${t('fade')}">
-                        <input type="checkbox" id="ramp-${a.d}" ${rampChecked}>
-                        <span class="slider"></span>
-                    </label>
-                    <span style='margin-left: 5px; font-size: 0.8rem; color: #888;'>${t('fade')}</span>
-                    
-                    <div style="display:flex; align-items:center; gap:5px; flex:1; justify-content:flex-end;">
-                        <select id="snd-${a.d}" onchange="previewTone(this.value)" class="alarm-sound-select">
-                            ${soundOpts}
-                        </select>
+                <!-- Row 3: Fade (Left) - Sound (Right) -->
+                <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display:flex; align-items:center;">
+                        <!-- Scaled removed to match size -->
+                        <label class="switch" title="${t('fade')}">
+                            <input type="checkbox" id="ramp-${a.d}" ${rampChecked}>
+                            <span class="slider"></span>
+                        </label>
+                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('fade')}</span>
                     </div>
+                    
+                    <select id="snd-${a.d}" onchange="previewTone(this.value)" class="alarm-sound-select">
+                        ${soundOpts}
+                    </select>
                 </div>
             </div>
             `;
@@ -338,6 +361,7 @@ function renderSettings() {
 
     return `
         <div class="card">
+            <h3>${t('alarm_title')}</h3>
             ${rows}
         </div>
     `;
@@ -384,19 +408,102 @@ window.saveAlarms = () => {
 }
 
 function renderAdvanced() {
+     const currentTime = state.settings.current_time || "--";
+     const currentTz = state.settings.timezone || "";
+     
+     let tzOptions = "";
+     TIMEZONES.forEach(tz => {
+         const sel = (tz.val === currentTz) ? "selected" : "";
+         tzOptions += `<option value="${tz.val}" ${sel}>${tz.name}</option>`;
+     });
+
      return `
         <div class="card">
             <h3>${t('config')}</h3>
-            <label>WiFi SSID</label>
-            <input type="text" value="${state.settings.wifi_ssid || ''}" disabled />
-            <br>
-            <button onclick="nav('/setup')">Re-Scan WiFi</button>
-            <br>
-            <label>Volume</label>
-            <input type="range" min="0" max="100" value="${state.settings.volume || 60}" onchange="saveVol(this.value)"/>
+
+            <!-- DATE & TIME PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('datetime')}</h4>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                    <div style="color:#d4af37; font-size:1.1rem; font-family:'Plaisir', serif;">${currentTime}</div>
+                    
+                    <div style="text-align:right;">
+                        <select id="tz-select" style="padding:6px; width:140px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem;" onchange="saveTimezone(this.value)">
+                            ${tzOptions}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WIFI PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">WiFi Network</h4>
+                 
+                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                    <!-- Scan Button (Left) -->
+                    <button onclick="nav('/setup')" style="width:140px; padding:6px; background-color:#a52a2a; color:white; border:1px solid #a52a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; text-transform:uppercase;">SCAN</button>
+                    
+                    <!-- SSID Display (Right, styled like Select) -->
+                    <div style="text-align:right;">
+                        <select disabled style="padding:6px; width:140px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem; opacity:1;">
+                            <option>${state.settings.wifi_ssid || 'No Net'}</option>
+                        </select>
+                    </div>
+                 </div>
+            </div>
+
+            <!-- VOLUME PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Volume</h4>
+                
+                <!-- Base Speaker -->
+                <div style="margin-top:12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Base Speaker</label>
+                        <span id="vol-disp-base" style="color:#d4af37; font-weight:bold;">${state.settings.volume || 60}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="${state.settings.volume || 60}" 
+                           oninput="document.getElementById('vol-disp-base').innerText=this.value+'%'"
+                           onchange="saveVol('base', this.value)" style="width:100%"/>
+                </div>
+
+                <!-- Handset Speaker -->
+                <div style="margin-top:15px;">
+                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Handset</label>
+                        <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset || 60}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="${state.settings.volume_handset || 60}" 
+                           oninput="document.getElementById('vol-disp-handset').innerText=this.value+'%'"
+                           onchange="saveVol('handset', this.value)" style="width:100%"/>
+                </div>
+            </div>
+
         </div>
     `;
 }
+
+window.saveTimezone = (val) => {
+    API.saveSettings({timezone: val}).then(() => {
+        // Reload settings to refresh time display
+        API.getSettings().then(s => {
+            state.settings = s;
+            render();
+        });
+    });
+};
+
+window.saveVol = (type, v) => {
+    const val = parseInt(v);
+    if (type === 'base') {
+        state.settings.volume = val;
+        API.saveSettings({volume: val});
+    } else {
+         state.settings.volume_handset = val;
+         API.saveSettings({volume_handset: val});
+    }
+};
 
 function renderSetup() {
     let content = "";
@@ -463,8 +570,5 @@ window.connectWifi = () => {
     });
 };
 
-window.saveVol = (v) => {
-    API.saveSettings({volume: parseInt(v)});
-};
-
+// Removed duplicate window.saveVol. It is defined above in renderAdvanced context.
 document.addEventListener("DOMContentLoaded", init);

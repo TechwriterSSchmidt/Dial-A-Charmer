@@ -25,4 +25,8 @@ public:
     static void stopAlarm();
     
     static struct tm getCurrentTime();
+
+    // Timezone Handling
+    static void setTimezone(const char* tz);
+    static std::string getTimezone();
 };

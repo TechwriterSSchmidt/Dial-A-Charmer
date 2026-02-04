@@ -241,16 +241,34 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     // WiFi Pass (Always return empty or placeholder)
     cJSON_AddStringToObject(root, "wifi_pass", "");
 
-    // System Volume (Example for Integer)
+    // System Volume
+    // Base Speaker
     uint8_t vol = 60;
     if (err == ESP_OK) nvs_get_u8(my_handle, "volume", &vol);
     cJSON_AddNumberToObject(root, "volume", vol);
+
+    // Handset Volume (New)
+    uint8_t vol_h = 60;
+    if (err == ESP_OK) nvs_get_u8(my_handle, "volume_handset", &vol_h);
+    cJSON_AddNumberToObject(root, "volume_handset", vol_h);
+
 
     // Snooze Time
     int32_t snooze = 5;
     if (err == ESP_OK) nvs_get_i32(my_handle, "snooze_min", &snooze);
     cJSON_AddNumberToObject(root, "snooze_min", snooze);
     
+    // --- Time & Timezone ---
+    struct tm now = TimeManager::getCurrentTime();
+    char timeStr[64];
+    strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &now);
+    cJSON_AddStringToObject(root, "current_time", timeStr);
+    
+    std::string tz = TimeManager::getTimezone();
+    if(tz.empty()) tz = "CET-1CEST,M3.5.0,M10.5.0/3"; // Fallback default in UI
+    cJSON_AddStringToObject(root, "timezone", tz.c_str());
+    // -----------------------
+
     // --- Alarms ---
     cJSON *alarms = cJSON_CreateArray();
     for (int i=0; i<7; i++) {
@@ -321,9 +339,35 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_u8(my_handle, "volume", (uint8_t)item->valueint);
         }
 
+        item = cJSON_GetObjectItem(root, "volume_handset");
+        if (cJSON_IsNumber(item)) {
+            nvs_set_u8(my_handle, "volume_handset", (uint8_t)item->valueint);
+        }
+
         item = cJSON_GetObjectItem(root, "snooze_min");
         if (cJSON_IsNumber(item)) {
             nvs_set_i32(my_handle, "snooze_min", item->valueint);
+        }
+
+        // Timezone
+        item = cJSON_GetObjectItem(root, "timezone");
+        if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
+            // Save inside TimeManager (it handles NVS internally too, but distinct key/handle)
+            // But we can just call it here. 
+            // Note: Since TimeManager opens NVS "dialcharm" too, we must ensure handles don't conflict 
+            // or just rely on TimeManager's logic.
+            // Since we are holding 'my_handle' open here, checking concurrency... 
+            // NVS single partition open is fine usually, but cleaner to close first?
+            // Actually TimeManager uses its own nvs_open/close.
+            // To avoid "NVS_ERR_NVS_PART_ALREADY_OPEN" or similar if logic restricted, 
+            // we should probably just save it via TimeManager AFTER closing here, or just save key here manually if we know it.
+            // TimeManager uses key "time_zone". Let's save it directly to 'my_handle' to avoid overhead!
+            
+            nvs_set_str(my_handle, "time_zone", item->valuestring);
+            
+            // Also update runtime - warning: this updates env var so we need to do it.
+            // But we can't do it easily inside this NVS block for TimeManager state. 
+            // Better: Let's extract the string and call TimeManager::setTimezone() *after* this block.
         }
 
         // --- Alarms ---
@@ -357,6 +401,12 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
 
         nvs_commit(my_handle);
         nvs_close(my_handle);
+    }
+    
+    // Apply Timezone (read from JSON again to be safe/easy, or variable)
+    cJSON *tzItem = cJSON_GetObjectItem(root, "timezone");
+    if (cJSON_IsString(tzItem) && strlen(tzItem->valuestring) > 0) {
+        TimeManager::setTimezone(tzItem->valuestring);
     }
     
     cJSON_Delete(root);
