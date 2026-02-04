@@ -52,5 +52,5 @@
 #define APP_PIN_SD_CS      13
 
 // Debug / Monitor
-#define ENABLE_SYSTEM_MONITOR 1
+#define ENABLE_SYSTEM_MONITOR 0
 #define SYSTEM_MONITOR_INTERVAL_MS 5000
