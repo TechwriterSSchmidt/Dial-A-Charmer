@@ -1,0 +1,4 @@
+[submodule "components/esp-adf"]
+	path = components/esp-adf
+	url = https://github.com/espressif/esp-adf.git
+	branch = master
