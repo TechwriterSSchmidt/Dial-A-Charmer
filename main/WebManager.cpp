@@ -432,7 +432,10 @@ static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
         .scan_time = {
             .active = { .min = 100, .max = 300 },
             .passive = 100
-        }
+        },
+        .home_chan_dwell_time = 0,
+        .channel_bitmap = { .ghz_2_channels = 0, .ghz_5_channels = 0 },
+        .coex_background_scan = false
     };
 
     // Trigger scan (blocking)
@@ -542,6 +545,8 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         httpd_resp_send(req, file_start, file_size);
         return ESP_OK;
     } else {
+#define HTTPD_MAX_URI_LEN 512
+
         // Fallback to SD Card
         char filepath[HTTPD_MAX_URI_LEN + 64];
         

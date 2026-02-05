@@ -86,7 +86,8 @@ static void rtc_read_time() {
     esp_err_t ret = i2c_master_transmit_receive(rtc_dev_handle, &reg, 1, data, 7, -1);
 
     if (ret == ESP_OK) {
-        struct tm t = {0};
+        struct tm t;
+        memset(&t, 0, sizeof(struct tm));
         t.tm_sec  = bcd2dec(data[0]);
         t.tm_min  = bcd2dec(data[1]);
         t.tm_hour = bcd2dec(data[2]);
