@@ -13,6 +13,7 @@ managed_components/
 sdkconfig
 sdkconfig.old
 dependencies.lock
+esp-adf/
 
 # Temporary / Large Resources
 temp_ai_thinker_repo/
