@@ -243,29 +243,140 @@ window.onpopstate = render;
 
 // --- SPECIFIC PAGES ---
 function renderPhonebook() {
+    const isDe = state.lang === 'de';
+    const tTitle = isDe ? "Telefonbuch" : "Phonebook";
+    const tSave = isDe ? "SPEICHERN" : "SAVE";
+    const fullData = state.phonebook || {};
+
+    const systemItems = [
+        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
+        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI', defNum: '0' },
+
+        { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)', defNum: '1' },
+        { id: 'p2', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '2', defName: 'Persona 2 (Joke)', defNum: '2' },
+        { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)', defNum: '3' },
+        { id: 'p4', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '4', defName: 'Persona 4 (Captain)', defNum: '4' },
+        { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5', defNum: '5' },
+        { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '6' },
+
+        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '9' },
+        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms', defNum: '90' },
+        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm', defNum: '91' },
+        { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '095' }
+    ];
+
     let rows = "";
-    // Sort keys
-    const keys = Object.keys(state.phonebook).sort((a,b) => a.localeCompare(b));
-    keys.forEach(k => {
-        const e = state.phonebook[k];
+    systemItems.forEach(item => {
+        let currentKey = "";
+        let currentName = item.defName;
+
+        for (const [key, entry] of Object.entries(fullData)) {
+            const entryParam = entry.parameter || "";
+            const itemParam = item.param || "";
+            if (entry.type === item.type && entry.value === item.val && entryParam === itemParam) {
+                currentKey = key;
+                if (entry.name && entry.name !== "Unknown") currentName = entry.name;
+                break;
+            }
+        }
+
+        const criticalClass = item.defNum === '095' ? 'pb-critical' : '';
+
         rows += `
-            <div class="row">
-                <div class="num">${k}</div>
-                <div class="details">
-                    <b>${e.name}</b><br>
-                    <small>${e.type}: ${e.value}</small>
-                </div>
-            </div>
+            <tr class="${criticalClass}">
+                <td class="pb-num-cell">
+                    <input id="pb_input_${item.id}" value="${currentKey}" placeholder="${item.defNum}" maxlength="3" type="tel" inputmode="numeric" class="pb-input">
+                </td>
+                <td class="pb-name-cell">${currentName}</td>
+            </tr>
         `;
     });
-    
+
     return `
-        <div class="card">
-            <h3>${t('pb')}</h3>
-            <div class="pb-list">${rows}</div>
+        <div class="pb-wrapper">
+            <div class="pb-title">${tTitle}</div>
+            <div class="pb-notepad">
+                <table class="pb-table">
+                    <thead>
+                        <tr class="pb-head">
+                            <th class="pb-head-num">Tel.</th>
+                            <th class="pb-head-name">Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+            <button class="pb-save" onclick="savePhonebook()">${tSave}</button>
         </div>
     `;
 }
+
+window.savePhonebook = () => {
+    const isDe = state.lang === 'de';
+    const fullData = state.phonebook || {};
+
+    const systemItems = [
+        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement' },
+        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI' },
+
+        { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)' },
+        { id: 'p2', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '2', defName: 'Persona 2 (Joke)' },
+        { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)' },
+        { id: 'p4', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '4', defName: 'Persona 4 (Captain)' },
+        { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5' },
+        { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)' },
+
+        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu' },
+        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms' },
+        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm' },
+        { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot' }
+    ];
+
+    const newData = {};
+
+    for (const [key, entry] of Object.entries(fullData)) {
+        const isSystem = systemItems.some(item => {
+            const entryParam = entry.parameter || "";
+            const itemParam = item.param || "";
+            return entry.type === item.type && entry.value === item.val && entryParam === itemParam;
+        });
+        if (!isSystem) newData[key] = entry;
+    }
+
+    systemItems.forEach(item => {
+        const input = document.getElementById(`pb_input_${item.id}`);
+        if (!input) return;
+
+        const newKey = input.value.trim();
+        if (!newKey) return;
+
+        let name = item.defName;
+        for (const entry of Object.values(fullData)) {
+            const entryParam = entry.parameter || "";
+            const itemParam = item.param || "";
+            if (entry.type === item.type && entry.value === item.val && entryParam === itemParam) {
+                if (entry.name && entry.name !== "Unknown") name = entry.name;
+                break;
+            }
+        }
+
+        newData[newKey] = {
+            name: name,
+            type: item.type,
+            value: item.val,
+            parameter: item.param
+        };
+    });
+
+    document.getElementById('app').innerHTML = `<div style="text-align:center; padding:50px; color:#d4af37;"><h3>${isDe ? 'Speichern...' : 'Saving...'}</h3></div>`;
+
+    API.savePhonebook(newData).then(() => {
+        state.phonebook = newData;
+        render();
+    });
+};
 
 function renderSettings() {
     const DAYS_DE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];

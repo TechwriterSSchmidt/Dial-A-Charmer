@@ -211,3 +211,126 @@ select.alarm-sound-select {
     height: 40px; /* Match height */ 
     font-weight: bold;
 }
+
+/* Phonebook - Notepad Style */
+.pb-wrapper {
+  max-width: 550px;
+  margin: 0 auto;
+}
+.pb-title {
+  text-align: center;
+  color: #d4af37;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+  font-family: 'AA Triple', serif;
+  font-size: 1.4rem;
+}
+.pb-notepad {
+  width: 100%;
+  min-height: 600px;
+  padding: 40px 20px 40px 0;
+  box-sizing: border-box;
+  background-color: #fffef0;
+  background-image:
+    radial-gradient(circle at 22px 90px, #080808 9px, transparent 10px),
+    radial-gradient(circle at 22px 290px, #080808 9px, transparent 10px),
+    radial-gradient(circle at 22px 490px, #080808 9px, transparent 10px),
+    linear-gradient(90deg, rgba(180,40,40,0.22) 0, rgba(180,40,40,0.22) 59px, transparent 59px),
+    linear-gradient(90deg, transparent 59px, #cc3333 59px, #cc3333 61px, transparent 61px),
+    repeating-linear-gradient(180deg, rgba(255,170,170,0.9) 0, rgba(255,170,170,0.9) 1px, transparent 1px, transparent 40px);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  border-top-right-radius: 25px;
+  border-bottom-right-radius: 25px;
+}
+.pb-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0;
+}
+.pb-table tr {
+  height: 40px;
+}
+.pb-table td {
+  padding: 0 10px;
+  border: none;
+  vertical-align: bottom;
+  height: 40px;
+  line-height: 38px;
+}
+.pb-head th {
+  height: 40px;
+  vertical-align: bottom;
+  color: #cc0000;
+  font-family: 'AA Triple', serif;
+  font-size: 1.1rem;
+  border: none;
+  line-height: 40px;
+  text-align: left;
+}
+.pb-head-num {
+  width: 60px;
+  padding-left: 78px;
+}
+.pb-head-name {
+  padding-left: 10px;
+}
+.pb-num-cell {
+  width: 60px;
+  padding-left: 78px;
+}
+.pb-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #000;
+  padding: 0;
+  font-family: 'Brush Script MT', 'Bradley Hand', cursive;
+  font-size: 1.5rem;
+  font-weight: bold;
+  text-align: left;
+  outline: none;
+  box-shadow: none;
+  height: 100%;
+  border-radius: 0;
+}
+.pb-input::placeholder {
+  color: #aaa;
+  opacity: 0.6;
+}
+.pb-input:focus {
+  background: rgba(255,255,0,0.12);
+}
+.pb-name-cell {
+  font-family: 'Brush Script MT', 'Bradley Hand', cursive;
+  font-size: 1.3rem;
+  color: #222;
+  padding-left: 10px;
+  line-height: 1.2;
+}
+.pb-critical .pb-name-cell,
+.pb-critical .pb-input {
+  color: #d00;
+  font-weight: bold;
+}
+.pb-save {
+  width: 100%;
+  padding: 15px;
+  margin-top: 18px;
+  background-color: #8b0000;
+  color: #f0e6d2;
+  border-radius: 12px;
+  font-size: 1.5rem;
+  letter-spacing: 4px;
+  font-family: 'Plaisir', 'Times New Roman', Times, serif;
+  border: 1px solid #a00000;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+.pb-save:hover {
+  background-color: #b22222;
+  color: #fff;
+  border-color: #f00;
+  box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
+}
