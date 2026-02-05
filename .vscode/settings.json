@@ -21,5 +21,6 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=/home/sebastian/Dokumente/GitHub/Dial-A-Charmer/build"
-  ]
+  ],
+  "idf.currentSetup": "/home/sebastian/.espressif/v5.5.2/esp-idf"
 }
