@@ -255,13 +255,13 @@ select.alarm-sound-select {
 .pb-table td {
   padding: 0 10px;
   border: none;
-  vertical-align: bottom;
+  vertical-align: middle;
   height: 30px;
-  line-height: 28px;
+  line-height: 30px;
 }
 .pb-head th {
   height: 30px;
-  vertical-align: bottom;
+  vertical-align: middle;
   color: #cc0000;
   font-family: 'AA Triple', serif;
   font-size: 1.0rem;
@@ -271,7 +271,9 @@ select.alarm-sound-select {
 }
 .pb-head-num {
   width: 60px;
-  padding-left: 58px;
+  padding-left: 0;
+  padding-right: 10px;
+  text-align: right;
 }
 .pb-head-name {
   padding-left: 10px;
@@ -283,7 +285,18 @@ select.alarm-sound-select {
 }
 .pb-num-cell {
   width: 60px;
-  padding-left: 58px;
+  padding-left: 0;
+  padding-right: 10px;
+  text-align: right;
+}
+.pb-num-text {
+  color: #000;
+  font-family: 'Plaisir', 'Times New Roman', Times, serif;
+  font-size: 1.35rem;
+  font-weight: bold;
+  text-align: right;
+  height: 30px;
+  line-height: 30px;
 }
 .pb-input {
   width: 100%;
@@ -294,10 +307,11 @@ select.alarm-sound-select {
   font-family: 'Plaisir', 'Times New Roman', Times, serif;
   font-size: 1.35rem;
   font-weight: bold;
-  text-align: left;
+  text-align: right;
   outline: none;
   box-shadow: none;
-  height: 100%;
+  height: 30px;
+  line-height: 30px;
   border-radius: 0;
 }
 .pb-input::placeholder {
@@ -312,35 +326,19 @@ select.alarm-sound-select {
   font-size: 1.15rem;
   color: #222;
   padding-left: 10px;
-  line-height: 1.0;
+  line-height: 30px;
 }
 .pb-critical .pb-name-cell {
   color: #d00;
   font-weight: bold;
 }
-.pb-critical .pb-input {
+.pb-critical .pb-num-text {
   color: #000;
   font-weight: bold;
 }
-.pb-save {
-  width: 100%;
-  padding: 15px;
-  margin-top: 18px;
-  background-color: #8b0000;
-  color: #f0e6d2;
-  border-radius: 12px;
-  font-size: 1.5rem;
-  letter-spacing: 4px;
-  font-family: 'Plaisir', 'Times New Roman', Times, serif;
-  border: 1px solid #a00000;
-  cursor: pointer;
-  text-transform: uppercase;
-}
-.pb-save:hover {
-  background-color: #b22222;
-  color: #fff;
-  border-color: #f00;
-  box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
+.pb-critical .pb-input {
+  color: #000;
+  font-weight: bold;
 }
 
 /* WiFi panel alignment */
@@ -393,11 +391,17 @@ select.alarm-sound-select {
   border-radius: 12px;
   padding: 10px 12px;
   box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
-  max-width: 260px;
+  width: 100%;
+  max-width: 520px;
+  min-height: 260px;
+  margin: 0 auto;
+  box-sizing: border-box;
 }
 .crt-text {
   color: #d7b200;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   letter-spacing: 1px;
+  line-height: 1.2;
+  white-space: pre-wrap;
 }

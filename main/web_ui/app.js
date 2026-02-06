@@ -4,8 +4,9 @@
 const state = {
     lang: 'de',
     settings: {}, // will hold wifi, volume etc
-    phonebook: {},
-    loading: true
+    loading: true,
+    logLines: [],
+    logTimer: null
 };
 
 // --- Debugging ---
@@ -68,10 +69,9 @@ const TIMEZONES = [
 const API = {
     getSettings: () => fetch('/api/settings').then(r => r.json()),
     saveSettings: (data) => fetch('/api/settings', { method: 'POST', body: JSON.stringify(data) }),
-    getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
-    savePhonebook: (data) => fetch('/api/phonebook', { method: 'POST', body: JSON.stringify(data) }),
     scanWifi: () => fetch('/api/wifi/scan').then(r => r.json()),
-    getRingtones: () => fetch('/api/ringtones').then(r => r.json()) 
+    getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
+    getLogs: () => fetch('/api/logs').then(r => r.json())
 };
 
 async function init() {
@@ -168,6 +168,12 @@ function render() {
     html += renderFooter(path);
     
     app.innerHTML = html;
+
+    if (path === '/configuration') {
+        startLogPolling();
+    } else {
+        stopLogPolling();
+    }
     
     // Post-render Logic (Listeners)
     if (path === '/phonebook' && Object.keys(state.phonebook).length === 0) {
@@ -176,6 +182,33 @@ function render() {
             render(); // Re-render with data
         });
     }
+}
+
+function updateCrt(lines) {
+    const crt = document.getElementById('crt-log');
+    if (!crt) return;
+    crt.textContent = (lines && lines.length) ? lines.join('\n') : 'READY>_';
+}
+
+function startLogPolling() {
+    if (state.logTimer) return;
+    const fetchLogs = () => {
+        API.getLogs().then(data => {
+            if (!data || !Array.isArray(data.lines)) return;
+            state.logLines = data.lines.slice(-20);
+            updateCrt(state.logLines);
+        }).catch(() => {
+            updateCrt(state.logLines);
+        });
+    };
+    fetchLogs();
+    state.logTimer = setInterval(fetchLogs, 1500);
+}
+
+function stopLogPolling() {
+    if (!state.logTimer) return;
+    clearInterval(state.logTimer);
+    state.logTimer = null;
 }
 
 function renderHome() {
@@ -245,24 +278,22 @@ window.onpopstate = render;
 function renderPhonebook() {
     const isDe = state.lang === 'de';
     const tTitle = isDe ? "Telefonbuch" : "Phonebook";
-    const tSave = isDe ? "SPEICHERN" : "SAVE";
-    const fullData = state.phonebook || {};
+    const fullData = {};
 
     const systemItems = [
-        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
-        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI', defNum: '0' },
-
         { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)', defNum: '1' },
         { id: 'p2', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '2', defName: 'Persona 2 (Joke)', defNum: '2' },
         { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)', defNum: '3' },
         { id: 'p4', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '4', defName: 'Persona 4 (Captain)', defNum: '4' },
         { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5', defNum: '5' },
-        { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '6' },
+        { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
-        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '9' },
-        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms', defNum: '90' },
-        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm', defNum: '91' },
-        { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '095' }
+        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
+        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI', defNum: '000' },
+        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '900' },
+        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms', defNum: '910' },
+        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm', defNum: '911' },
+        { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '999' }
     ];
 
     let rows = "";
@@ -280,12 +311,13 @@ function renderPhonebook() {
             }
         }
 
-        const criticalClass = item.defNum === '095' ? 'pb-critical' : '';
+        const criticalClass = item.defNum === '999' ? 'pb-critical' : '';
 
+        const displayKey = currentKey || item.defNum;
         rows += `
             <tr class="${criticalClass}">
                 <td class="pb-num-cell">
-                    <input id="pb_input_${item.id}" value="${currentKey}" placeholder="${item.defNum}" maxlength="3" type="tel" inputmode="numeric" class="pb-input">
+                    <div class="pb-num-text">${displayKey}</div>
                 </td>
                 <td class="pb-name-cell">${currentName}</td>
             </tr>
@@ -299,7 +331,7 @@ function renderPhonebook() {
                 <table class="pb-table">
                     <thead>
                         <tr class="pb-head">
-                            <th class="pb-head-num"><span class="pb-phone-icon">&#9742;</span></th>
+                            <th class="pb-head-num"><span class="pb-phone-icon">&#128222;</span></th>
                             <th class="pb-head-name">Name</th>
                         </tr>
                     </thead>
@@ -308,7 +340,6 @@ function renderPhonebook() {
                     </tbody>
                 </table>
             </div>
-            <button class="pb-save" onclick="savePhonebook()">${tSave}</button>
         </div>
     `;
 }
@@ -318,9 +349,6 @@ window.savePhonebook = () => {
     const fullData = state.phonebook || {};
 
     const systemItems = [
-        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement' },
-        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI' },
-
         { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)' },
         { id: 'p2', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '2', defName: 'Persona 2 (Joke)' },
         { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)' },
@@ -328,6 +356,8 @@ window.savePhonebook = () => {
         { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5' },
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)' },
 
+        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement' },
+        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI' },
         { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu' },
         { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms' },
         { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm' },
@@ -386,78 +416,7 @@ function renderSettings() {
     // Ensure alarms exist (backend should send them, but safe fallback)
     const alarms = state.settings.alarms || []; 
     
-    // Display order: Mon(1) ... Sun(0)
-    const displayOrder = [1, 2, 3, 4, 5, 6, 0];
-    const ringtones = state.ringtones || [];
-
-    let rows = "";
-    if (alarms.length === 0) {
-        rows = "<p style='text-align:center;'>Loading alarms...</p>";
     } else {
-        displayOrder.forEach(dayIndex => {
-            const a = alarms.find(x => x.d === dayIndex);
-            if (!a) return;
-
-            const dayName = days[a.d] || "Day " + a.d;
-            const hh = String(a.h).padStart(2,'0');
-            const mm = String(a.m).padStart(2,'0');
-            const timeVal = `${hh}:${mm}`;
-            const checked = a.en ? "checked" : "";
-            const rampChecked = a.rmp ? "checked" : ""; // Rising volume
-            const currentSound = a.snd || "digital_alarm.wav";
-            
-            let soundOpts = "";
-            ringtones.forEach(r => {
-                const sel = (r === currentSound) ? "selected" : "";
-                soundOpts += `<option value="${r}" ${sel}>${r}</option>`;
-            });
-            if (ringtones.length === 0) soundOpts = `<option>${currentSound}</option>`;
-
-            rows += `
-            <div class="alarm-card" style="flex-direction: column; align-items: flex-start;">
-                <!-- Row 1: Day Name -->
-                <div style="width:100%; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px;">
-                    <div class="alarm-day" style="font-family: 'Plaisir', serif;">${dayName}</div>
-                </div>
-
-                <!-- Row 2: Active (Left) - Time (Right) -->
-                <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom: 8px;">
-                     <div style="display:flex; align-items:center;">
-                        <label class="switch" title="${t('active')}">
-                            <input type="checkbox" id="check-${a.d}" ${checked}>
-                            <span class="slider"></span>
-                        </label>
-                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('active')}</span>
-                    </div>
-                    <input type="time" value="${timeVal}" id="time-${a.d}" class="alarm-time-input">
-                </div>
-                
-                <!-- Row 3: Fade (Left) - Sound (Right) -->
-                <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                    <div style="display:flex; align-items:center;">
-                        <!-- Scaled removed to match size -->
-                        <label class="switch" title="${t('fade')}">
-                            <input type="checkbox" id="ramp-${a.d}" ${rampChecked}>
-                            <span class="slider"></span>
-                        </label>
-                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('fade')}</span>
-                    </div>
-                    
-                    <select id="snd-${a.d}" onchange="previewTone(this.value)" class="alarm-sound-select">
-                        ${soundOpts}
-                    </select>
-                </div>
-            </div>
-            `;
-        });
-
-        // Snooze Selection
-        const currentSnooze = state.settings.snooze_min || 5;
-        let snoozeOpts = "";
-        for (let i=1; i<=20; i++) {
-            const sel = (i === currentSnooze) ? "selected" : "";
-            snoozeOpts += `<option value="${i}" ${sel}>${i} min</option>`;
-        }
 
         rows += `
         <div style="margin-top:20px; text-align:center; padding-top:10px; border-top:1px solid #444;">
@@ -565,7 +524,7 @@ function renderAdvanced() {
             <!-- CONSOLE PANEL -->
             <div class="crt-panel">
                 <div class="crt-screen">
-                    <div class="crt-text">READY&gt;_</div>
+                    <div class="crt-text" id="crt-log">READY&gt;_</div>
                 </div>
             </div>
 

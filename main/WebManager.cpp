@@ -1,6 +1,8 @@
 #include "WebManager.h"
 #include "TimeManager.h" // Added TimeManager
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include <sys/param.h>
 #include <dirent.h>
 #include <sys/types.h>
@@ -24,6 +26,56 @@ extern void play_file(const char* path);
 
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
+
+// Log capture (last 20 lines)
+static const size_t LOG_LINE_MAX = 256;
+static const size_t LOG_LINE_COUNT = 20;
+static char s_log_lines[LOG_LINE_COUNT][LOG_LINE_MAX];
+static size_t s_log_head = 0;
+static size_t s_log_count = 0;
+static portMUX_TYPE s_log_mux = portMUX_INITIALIZER_UNLOCKED;
+static vprintf_like_t s_prev_vprintf = NULL;
+
+static void log_buffer_add(const char *line) {
+    if (!line || !line[0]) {
+        return;
+    }
+    portENTER_CRITICAL(&s_log_mux);
+    size_t idx = s_log_head % LOG_LINE_COUNT;
+    strncpy(s_log_lines[idx], line, LOG_LINE_MAX - 1);
+    s_log_lines[idx][LOG_LINE_MAX - 1] = '\0';
+    s_log_head = (s_log_head + 1) % LOG_LINE_COUNT;
+    if (s_log_count < LOG_LINE_COUNT) {
+        s_log_count++;
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+}
+
+static int log_vprintf(const char *fmt, va_list args) {
+    char buf[LOG_LINE_MAX];
+    va_list args_copy;
+    va_copy(args_copy, args);
+    vsnprintf(buf, sizeof(buf), fmt, args_copy);
+    va_end(args_copy);
+
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
+        buf[len - 1] = '\0';
+        len--;
+    }
+    log_buffer_add(buf);
+
+    if (s_prev_vprintf) {
+        return s_prev_vprintf(fmt, args);
+    }
+    return vprintf(fmt, args);
+}
+
+static void init_log_capture() {
+    if (!s_prev_vprintf) {
+        s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
+    }
+}
 
 // DNS Server Task
 static void dns_server_task(void *pvParameters) {
@@ -132,38 +184,6 @@ static const char* get_mime_type(const char* path) {
 
 // --- API HANDLERS ---
 
-static esp_err_t api_phonebook_get_handler(httpd_req_t *req) {
-    httpd_resp_set_type(req, "application/json");
-    std::string json = phonebook.getJson();
-    httpd_resp_send(req, json.c_str(), json.length());
-    return ESP_OK;
-}
-
-static esp_err_t api_phonebook_post_handler(httpd_req_t *req) {
-    char *buf = (char *)malloc(req->content_len + 1);
-    if (!buf) {
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-    
-    int ret = httpd_req_recv(req, buf, req->content_len);
-    if (ret <= 0) {
-        free(buf);
-        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
-            httpd_resp_send_408(req);
-        }
-        return ESP_FAIL;
-    }
-    buf[ret] = '\0';
-
-    ESP_LOGI(TAG, "Saving Phonebook JSON: %s", buf);
-    phonebook.saveFromJson(std::string(buf));
-    free(buf);
-    
-    httpd_resp_send(req, "{\"status\":\"saved\"}", HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
-}
-
 static esp_err_t api_ringtones_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     cJSON *root = cJSON_CreateArray();
@@ -207,6 +227,37 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
     }
     httpd_resp_send_404(req);
     return ESP_FAIL;
+}
+
+static esp_err_t api_logs_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+
+    char lines[LOG_LINE_COUNT][LOG_LINE_MAX];
+    size_t count = 0;
+    size_t start = 0;
+
+    portENTER_CRITICAL(&s_log_mux);
+    count = s_log_count;
+    start = (s_log_head + LOG_LINE_COUNT - count) % LOG_LINE_COUNT;
+    for (size_t i = 0; i < count; ++i) {
+        size_t idx = (start + i) % LOG_LINE_COUNT;
+        strncpy(lines[i], s_log_lines[idx], LOG_LINE_MAX - 1);
+        lines[i][LOG_LINE_MAX - 1] = '\0';
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON *arr = cJSON_CreateArray();
+    for (size_t i = 0; i < count; ++i) {
+        cJSON_AddItemToArray(arr, cJSON_CreateString(lines[i]));
+    }
+    cJSON_AddItemToObject(root, "lines", arr);
+
+    const char *json_str = cJSON_PrintUnformatted(root);
+    httpd_resp_send(req, json_str, strlen(json_str));
+    free((void *)json_str);
+    cJSON_Delete(root);
+    return ESP_OK;
 }
 
 static esp_err_t api_settings_get_handler(httpd_req_t *req) {
@@ -699,22 +750,6 @@ void WebManager::setupWebServer() {
         };
         httpd_register_uri_handler(server, &wifi_scan_uri);
 
-        httpd_uri_t pb_get_uri = {
-            .uri       = "/api/phonebook",
-            .method    = HTTP_GET,
-            .handler   = api_phonebook_get_handler,
-            .user_ctx  = NULL
-        };
-        httpd_register_uri_handler(server, &pb_get_uri);
-
-        httpd_uri_t pb_post_uri = {
-            .uri       = "/api/phonebook",
-            .method    = HTTP_POST,
-            .handler   = api_phonebook_post_handler,
-            .user_ctx  = NULL
-        };
-        httpd_register_uri_handler(server, &pb_post_uri);
-
         httpd_uri_t set_get_uri = {
             .uri       = "/api/settings",
             .method    = HTTP_GET,
@@ -747,6 +782,14 @@ void WebManager::setupWebServer() {
         };
         httpd_register_uri_handler(server, &preview_uri);
 
+        httpd_uri_t logs_uri = {
+            .uri       = "/api/logs",
+            .method    = HTTP_GET,
+            .handler   = api_logs_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &logs_uri);
+
         // Files (Catch-all)
         // We register this last or use a greedy match
         httpd_uri_t file_uri = {
@@ -764,6 +807,7 @@ void WebManager::setupDnsServer() {
 }
 
 void WebManager::begin() {
+    init_log_capture();
     setupWifi();
     setupMdns();
     setupWebServer();

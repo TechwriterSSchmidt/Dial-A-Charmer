@@ -47,6 +47,20 @@
 #define APP_GAIN_DEFAULT_RIGHT 0.5f
 #define APP_GAIN_RAMP_MS 40
 
+// Phonebook default numbers (max 3 digits)
+#define APP_PB_NUM_PERSONA_1 "1"
+#define APP_PB_NUM_PERSONA_2 "2"
+#define APP_PB_NUM_PERSONA_3 "3"
+#define APP_PB_NUM_PERSONA_4 "4"
+#define APP_PB_NUM_PERSONA_5 "5"
+#define APP_PB_NUM_RANDOM_MIX "11"
+#define APP_PB_NUM_TIME "110"
+#define APP_PB_NUM_GEMINI "000"
+#define APP_PB_NUM_VOICE_MENU "900"
+#define APP_PB_NUM_TOGGLE_ALARMS "910"
+#define APP_PB_NUM_SKIP_ALARM "911"
+#define APP_PB_NUM_REBOOT "999"
+
 
 // SD Card
 #define APP_PIN_SD_CS      13

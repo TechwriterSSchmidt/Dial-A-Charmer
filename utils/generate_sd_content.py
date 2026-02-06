@@ -822,25 +822,7 @@ def generate_sd_card_structure(categories):
 
     print(f"\nDone! SD Card content generated in: {SD_ROOT}")
 
-    # Write phonebook.json with persona names derived from categories
-    phonebook_path = SD_ROOT / "phonebook.json"
-    phonebook_entries = {
-        "110": {"name": "Zeitauskunft", "type": "FUNCTION", "value": "ANNOUNCE_TIME", "parameter": ""},
-        "0": {"name": "Gemini AI", "type": "FUNCTION", "value": "GEMINI_CHAT", "parameter": ""},
-        "1": {"name": persona_assignments.get(1, "Persona 1"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "1"},
-        "2": {"name": persona_assignments.get(2, "Persona 2"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "2"},
-        "3": {"name": persona_assignments.get(3, "Persona 3"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "3"},
-        "4": {"name": persona_assignments.get(4, "Persona 4"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "4"},
-        "5": {"name": persona_assignments.get(5, "Persona 5"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "5"},
-        "6": {"name": "Random Mix", "type": "FUNCTION", "value": "COMPLIMENT_MIX", "parameter": "0"},
-        "9": {"name": "Voice Admin Menu", "type": "FUNCTION", "value": "VOICE_MENU", "parameter": ""},
-        "90": {"name": "Toggle Alarms", "type": "FUNCTION", "value": "TOGGLE_ALARMS", "parameter": ""},
-        "91": {"name": "Skip Next Alarm", "type": "FUNCTION", "value": "SKIP_NEXT_ALARM", "parameter": ""},
-        "095": {"name": "System Reboot", "type": "FUNCTION", "value": "REBOOT", "parameter": ""},
-    }
-    with open(phonebook_path, "w", encoding="utf-8") as f:
-        json.dump(phonebook_entries, f, ensure_ascii=False, indent=2)
-    print(f"  [OK] Wrote phonebook: {phonebook_path}")
+    # phonebook.json generation removed; defaults are now in firmware.
 
 def generate_tones(base_dir):
     """
