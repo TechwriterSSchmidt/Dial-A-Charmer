@@ -17,6 +17,7 @@ static bool _alarm_ringing = false;
 static int _last_triggered_day = -1; // To ensure we trigger only once per day
 static TaskHandle_t s_sntp_task = NULL;
 static bool s_sntp_synced = false;
+static time_t s_last_ntp_sync = 0;
 
 // --- RTC DS3231 Implementation (IDF 5.x New Driver) ---
 #define I2C_PORT_NUM I2C_NUM_1
@@ -184,6 +185,7 @@ void time_sync_notification_cb(struct timeval *tv) {
     gmtime_r(&now, &timeinfo);
     rtc_write_time(&timeinfo);
     s_sntp_synced = true;
+    s_last_ntp_sync = now;
 }
 
 void TimeManager::init() {
@@ -228,6 +230,10 @@ void TimeManager::setTimezone(const char* tz) {
         // struct tm now = getCurrentTime();
         // rtc_write_time(&now); 
     }
+}
+
+time_t TimeManager::getLastNtpSync() {
+    return s_last_ntp_sync;
 }
 
 std::string TimeManager::getTimezone() {

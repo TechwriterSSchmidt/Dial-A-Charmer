@@ -54,6 +54,11 @@
 #define APP_GAIN_DEFAULT_RIGHT 0.5f
 #define APP_GAIN_RAMP_MS 40
 
+// Night mode settings
+#define APP_NIGHTMODE_DURATION_HOURS 8
+#define APP_NIGHTMODE_LED_PERCENT 5
+#define APP_NIGHTMODE_VOLUME_PERCENT 50
+
 // Phonebook default numbers (max 3 digits)
 #define APP_PB_NUM_PERSONA_1 "1"
 #define APP_PB_NUM_PERSONA_2 "2"
@@ -62,7 +67,7 @@
 #define APP_PB_NUM_PERSONA_5 "5"
 #define APP_PB_NUM_RANDOM_MIX "11"
 #define APP_PB_NUM_TIME "110"
-#define APP_PB_NUM_VOICE_MENU "900"
+#define APP_PB_NUM_VOICE_MENU "112"
 #define APP_PB_NUM_REBOOT "999"
 
 

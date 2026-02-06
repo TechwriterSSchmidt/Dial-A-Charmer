@@ -360,6 +360,37 @@ select.alarm-sound-select {
   font-weight: bold;
 }
 
+.pb-sub .pb-num-cell {
+  padding: 0 10px;
+  width: 60px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.pb-sub {
+  background: rgba(212, 175, 55, 0.03);
+  border-left: 3px solid rgba(212, 175, 55, 0.3);
+}
+
+.pb-sub .pb-name-cell {
+  padding-left: 15px;
+}
+
+.pb-sub-text {
+  font-size: 0.82rem;
+  color: #555;
+  line-height: 26px;
+  font-style: italic;
+}
+
+.pb-sub-text::before {
+  content: '▸ ';
+  color: #d4af37;
+  font-style: normal;
+  margin-right: 6px;
+}
+
 /* WiFi panel alignment */
 .wifi-row {
   display: flex;

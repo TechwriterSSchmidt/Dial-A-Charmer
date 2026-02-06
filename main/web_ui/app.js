@@ -313,7 +313,7 @@ function renderPhonebook() {
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
-        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '900' },
+        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '112' },
         { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '999' }
     ];
 
@@ -343,6 +343,31 @@ function renderPhonebook() {
                 <td class="pb-name-cell">${currentName}</td>
             </tr>
         `;
+
+        if (item.id === 'menu') {
+            const sub = isDe
+                ? [
+                    ['1', 'Wecker morgen'],
+                    ['2', 'Nachtmodus'],
+                    ['3', 'Telefonbuch Export'],
+                    ['4', 'System Check']
+                ]
+                : [
+                    ['1', 'Next Alarm'],
+                    ['2', 'Night Mode'],
+                    ['3', 'Phonebook Export'],
+                    ['4', 'System Check']
+                ];
+
+            sub.forEach(([num, text]) => {
+                rows += `
+                    <tr class="pb-sub">
+                        <td class="pb-num-cell">${num}</td>
+                        <td class="pb-name-cell pb-sub-text">${text}</td>
+                    </tr>
+                `;
+            });
+        }
     });
 
     return `
@@ -614,12 +639,12 @@ function renderAdvanced() {
             </div>
 
             <!-- VOLUME PANEL -->
-            <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+            <div style="background:#222; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Volume</h4>
                 
                 <!-- Base Speaker -->
-                <div style="margin-top:8px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <div style="margin-top:6px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Base Speaker</label>
                         <span id="vol-disp-base" style="color:#d4af37; font-weight:bold;">${state.settings.volume || 60}%</span>
                     </div>
@@ -629,8 +654,8 @@ function renderAdvanced() {
                 </div>
 
                 <!-- Handset Speaker -->
-                <div style="margin-top:10px;">
-                     <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
+                <div style="margin-top:8px;">
+                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Handset</label>
                         <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset || 60}%</span>
                     </div>

@@ -4,6 +4,7 @@
 #include "cJSON.h"
 #include <dirent.h>
 #include <string.h>
+#include <strings.h>
 #include <stdio.h>
 
 static const char *TAG = "APP_PHONEBOOK";
@@ -12,13 +13,20 @@ PhonebookManager phonebook;
 
 PhonebookManager::PhonebookManager() {}
 
+static bool is_wav_name(const char *name) {
+    if (!name) return false;
+    size_t len = strlen(name);
+    if (len < 4) return false;
+    return strcasecmp(name + len - 4, ".wav") == 0;
+}
+
 static bool read_first_wav(const std::string &dir_path, std::string &out_name) {
     DIR *dir = opendir(dir_path.c_str());
     if (!dir) return false;
 
     struct dirent *ent;
     while ((ent = readdir(dir)) != NULL) {
-        if (strstr(ent->d_name, ".wav")) {
+        if (is_wav_name(ent->d_name)) {
             out_name = ent->d_name;
             closedir(dir);
             return true;
@@ -55,7 +63,10 @@ static std::string get_persona_title(int idx) {
     if (!read_first_wav(path, wav)) {
         snprintf(path, sizeof(path), "/sdcard/persona_%02d/en", idx);
         if (!read_first_wav(path, wav)) {
-            return "";
+            snprintf(path, sizeof(path), "/sdcard/persona_%02d", idx);
+            if (!read_first_wav(path, wav)) {
+                return "";
+            }
         }
     }
 

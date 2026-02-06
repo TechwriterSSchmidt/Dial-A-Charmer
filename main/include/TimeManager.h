@@ -26,6 +26,9 @@ public:
     
     static struct tm getCurrentTime();
 
+    // SNTP Sync
+    static time_t getLastNtpSync();
+
     // Timezone Handling
     static void setTimezone(const char* tz);
     static std::string getTimezone();

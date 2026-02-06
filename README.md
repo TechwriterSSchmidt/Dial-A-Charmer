@@ -66,7 +66,7 @@ The phonebook ships with default numbers. You can edit these entries in the Web 
 | `5` | Persona 5 | Play Persona 5 compliments |
 | `11` | Random Mix (Surprise) | Play a randomized mix |
 | `110` | Zeitauskunft | Announce time (local) |
-| `900` | Voice Admin Menu | Play spoken admin menu |
+| `112` | Voice Admin Menu | Play spoken admin menu |
 | `999` | System Reboot | Reboot device |
 
 ## Hardware Support & Pinout
