@@ -212,6 +212,7 @@ def generate_tones(base_dir):
 
     # Helper: Save tone
     def save(seg, name):
+        seg = seg.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
         seg.export(system_dir / name, format="wav")
         print(f"  Generated {system_dir}/{name}")
 
@@ -458,6 +459,13 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
     
     if process.returncode != 0:
         raise Exception(f"Piper failed: {stderr.decode()}")
+
+    try:
+        sound = AudioSegment.from_wav(str(output_path))
+        sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
+        sound.export(str(output_path), format="wav")
+    except Exception as e:
+        raise Exception(f"Piper WAV normalize failed: {e}")
     
     return True
 
@@ -991,6 +999,14 @@ def generate_procedural_tones():
     rain = rain.fade_in(500).fade_out(500).apply_gain(-6)
     save_tone(rain, "gentle_rain.wav", -3.0)
 
+    # 11b. Pink Noise (approximated by low-pass filtering white noise)
+    print("  Synthesizing Pink Noise...")
+    pink_dur = 5000
+    pink = WhiteNoise().to_audio_segment(duration=pink_dur)
+    pink = pink.low_pass_filter(1200).low_pass_filter(1200)
+    pink = pink.fade_in(200).fade_out(200).apply_gain(-8)
+    save_tone(pink, "pink_noise.wav", -3.0)
+
     # 12. Wind Chimes (Random Pentatonic High Sines)
     print("  Synthesizing Wind Chimes...")
     chimes = AudioSegment.silent(duration=6000)
@@ -1224,6 +1240,18 @@ def generate_system_sounds():
                  print(f"  [COPY] Font {font.name}")
                  shutil.copy2(font, dest_file)
 
+    # 3c. Copy Web UI (from main/web_ui -> /sdcard/data)
+    web_ui_src = PROJECT_ROOT / "main" / "web_ui"
+    web_ui_dest = SD_ROOT / "data"
+    if web_ui_src.exists():
+         web_ui_dest.mkdir(parents=True, exist_ok=True)
+         for asset in web_ui_src.glob("*.*"):
+             dest_file = web_ui_dest / asset.name
+             shutil.copy2(asset, dest_file)
+             print(f"  [COPY] Web UI {asset.name}")
+    else:
+         print(f"  [WARN] Web UI source missing: {web_ui_src}")
+
     # 4. Copy Ringtones (From multiple potential sources)
     ringtones_dest = SD_ROOT / "ringtones"
     ringtones_dest.mkdir(parents=True, exist_ok=True)
@@ -1250,7 +1278,7 @@ def main():
     try:
         categories = generate_audio_cache()
         generate_sd_card_structure(categories)
-        generate_procedural_tones()
+        # Procedural ringtones disabled; use curated assets only.
         generate_wake_up_rants()
         generate_tones(SD_ROOT)
         generate_system_sounds()
