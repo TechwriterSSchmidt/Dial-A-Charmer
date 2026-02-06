@@ -1,0 +1,438 @@
+@font-face {
+    font-family: 'AA Triple';
+    src: url('/fonts/AATriple.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'Plaisir';
+    src: url('/fonts/3620-plaisir-app.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+body {
+    font-family: 'Plaisir', 'Times New Roman', Times, serif;
+    background-color: #080808; /* Deep Black */
+    color: #f0e6d2; /* Cream/Champagne */
+    margin: 0;
+    padding: 20px;
+    line-height: 1.5;
+}
+h2 {
+    font-family: 'AA Triple', serif;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 3px; /* Art Deco Spacing */
+    color: #d4af37; /* Metallic Gold */
+    border-bottom: 2px solid #d4af37;
+    margin-bottom: 40px;
+    padding-bottom: 25px;
+    font-weight: normal;
+    font-size: 2.2rem;
+}
+h3 {
+    font-family: 'AA Triple', serif;
+    margin-top: 0;
+    color: #d4af37;
+    font-size: 1.8rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    border-bottom: 1px solid #333;
+    padding-bottom: 25px;
+    font-weight: bold;
+}
+label {
+    display: block;
+    margin-top: 20px;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #888;
+}
+input, select {
+    width: 100%;
+    padding: 12px;
+    margin-top: 5px;
+    background-color: #f0e6d2;
+    border: 2px solid #333;
+    color: #111;
+    font-family: 'Plaisir', 'Times New Roman', Times, serif;
+    font-size: 1.4rem;
+    box-sizing: border-box;
+    border-radius: 12px; /* Soft Rounded Edges */
+}
+input:focus, select:focus {
+    outline: none;
+    border-color: #d4af37;
+    background-color: #fff;
+}
+button {
+    width: 100%;
+    padding: 18px;
+    margin-top: 30px;
+    background-color: #8b0000; /* Deep Red */
+    color: #f0e6d2;
+    border: 1px solid #a00000;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: 'Plaisir', 'Times New Roman', Times, serif;
+    border-radius: 12px; /* Rounded Button */
+}
+button:hover {
+    background-color: #b22222;
+    color: #fff;
+    border-color: #f00;
+    box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
+}
+/* Toggle Switch Style (Radio-look replacement) */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 28px;
+  margin: 0;
+}
+.switch input { 
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #333;
+  transition: .4s;
+  border-radius: 34px;
+  border: 1px solid #555;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: #888;
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider {
+  background-color: #d4af37;
+  border-color: #d4af37;
+}
+input:focus + .slider {
+  box-shadow: 0 0 1px #d4af37;
+}
+input:checked + .slider:before {
+  transform: translateX(22px);
+  background-color: #fff;
+}
+output {
+    float: right;
+    color: #d4af37;
+    font-family: monospace;
+    font-size: 1.2em;
+}
+a { color: #d4af37; text-decoration: none; border-bottom: 1px dotted #d4af37; transition: 0.3s; }
+a:hover { color: #fff; border-bottom: 1px solid #fff; }
+
+/* Dashboard Specific */
+.dash-btn { display:block; padding:20px; margin:15px 0; background:#222; border:1px solid #d4af37; color:#d4af37; text-align:center; text-transform:uppercase; font-size:1.2rem; transition:0.3s; } 
+.dash-btn:hover { background:#d4af37; color:#111; }
+
+/* Setup Page */
+.setup-body { font-family: sans-serif; background: #111; color: #eee; padding: 20px; text-align: center; }
+
+/* Alarm Card Layout */
+.alarm-card {
+  background: rgba(26, 26, 26, 0.8);
+  padding: 0.8rem 1rem;
+  margin-bottom: 0.8rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.alarm-day {
+    flex: 1;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #d4af37;
+    text-align: left;
+    text-transform: uppercase;
+    font-family: 'AA Triple', serif;
+}
+
+.alarm-time-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.alarm-time {
+  background: #f0e6d2;
+  border: 1px solid #d4af37;
+  color: #111;
+  font-family: 'Plaisir', serif;
+  font-size: 1.2rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  width: 5rem;
+  text-align: center;
+}
+
+input.alarm-time-input {
+    width: 175px; /* Increased width (~25% more than 140px) */
+    margin-top: 0;
+    padding: 8px;
+    font-size: 1.2rem;
+    height: 40px;
+    font-weight: bold;
+}
+
+select.alarm-sound-select {
+    width: 175px; /* Matches alarm-time-input width */
+    margin-top: 0;
+    padding: 8px; /* Correct padding */
+    font-size: 0.9rem;
+    height: 40px; /* Match height */ 
+    font-weight: bold;
+}
+
+/* Alarm Time Display */
+.alarm-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.alarm-current-time {
+    color: #d4af37;
+    font-family: 'Plaisir', serif;
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin-top: 15px;
+    letter-spacing: 2px;
+}
+
+/* Phonebook - Notepad Style */
+.pb-wrapper {
+  max-width: 550px;
+  margin: 0 auto;
+}
+.pb-title {
+  text-align: center;
+  color: #d4af37;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  margin-bottom: 10px;
+  font-family: 'AA Triple', serif;
+  font-size: 1.4rem;
+}
+.pb-notepad {
+  width: 100%;
+  min-height: 600px;
+  padding: 34px 20px 40px 0;
+  box-sizing: border-box;
+  background-color: #fffef0;
+  background-image:
+    radial-gradient(circle at 16px 90px, #080808 9px, transparent 10px),
+    radial-gradient(circle at 16px 290px, #080808 9px, transparent 10px),
+    radial-gradient(circle at 16px 490px, #080808 9px, transparent 10px),
+    linear-gradient(90deg, rgba(180,40,40,0.22) 0, rgba(180,40,40,0.22) 34px, transparent 34px),
+    linear-gradient(90deg, transparent 34px, #cc3333 34px, #cc3333 36px, transparent 36px),
+    repeating-linear-gradient(180deg, rgba(255,170,170,0.9) 0, rgba(255,170,170,0.9) 1px, transparent 1px, transparent 30px);
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
+}
+.pb-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0;
+}
+.pb-table tr {
+  height: 30px;
+}
+.pb-table td {
+  padding: 0 10px;
+  border: none;
+  vertical-align: middle;
+  height: 30px;
+  line-height: 28px;
+}
+.pb-head th {
+  height: 30px;
+  vertical-align: middle;
+  color: #cc0000;
+  font-family: 'AA Triple', serif;
+  font-size: 0.9rem;
+  border: none;
+  line-height: 30px;
+  text-align: left;
+}
+.pb-head-num {
+  width: 70px;
+  padding-left: 10px;
+  padding-right: 10px;
+  text-align: right;
+}
+.pb-head-name {
+  padding-left: 18px;
+}
+.pb-phone-icon {
+  color: #cc0000;
+  font-size: 1.0rem;
+  line-height: 1;
+  display: inline-block;
+  width: 100%;
+  text-align: right;
+  transform: translateY(-2px);
+}
+.pb-num-cell {
+  width: 70px;
+  padding-left: 12px;
+  padding-right: 10px;
+  text-align: right;
+}
+.pb-num-text {
+  color: #000;
+  font-family: 'Plaisir', 'Times New Roman', Times, serif;
+  font-size: 1.0rem;
+  font-weight: bold;
+  text-align: right;
+  height: 30px;
+  line-height: 28px;
+}
+.pb-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #000;
+  padding: 0;
+  font-family: 'Plaisir', 'Times New Roman', Times, serif;
+  font-size: 1.0rem;
+  font-weight: bold;
+  text-align: right;
+  outline: none;
+  box-shadow: none;
+  height: 30px;
+  line-height: 28px;
+  border-radius: 0;
+}
+.pb-input::placeholder {
+  color: #aaa;
+  opacity: 0.6;
+}
+.pb-input:focus {
+  background: rgba(255,255,0,0.12);
+}
+.pb-name-cell {
+  font-family: 'Plaisir', 'Times New Roman', Times, serif;
+  font-size: 0.9rem;
+  color: #222;
+  padding-left: 20px;
+  line-height: 28px;
+}
+.pb-critical .pb-name-cell {
+  color: #d00;
+  font-weight: bold;
+}
+.pb-critical .pb-num-text {
+  color: #000;
+  font-weight: bold;
+}
+.pb-critical .pb-input {
+  color: #000;
+  font-weight: bold;
+}
+
+/* WiFi panel alignment */
+.wifi-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 10px;
+}
+.wifi-scan-btn {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  font-size: 0.85rem;
+  line-height: 38px;
+  border-radius: 6px;
+  box-sizing: border-box;
+  background-color: #a52a2a;
+  color: #fff;
+  border: 1px solid #a52a2a;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.wifi-ssid-wrap {
+  display: flex;
+  align-items: center;
+}
+.wifi-ssid-field {
+  width: 140px;
+  height: 34px;
+  padding: 0 10px;
+  font-size: 0.8rem;
+  line-height: 34px;
+  border-radius: 4px;
+  box-sizing: border-box;
+  background: #111;
+  color: #fff;
+  border: 1px solid #555;
+  opacity: 1;
+}
+.wifi-ssid-text {
+  color: #d4af37;
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  margin: 6px 0 10px;
+  text-align: center;
+}
+
+/* CRT-style console frame */
+.crt-panel {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 15px;
+}
+.crt-screen {
+  background: #0b0b0b;
+  border: 2px solid #2a2a2a;
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+  width: 100%;
+  max-width: 520px;
+  min-height: 170px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+.crt-text {
+  color: #d7b200;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.65rem;
+  letter-spacing: 1px;
+  line-height: 1.15;
+  white-space: pre-wrap;
+}
