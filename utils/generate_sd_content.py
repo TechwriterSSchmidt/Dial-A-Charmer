@@ -1,4 +1,5 @@
 import os
+import json
 import hashlib
 import shutil
 import re
@@ -7,12 +8,10 @@ import concurrent.futures
 import threading
 import time
 import subprocess
-import base64
 from pathlib import Path
 from gtts import gTTS
 from pydub import AudioSegment
 from pydub.generators import Sine, Square, Sawtooth, Pulse, WhiteNoise
-from google import genai
 
 # Configuration
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -21,82 +20,173 @@ CACHE_DIR = SOURCE_DIR / "audio_cache"
 SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
 
-# Initialize Gemini Client
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-gemini_client = None
-if GEMINI_API_KEY:
-    try:
-        gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        print("[INFO] Gemini API Client initialized for Native Audio TTS.")
-    except Exception as e:
-        print(f"[ERROR] Failed to initialize Gemini Client: {e}")
-
 # Piper Configuration
-PIPER_BIN = PROJECT_ROOT / "utils/piper/piper/piper"
+PIPER_BIN = Path(shutil.which("piper") or "")
+PIPER_BIN_VENV = PROJECT_ROOT / ".venv/bin/piper"
+PIPER_BIN_FALLBACK = PROJECT_ROOT / "utils/piper/piper/piper"
 PIPER_VOICES_DIR = PROJECT_ROOT / "utils/piper_voices"
+PIPER_VOICES_DIR_EN = PIPER_VOICES_DIR / "en"
+PIPER_VOICES_DIR_DE = PIPER_VOICES_DIR / "de"
 USE_PIPER = False # Will be auto-detected
+
+# TTS Routing (Fixed): EN -> Piper, DE -> Google TTS
+GTTS_DE_MAX_WORKERS = 6
+
+# Language generation toggle
+ENABLED_LANGS = {"de", "en"}
+
+# Non-interactive mode for persona assignment
+NON_INTERACTIVE = True
+PERSONA_DEFAULTS = {
+    1: "TGIF",
+    2: "badran",
+    3: "computer",
+    4: "dad_jokes",
+    5: "trump",
+}
 
 # Available Accents (TLDs) for gTTS
 ACCENTS_EN = ['com', 'co.uk', 'com.au', 'ca', 'co.in', 'ie', 'co.za']
 ACCENTS_DE = ['de'] # 'fr', 'us' etc produce strong foreign accents, 'de' is standard
 
-# Piper Models
-PIPER_MODELS_EN = [
-    "en_GB-cori-high.onnx",
-    "en_GB-alan-medium.onnx",
-    "en_GB-alba-medium.onnx",
-    "en_GB-aru-medium.onnx",
-    "en_GB-jenny_dioco-medium.onnx",
-    "en_US-ryan-high.onnx"
-]
-PIPER_MODELS_DE = [
-    "de_DE-thorsten-high.onnx"
-]
+# Piper Models (auto-discovered from utils/piper_voices/en, de)
+PIPER_MODELS_EN = []
+PIPER_MODELS_DE = []
+
+# Voice preferences
+EN_HAL_MODEL = "hal.onnx"
+EN_GLADOS_MODEL = "en_us-glados-high.onnx"
+DE_GLADOS_MODEL = "de_glados-medium.onnx"
+EN_TRUMP_MODEL = "en_US-trump-high.onnx"
+EN_EMINEM_MODEL = "en_US-eminem-medium.onnx"
+EN_FEMALE_PREFERRED = ["en_GB-jenny_dioco-medium.onnx", "en_GB-cori-high.onnx"]
+EN_MALE_PREFERRED = ["en_GB-alan-medium.onnx", "en_US-ryan-high.onnx", "en_GB-aru-medium.onnx"]
+
+def load_piper_models_en():
+    if not PIPER_VOICES_DIR_EN.exists():
+        return []
+    return sorted(p.name for p in PIPER_VOICES_DIR_EN.glob("*.onnx"))
+
+def load_piper_models_de():
+    if not PIPER_VOICES_DIR_DE.exists():
+        return []
+    return sorted(p.name for p in PIPER_VOICES_DIR_DE.glob("*.onnx"))
+
+def refresh_piper_models_en():
+    global PIPER_MODELS_EN
+    PIPER_MODELS_EN = load_piper_models_en()
+    return PIPER_MODELS_EN
+
+def refresh_piper_models_de():
+    global PIPER_MODELS_DE
+    PIPER_MODELS_DE = load_piper_models_de()
+    return PIPER_MODELS_DE
+
+def get_default_piper_en_model():
+    if not PIPER_MODELS_EN:
+        return None
+    preferred = "en_GB-jenny_dioco-medium.onnx"
+    if preferred in PIPER_MODELS_EN:
+        return preferred
+    return PIPER_MODELS_EN[0]
+
+def resolve_preferred_en_model(candidates):
+    for model in candidates:
+        if model in PIPER_MODELS_EN:
+            return model
+    return None
+
+def get_hal_en_model():
+    if EN_HAL_MODEL in PIPER_MODELS_EN:
+        return EN_HAL_MODEL
+    return None
+
+def get_glados_en_model():
+    if EN_GLADOS_MODEL in PIPER_MODELS_EN:
+        return EN_GLADOS_MODEL
+    return None
+
+def get_glados_de_model():
+    if DE_GLADOS_MODEL in PIPER_MODELS_DE:
+        return DE_GLADOS_MODEL
+    return None
+
+def get_trump_en_model():
+    if EN_TRUMP_MODEL in PIPER_MODELS_EN:
+        return EN_TRUMP_MODEL
+    return None
+
+def get_eminem_en_model():
+    if EN_EMINEM_MODEL in PIPER_MODELS_EN:
+        return EN_EMINEM_MODEL
+    return None
+
+def pick_random_en_model(rng, exclude_special=True):
+    models = PIPER_MODELS_EN
+    if exclude_special:
+        models = [m for m in PIPER_MODELS_EN if m not in {EN_HAL_MODEL, EN_GLADOS_MODEL, EN_TRUMP_MODEL, EN_EMINEM_MODEL}]
+    if not models:
+        return get_default_piper_en_model()
+    return rng.choice(models)
+
+def select_en_model_for_category(category, rng):
+    if category == "computer":
+        return get_hal_en_model() or get_default_piper_en_model()
+    if category == "robo":
+        return get_glados_en_model() or get_default_piper_en_model()
+    if category == "trump":
+        return get_trump_en_model() or get_default_piper_en_model()
+    if category == "eminem":
+        return get_eminem_en_model() or get_default_piper_en_model()
+    if category == "badran":
+        return resolve_preferred_en_model(EN_FEMALE_PREFERRED) or get_default_piper_en_model()
+    if category in {"dad_jokes", "trump"}:
+        return resolve_preferred_en_model(EN_MALE_PREFERRED) or get_default_piper_en_model()
+    return pick_random_en_model(rng, exclude_special=True)
 
 # System Prompts Configuration
 # Format: "path/to/file.wav": ("Text to speak", "Language Code", "Specific Model Name or None")
-# Note: If model is None, it defaults to Gemini (if API key present) or gTTS.
-# You can also use "gemini:VoiceName" (e.g. "gemini:Puck", "gemini:Charon", "de_DE-thorsten-high.onnx", "gemini:Fenrir", "gemini:Aoede")
+# Note: If model is None, it defaults to gTTS (DE) or the default Piper EN model.
 SYSTEM_PROMPTS = {
-    # English System Messages (Using Piper/Jenny for consistency as per user choice)
-    "system/snooze_active_en.wav": ("Snooze active.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/system_ready_en.wav": ("System ready.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/timer_stopped_en.wav": ("Timer cancelled.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/alarm_stopped_en.wav": ("Alarm cancelled.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/reindex_warning_en.wav": ("Please wait. Re-indexing content.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/alarm_active_en.wav": ("Alarm active.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/alarm_confirm_en.wav": ("Alarm confirmed.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/alarm_deleted_en.wav": ("Alarm deleted.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/alarm_skipped_en.wav": ("Alarm skipped.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/alarms_off_en.wav": ("Alarms disabled.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/alarms_on_en.wav": ("Alarms enabled.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/battery_crit_en.wav": ("Battery critical. Shutting down.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/error_msg_en.wav": ("An error occurred.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/menu_en.wav": ("Main Menu.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/timer_confirm_en.wav": ("Timer started.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/timer_deleted_en.wav": ("Timer deleted.", "en", "en_GB-jenny_dioco-medium.onnx"),
-    "system/timer_set_en.wav": ("Timer set.", "en", "en_GB-jenny_dioco-medium.onnx"),
+    # English System Messages (Piper)
+    "system/snooze_active_en.wav": ("Snooze active.", "en", None),
+    "system/system_ready_en.wav": ("System ready.", "en", None),
+    "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", None),
+    "system/timer_stopped_en.wav": ("Timer cancelled.", "en", None),
+    "system/alarm_stopped_en.wav": ("Alarm cancelled.", "en", None),
+    "system/reindex_warning_en.wav": ("Please wait. Re-indexing content.", "en", None),
+    "system/alarm_active_en.wav": ("Alarm active.", "en", None),
+    "system/alarm_confirm_en.wav": ("Alarm confirmed.", "en", None),
+    "system/alarm_deleted_en.wav": ("Alarm deleted.", "en", None),
+    "system/alarm_skipped_en.wav": ("Alarm skipped.", "en", None),
+    "system/alarms_off_en.wav": ("Alarms disabled.", "en", None),
+    "system/alarms_on_en.wav": ("Alarms enabled.", "en", None),
+    "system/battery_crit_en.wav": ("Battery critical. Shutting down.", "en", None),
+    "system/error_msg_en.wav": ("An error occurred.", "en", None),
+    "system/menu_en.wav": ("Main Menu.", "en", None),
+    "system/timer_confirm_en.wav": ("Timer started.", "en", None),
+    "system/timer_deleted_en.wav": ("Timer deleted.", "en", None),
+    "system/timer_set_en.wav": ("Timer set.", "en", None),
     
-    # German System Messages (Gemini Kore: friendly but impatient female voice)
-    "system/snooze_active_de.wav": ("Snooze aktiv.", "de", "de_DE-thorsten-high.onnx"),
-    "system/system_ready_de.wav": ("System bereit.", "de", "de_DE-thorsten-high.onnx"),
-    "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_stopped_de.wav": ("Timer abgebrochen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_stopped_de.wav": ("Alarm abgebrochen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/reindex_warning_de.wav": ("Bitte warten. Inhalte werden neu indexiert.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_active_de.wav": ("Alarm aktiv.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_confirm_de.wav": ("Alarm bestätigt.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_deleted_de.wav": ("Alarm gelöscht.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarm_skipped_de.wav": ("Alarm übersprungen.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarms_off_de.wav": ("Alarme deaktiviert.", "de", "de_DE-thorsten-high.onnx"),
-    "system/alarms_on_de.wav": ("Alarme aktiviert.", "de", "de_DE-thorsten-high.onnx"),
-    "system/battery_crit_de.wav": ("Batterie kritisch. System wird heruntergefahren.", "de", "de_DE-thorsten-high.onnx"),
-    "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", "de_DE-thorsten-high.onnx"),
-    "system/menu_de.wav": ("Hauptmenü.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_confirm_de.wav": ("Timer gestartet.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", "de_DE-thorsten-high.onnx"),
-    "system/timer_set_de.wav": ("Timer gesetzt.", "de", "de_DE-thorsten-high.onnx"),
+    # German System Messages (Google TTS, female voice)
+    "system/snooze_active_de.wav": ("Snooze aktiv.", "de", None),
+    "system/system_ready_de.wav": ("System bereit.", "de", None),
+    "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
+    "system/timer_stopped_de.wav": ("Timer abgebrochen.", "de", None),
+    "system/alarm_stopped_de.wav": ("Alarm abgebrochen.", "de", None),
+    "system/reindex_warning_de.wav": ("Bitte warten. Inhalte werden neu indexiert.", "de", None),
+    "system/alarm_active_de.wav": ("Alarm aktiv.", "de", None),
+    "system/alarm_confirm_de.wav": ("Alarm bestätigt.", "de", None),
+    "system/alarm_deleted_de.wav": ("Alarm gelöscht.", "de", None),
+    "system/alarm_skipped_de.wav": ("Alarm übersprungen.", "de", None),
+    "system/alarms_off_de.wav": ("Alarme deaktiviert.", "de", None),
+    "system/alarms_on_de.wav": ("Alarme aktiviert.", "de", None),
+    "system/battery_crit_de.wav": ("Batterie kritisch. System wird heruntergefahren.", "de", None),
+    "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
+    "system/menu_de.wav": ("Hauptmenü.", "de", None),
+    "system/timer_confirm_de.wav": ("Timer gestartet.", "de", None),
+    "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
+    "system/timer_set_de.wav": ("Timer gesetzt.", "de", None),
 }
 
 # Static Files to Copy (Source Path relative to template, Destination relative to SD Root)
@@ -151,6 +241,10 @@ def generate_tones(base_dir):
     # 4. Beep (Simple 1000Hz)
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-5.0)
     save(beep, "beep.wav")
+
+    # 4b. Silence (200ms)
+    silence = AudioSegment.silent(duration=200)
+    save(silence, "silence_200ms.wav")
     
     # 5. Click (User Interaction)
     click = Sine(2500).to_audio_segment(duration=30).apply_gain(-10.0).fade_out(10)
@@ -190,11 +284,13 @@ def generate_tones(base_dir):
 def generate_time_announcements():
     """Generates time announcement files for DE and EN."""
     
-    # German (Piper/Thorsten - Offline Fallback for speed/reliability)
-    model_de = "de_DE-thorsten-high.onnx"
+    # German (Google TTS)
+    model_de = None
     inst_de = ""
-    # English (Piper/Jenny)
-    model_en = "en_GB-jenny_dioco-medium.onnx"
+    # English (Piper)
+    if not PIPER_MODELS_EN:
+        refresh_piper_models_en()
+    model_en = get_default_piper_en_model()
     inst_en = ""
     
     base_dir = SD_ROOT / "time"
@@ -211,8 +307,10 @@ def generate_time_announcements():
 
     # Hours
     for h in TIME_CONFIG["hours"]:
-        add_task(f"{inst_de}{h}", "de", base_dir / f"de/h_{h}.wav", model_de)
-        add_task(f"{inst_en}{h}", "en", base_dir / f"en/h_{h}.wav", model_en)
+        if "de" in ENABLED_LANGS:
+            add_task(f"{inst_de}{h}", "de", base_dir / f"de/h_{h}.wav", model_de)
+        if "en" in ENABLED_LANGS:
+            add_task(f"{inst_en}{h}", "en", base_dir / f"en/h_{h}.wav", model_en)
 
     # Minutes
     for m in TIME_CONFIG["minutes"]:
@@ -220,156 +318,94 @@ def generate_time_announcements():
         # Format "m_XX.wav" (always 2 digits? or 1? template had m_00)
         # We will generate m_00 to m_59
         fname = f"m_{m:02d}.wav"
-        add_task(f"{inst_de}{m}", "de", base_dir / f"de/{fname}", model_de)
-        add_task(f"{inst_en}{m}", "en", base_dir / f"en/{fname}", model_en)
+        if "de" in ENABLED_LANGS:
+            add_task(f"{inst_de}{m}", "de", base_dir / f"de/{fname}", model_de)
+        if "en" in ENABLED_LANGS:
+            add_task(f"{inst_en}{m}", "en", base_dir / f"en/{fname}", model_en)
 
     # Days
     for d in TIME_CONFIG["days"]:
-        add_task(f"{inst_de}{d}.", "de", base_dir / f"de/day_{d}.wav", model_de) # Ordinal in DE? "erster"? 
-        add_task(f"{inst_en}{d}", "en", base_dir / f"en/day_{d}.wav", model_en) # "1st"?
+        if "de" in ENABLED_LANGS:
+            add_task(f"{inst_de}{d}.", "de", base_dir / f"de/day_{d}.wav", model_de) # Ordinal in DE? "erster"? 
+        if "en" in ENABLED_LANGS:
+            add_task(f"{inst_en}{d}", "en", base_dir / f"en/day_{d}.wav", model_en) # "1st"?
 
     # Months
     months_de = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
     months_en = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
     
     for i in TIME_CONFIG["months"]:
-        add_task(f"{inst_de}{months_de[i]}", "de", base_dir / f"de/month_{i}.wav", model_de)
-        add_task(f"{inst_en}{months_en[i]}", "en", base_dir / f"en/month_{i}.wav", model_en)
+        if "de" in ENABLED_LANGS:
+            add_task(f"{inst_de}{months_de[i]}", "de", base_dir / f"de/month_{i}.wav", model_de)
+        if "en" in ENABLED_LANGS:
+            add_task(f"{inst_en}{months_en[i]}", "en", base_dir / f"en/month_{i}.wav", model_en)
 
     # Weekdays
     wday_de = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"]
     wday_en = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
     
     for i in TIME_CONFIG["weekdays"]:
-         add_task(f"{inst_de}{wday_de[i]}", "de", base_dir / f"de/wday_{i}.wav", model_de)
-         add_task(f"{inst_en}{wday_en[i]}", "en", base_dir / f"en/wday_{i}.wav", model_en)
+         if "de" in ENABLED_LANGS:
+             add_task(f"{inst_de}{wday_de[i]}", "de", base_dir / f"de/wday_{i}.wav", model_de)
+         if "en" in ENABLED_LANGS:
+             add_task(f"{inst_en}{wday_en[i]}", "en", base_dir / f"en/wday_{i}.wav", model_en)
 
     # Years
     for y in TIME_CONFIG["years"]:
-        add_task(f"{inst_de}{y}", "de", base_dir / f"de/year_{y}.wav", model_de)
-        add_task(f"{inst_en}{y}", "en", base_dir / f"en/year_{y}.wav", model_en)
+        if "de" in ENABLED_LANGS:
+            add_task(f"{inst_de}{y}", "de", base_dir / f"de/year_{y}.wav", model_de)
+        if "en" in ENABLED_LANGS:
+            add_task(f"{inst_en}{y}", "en", base_dir / f"en/year_{y}.wav", model_en)
 
     # Specials
-    add_task(f"{inst_de}Uhr", "de", base_dir / "de/uhr.wav", model_de)
-    add_task(f"{inst_de}Es ist", "de", base_dir / "de/intro.wav", model_de)
-    add_task(f"{inst_de}Heute ist", "de", base_dir / "de/date_intro.wav", model_de)
-    add_task(f"{inst_de}Sommerzeit", "de", base_dir / "de/dst_summer.wav", model_de)
-    add_task(f"{inst_de}Winterzeit", "de", base_dir / "de/dst_winter.wav", model_de)
+    if "de" in ENABLED_LANGS:
+        add_task(f"{inst_de}Uhr", "de", base_dir / "de/uhr.wav", model_de)
+        add_task(f"{inst_de}Es ist", "de", base_dir / "de/intro.wav", model_de)
+        add_task(f"{inst_de}Heute ist", "de", base_dir / "de/date_intro.wav", model_de)
+        add_task(f"{inst_de}Sommerzeit", "de", base_dir / "de/dst_summer.wav", model_de)
+        add_task(f"{inst_de}Winterzeit", "de", base_dir / "de/dst_winter.wav", model_de)
     
-    add_task(f"{inst_en}It is", "en", base_dir / "en/intro.wav", model_en)
-    add_task(f"{inst_en}Today is", "en", base_dir / "en/date_intro.wav", model_en)
-    add_task(f"{inst_en}Summer time", "en", base_dir / "en/dst_summer.wav", model_en)
-    add_task(f"{inst_en}Winter time", "en", base_dir / "en/dst_winter.wav", model_en)
+    if "en" in ENABLED_LANGS:
+        add_task(f"{inst_en}It is", "en", base_dir / "en/intro.wav", model_en)
+        add_task(f"{inst_en}Today is", "en", base_dir / "en/date_intro.wav", model_en)
+        add_task(f"{inst_en}Summer time", "en", base_dir / "en/dst_summer.wav", model_en)
+        add_task(f"{inst_en}Winter time", "en", base_dir / "en/dst_winter.wav", model_en)
 
     return tasks
 
 def check_piper_status():
     """Checks if Piper is installed and voices are available."""
     global USE_PIPER
-    if PIPER_BIN.exists() and PIPER_VOICES_DIR.exists():
-        # Check for Jenny (System) and Thorsten (DE) at minimum
-        has_jenny = (PIPER_VOICES_DIR / "en_GB-jenny_dioco-medium.onnx").exists()
-        has_thorsten = (PIPER_VOICES_DIR / "de_DE-thorsten-high.onnx").exists()
-        
-        if has_jenny and has_thorsten:
+    if PIPER_BIN.exists():
+        piper_bin = PIPER_BIN
+    elif PIPER_BIN_VENV.exists():
+        piper_bin = PIPER_BIN_VENV
+    else:
+        piper_bin = PIPER_BIN_FALLBACK
+    if piper_bin.exists() and PIPER_VOICES_DIR_EN.exists():
+        refresh_piper_models_en()
+        refresh_piper_models_de()
+        if PIPER_MODELS_EN:
             USE_PIPER = True
-            print("[INFO] Piper TTS detected. Google TTS disabled (Piper only mode).")
+            print("[INFO] Piper TTS detected for English voices.")
         else:
-            print("[INFO] Piper binary found, but key Voice Models (Jenny/Thorsten) missing.")
-            print("       Run 'python3 utils/setup_piper.py' to download them.")
+            print("[ERROR] No English Piper voices found in utils/piper_voices/en")
             USE_PIPER = False
-            exit(1) # Strict mode
+            exit(1)
     else:
         print("[ERROR] Piper not detected. Please install Piper to proceed.")
-        print("        Check 'utils/piper/' and 'utils/piper_voices/'")
-        exit(1) # Strict mode
+        print("        Check 'utils/piper/' or your PATH, and 'utils/piper_voices/en'")
+        exit(1)
 
-def generate_speech(text, lang, output_path, model_name=None):
-    """Generates audio using Gemini (online), Piper (local) or gTTS (online fallback)."""
+def generate_speech(text, lang, output_path, model_name=None, force_piper=False):
+    """Generates audio using Piper (EN) or Google TTS (DE)."""
     
-    # CASE 0: Use Gemini if API Key is available and no specific Piper model is requested
-    # OR if model_name starts with 'gemini:'
-    effective_model = model_name
-    use_gemini = False
-    gemini_voice = "Puck" # Default high-quality voice
-    
-    if effective_model is None and gemini_client:
-        use_gemini = True
-    elif isinstance(effective_model, str) and effective_model.startswith("gemini:"):
-        use_gemini = True
-        gemini_voice = effective_model.split(":")[1]
-        effective_model = None
-
-    if use_gemini and gemini_client:
-        max_retries = 3
-        # Base delay to respect the Free Tier Limit (15 RPM = 1 request every 4s)
-        # We add a bit of buffer
-        rate_limit_delay = 5.0 
-        
-        for attempt in range(max_retries):
-            try:
-                # Proactive rate limiting
-                time.sleep(rate_limit_delay)
-                
-                # Using current stable model with Native Audio/TTS support
-                response = gemini_client.models.generate_content(
-                    model='gemini-2.0-flash',
-                    contents=text,
-                    config={
-                        'speech_config': {'voice_config': {'prebuilt_voice_config': {'voice_name': gemini_voice}}},
-                    }
-                )
-                
-                audio_data = None
-                mime_type = "audio/wav" # Default assumption
-                
-                if response.candidates and response.candidates[0].content.parts:
-                    for part in response.candidates[0].content.parts:
-                        if part.inline_data:
-                            audio_data = part.inline_data.data
-                            mime_type = part.inline_data.mime_type
-                            break
-                
-                if audio_data:
-                    # Some models return MP3 data even if WAV is expected, or vice-versa
-                    suffix = ".mp3" if "mpeg" in mime_type else ".wav"
-                    temp_audio = str(output_path) + suffix
-                    
-                    with open(temp_audio, "wb") as f:
-                        f.write(audio_data)
-                    
-                    # Convert to standard format
-                    if ".mp3" in suffix:
-                        sound = AudioSegment.from_mp3(temp_audio)
-                    else:
-                        sound = AudioSegment.from_file(temp_audio)
-                    
-                    sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-                    sound.export(str(output_path), format="wav")
-                    
-                    if os.path.exists(temp_audio):
-                        os.remove(temp_audio)
-                    return True
-                else:
-                    safe_print(f"  [WARN] Gemini returned no audio for: {text[:30]}...")
-                    # No audio data usually means safety block or weird response, consider it a non-retryable error unless empty
-                    break 
-
-            except Exception as e:
-                err_str = str(e)
-                if "429" in err_str or "quota" in err_str.lower():
-                    wait_time = 10 * (attempt + 1) # Backoff: 10s, 20s, 30s
-                    safe_print(f"  [WARN] Rate limit hit (429). Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                else:
-                    safe_print(f"  [ERROR] Gemini TTS failed: {e}. Falling back...")
-                    break # Don't retry other errors
-
-    # CASE 1: Use gTTS if no specific Piper model is requested (and Gemini failed or not available)
-    if effective_model is None:
+    # German: Google TTS only
+    if lang == 'de' and not force_piper:
         try:
             # Use 'com' for English (US) and 'de' for German
             tld = 'de' if lang == 'de' else 'com'
+            safe_print(f"  [gTTS] de -> {output_path.name}: {text[:60]}{'...' if len(text) > 60 else ''}")
             tts = gTTS(text=text, lang=lang, tld=tld, slow=False)
             
             # gTTS saves MP3. We must convert to WAV if output is WAV.
@@ -390,17 +426,30 @@ def generate_speech(text, lang, output_path, model_name=None):
                 os.remove(temp_mp3)
             raise Exception(f"gTTS failed: {e}")
 
-    # CASE 2: Use Piper
-    model_path = PIPER_VOICES_DIR / effective_model
+    # Piper (EN or forced DE)
+    if not PIPER_MODELS_EN:
+        refresh_piper_models_en()
+    if not PIPER_MODELS_DE:
+        refresh_piper_models_de()
+
+    if lang == 'de' and force_piper:
+        effective_model = model_name or get_glados_de_model()
+        if not effective_model:
+            raise FileNotFoundError("No German Piper models found in utils/piper_voices/de")
+        model_path = PIPER_VOICES_DIR_DE / effective_model
+    else:
+        effective_model = model_name or get_default_piper_en_model()
+        if not effective_model:
+            raise FileNotFoundError("No English Piper models found in utils/piper_voices/en")
+        model_path = PIPER_VOICES_DIR_EN / effective_model
     
-    if not model_path.exists():
-         raise FileNotFoundError(f"Piper Model {effective_model} not found at {model_path}")
+        if not model_path.exists():
+            raise FileNotFoundError(f"Piper Model {effective_model} not found at {model_path}")
     
     cmd = [
-        str(PIPER_BIN),
+        str(PIPER_BIN if PIPER_BIN.exists() else (PIPER_BIN_VENV if PIPER_BIN_VENV.exists() else PIPER_BIN_FALLBACK)),
         "--model", str(model_path),
-        "--output_file", str(output_path),
-        "--quiet"
+        "--output_file", str(output_path)
     ]
     
     # Piper expects text via stdin
@@ -469,13 +518,19 @@ def process_single_file(args):
         
         # Deterministic Model Selection
         chosen_model = None
-        if lang == 'de':
-            chosen_model = rng.choice(PIPER_MODELS_DE)
-        elif lang == 'en':
-            chosen_model = rng.choice(PIPER_MODELS_EN)
+        force_piper = False
+        if lang == 'en':
+            if not PIPER_MODELS_EN:
+                refresh_piper_models_en()
+            chosen_model = select_en_model_for_category(category, rng)
+        elif lang == 'de' and category == 'robo':
+            if not PIPER_MODELS_DE:
+                refresh_piper_models_de()
+            chosen_model = get_glados_de_model()
+            force_piper = True
         
         try:
-            generate_speech(line, lang, wav_temp, model_name=chosen_model)
+            generate_speech(line, lang, wav_temp, model_name=chosen_model, force_piper=force_piper)
             sound = AudioSegment.from_wav(str(wav_temp))
             if wav_temp.exists(): os.remove(wav_temp)
             
@@ -541,7 +596,7 @@ def generate_audio_cache():
             wav_filename = f"{safe_cat}_{lang}_{line_hash}.wav"
             wav_path = CACHE_DIR / wav_filename
             
-            if not wav_path.exists():
+            if (lang in ENABLED_LANGS) and (not wav_path.exists()):
                 tasks.append((line, lang, category, wav_path, line_hash))
 
     # 2. Execute Tasks in Parallel
@@ -554,33 +609,39 @@ def generate_audio_cache():
         
         # Adjust max_workers based on your network/CPU comfort.
         # NOTE: severe rate-limiting by Google if too high (>5). Keeping it low for stability.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-            # We use as_completed to update progress immediately
-            future_to_task = {executor.submit(process_single_file, task): task for task in tasks}
-            
-            for future in concurrent.futures.as_completed(future_to_task):
-                completed += 1
-                
-                # Calculate timing
-                elapsed = time.time() - start_time
-                if completed > 0:
-                    avg_time = elapsed / completed
-                    remaining = avg_time * (total_tasks - completed)
-                else:
-                    remaining = 0
-                
-                # Progress Bar
-                percent = (completed / total_tasks) * 100
-                bar_len = 30
-                filled = int(bar_len * completed / total_tasks)
-                bar = '█' * filled + '-' * (bar_len - filled)
-                
-                status_line = (
-                    f"\r[{bar}] {percent:5.1f}% | "
-                    f"{completed}/{total_tasks} | "
-                    f"Time: {format_time(elapsed)} (ETA: {format_time(remaining)})"
-                )
-                print(status_line, end='', flush=True)
+        def run_task_batch(batch_tasks, max_workers):
+            nonlocal completed
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_task = {executor.submit(process_single_file, task): task for task in batch_tasks}
+                for future in concurrent.futures.as_completed(future_to_task):
+                    completed += 1
+
+                    elapsed = time.time() - start_time
+                    if completed > 0:
+                        avg_time = elapsed / completed
+                        remaining = avg_time * (total_tasks - completed)
+                    else:
+                        remaining = 0
+
+                    percent = (completed / total_tasks) * 100
+                    bar_len = 30
+                    filled = int(bar_len * completed / total_tasks)
+                    bar = '█' * filled + '-' * (bar_len - filled)
+
+                    status_line = (
+                        f"\r[{bar}] {percent:5.1f}% | "
+                        f"{completed}/{total_tasks} | "
+                        f"Time: {format_time(elapsed)} (ETA: {format_time(remaining)})"
+                    )
+                    print(status_line, end='', flush=True)
+
+        tasks_de = [t for t in tasks if t[1] == 'de']
+        tasks_en = [t for t in tasks if t[1] == 'en']
+
+        if tasks_de:
+            run_task_batch(tasks_de, GTTS_DE_MAX_WORKERS)
+        if tasks_en:
+            run_task_batch(tasks_en, 4)
 
         print() # Newline after done
     else:
@@ -635,6 +696,16 @@ def generate_sd_card_structure(categories):
             except Exception as e:
                 print(f"  [WARN] Could not delete {old_pl.name}: {e}")
         
+    def select_persona_category(persona_idx):
+        preferred = PERSONA_DEFAULTS.get(persona_idx, "")
+        if preferred in sorted_cats:
+            return preferred
+        if sorted_cats:
+            return sorted_cats[(persona_idx - 1) % len(sorted_cats)]
+        return ""
+
+    persona_assignments = {}
+
     for persona_idx in range(1, 6):
         default_name = ""
         
@@ -642,90 +713,119 @@ def generate_sd_card_structure(categories):
         if persona_idx == 1: default_name = next((c for c in sorted_cats if "Badran" in c), "")
         elif persona_idx == 5: default_name = next((c for c in sorted_cats if "Fortune" in c), "")
 
-        prompt_text = f"\nSelect Category for Persona {persona_idx}"
-        if default_name:
-            prompt_text += f" (Default: {default_name})"
-        prompt_text += ": "
-        
-        while True:
-            selection = input(prompt_text).strip()
-            selected_cat = ""
+        if NON_INTERACTIVE:
+            selected_cat = select_persona_category(persona_idx)
+            if not selected_cat:
+                print(f"  [WARN] No categories available for Persona {persona_idx}")
+                continue
+            print(f"  -> Assigned '{selected_cat}' to Persona {persona_idx} (auto)")
+        else:
+            prompt_text = f"\nSelect Category for Persona {persona_idx}"
+            if default_name:
+                prompt_text += f" (Default: {default_name})"
+            prompt_text += ": "
             
-            if not selection and default_name:
-                selected_cat = default_name
-            elif selection.isdigit():
-                idx = int(selection) - 1
-                if 0 <= idx < len(sorted_cats):
-                    selected_cat = sorted_cats[idx]
-            
-            if selected_cat:
-                print(f"  -> Assigned '{selected_cat}' to Persona {persona_idx}")
+            while True:
+                selection = input(prompt_text).strip()
+                selected_cat = ""
                 
-                # Create persona directories
-                p_dir = SD_ROOT / f"persona_{persona_idx:02d}"
-                if p_dir.exists():
-                    shutil.rmtree(p_dir)
-                p_dir.mkdir(parents=True) 
+                if not selection and default_name:
+                    selected_cat = default_name
+                elif selection.isdigit():
+                    idx = int(selection) - 1
+                    if 0 <= idx < len(sorted_cats):
+                        selected_cat = sorted_cats[idx]
                 
-                # Prepare Playlist Data
-                playlist_tracks = {'de': [], 'en': []}
-                
-                safe_cat = re.sub(r'[^a-zA-Z0-9_\-]', '', selected_cat)
-                
-                copied_count = 0
-                for wav_file in CACHE_DIR.glob("*.wav"):
-                    if wav_file.name.startswith(safe_cat + "_"):
-                        parts = wav_file.stem.split('_')
-                        if len(parts) >= 3:
-                            f_lang = parts[-2]
-                            f_cat = "_".join(parts[:-2])
-                            
-                            if f_cat == safe_cat and f_lang in ['de', 'en']:
-                                target_dir = p_dir / f_lang
-                                target_dir.mkdir(exist_ok=True)
-                                
-                                # Copy File
-                                shutil.copy2(wav_file, target_dir / wav_file.name)
-                                
-                                # Add to Playlist
-                                # Path format: /persona_01/de/file.wav
-                                relative_path = f"/persona_{persona_idx:02d}/{f_lang}/{wav_file.name}"
-                                playlist_tracks[f_lang].append(relative_path)
-                                
-                                copied_count += 1
-                
-                print(f"     Copied {copied_count} files.")
-                
-                # Generate Playlists
-                playlist_dir = SD_ROOT / "playlists"
-                playlist_dir.mkdir(exist_ok=True)
-                
-                for lang in ['de', 'en']:
-                    tracks = playlist_tracks[lang]
-                    if tracks:
-                        random.shuffle(tracks)
-                        # Filename: cat_1_de_v3.m3u
-                        pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
-                        pl_path = playlist_dir / pl_filename
-                        
-                        with open(pl_path, 'w', encoding='utf-8') as f:
-                            for track in tracks:
-                                f.write(track + "\n")
-                        print(f"     Created Playlist: {pl_filename} ({len(tracks)} tracks)")
-                    else:
-                        # Clean up old playlist if it exists? 
-                        # Or ensure we don't leave stale ones?
-                        pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
-                        pl_path = playlist_dir / pl_filename
-                        if pl_path.exists():
-                            pl_path.unlink()
-                            print(f"     Removed Playlist: {pl_filename} (0 tracks)")
+                if selected_cat:
+                    print(f"  -> Assigned '{selected_cat}' to Persona {persona_idx}")
+                    break
+                else:
+                    print("Invalid selection. Try again.")
 
-                break
-            else:
-                print("Invalid selection. Try again.")
+        if selected_cat:
+            persona_assignments[persona_idx] = selected_cat
+            
+            # Create persona directories
+            p_dir = SD_ROOT / f"persona_{persona_idx:02d}"
+            if p_dir.exists():
+                shutil.rmtree(p_dir)
+            p_dir.mkdir(parents=True) 
+            
+            # Prepare Playlist Data
+            playlist_tracks = {'de': [], 'en': []}
+            
+            safe_cat = re.sub(r'[^a-zA-Z0-9_\-]', '', selected_cat)
+            
+            copied_count = 0
+            for wav_file in CACHE_DIR.glob("*.wav"):
+                if wav_file.name.startswith(safe_cat + "_"):
+                    parts = wav_file.stem.split('_')
+                    if len(parts) >= 3:
+                        f_lang = parts[-2]
+                        f_cat = "_".join(parts[:-2])
+                        
+                        if f_cat == safe_cat and f_lang in ['de', 'en']:
+                            target_dir = p_dir / f_lang
+                            target_dir.mkdir(exist_ok=True)
+                            
+                            # Copy File
+                            shutil.copy2(wav_file, target_dir / wav_file.name)
+                            
+                            # Add to Playlist
+                            # Path format: /persona_01/de/file.wav
+                            relative_path = f"/persona_{persona_idx:02d}/{f_lang}/{wav_file.name}"
+                            playlist_tracks[f_lang].append(relative_path)
+                            
+                            copied_count += 1
+            
+            print(f"     Copied {copied_count} files.")
+            
+            # Generate Playlists
+            playlist_dir = SD_ROOT / "playlists"
+            playlist_dir.mkdir(exist_ok=True)
+            
+            for lang in ['de', 'en']:
+                tracks = playlist_tracks[lang]
+                if tracks:
+                    random.shuffle(tracks)
+                    # Filename: cat_1_de_v3.m3u
+                    pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
+                    pl_path = playlist_dir / pl_filename
+                    
+                    with open(pl_path, 'w', encoding='utf-8') as f:
+                        for track in tracks:
+                            f.write(track + "\n")
+                    print(f"     Created Playlist: {pl_filename} ({len(tracks)} tracks)")
+                else:
+                    # Clean up old playlist if it exists? 
+                    # Or ensure we don't leave stale ones?
+                    pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
+                    pl_path = playlist_dir / pl_filename
+                    if pl_path.exists():
+                        pl_path.unlink()
+                        print(f"     Removed Playlist: {pl_filename} (0 tracks)")
 
     print(f"\nDone! SD Card content generated in: {SD_ROOT}")
+
+    # Write phonebook.json with persona names derived from categories
+    phonebook_path = SD_ROOT / "phonebook.json"
+    phonebook_entries = {
+        "110": {"name": "Zeitauskunft", "type": "FUNCTION", "value": "ANNOUNCE_TIME", "parameter": ""},
+        "0": {"name": "Gemini AI", "type": "FUNCTION", "value": "GEMINI_CHAT", "parameter": ""},
+        "1": {"name": persona_assignments.get(1, "Persona 1"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "1"},
+        "2": {"name": persona_assignments.get(2, "Persona 2"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "2"},
+        "3": {"name": persona_assignments.get(3, "Persona 3"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "3"},
+        "4": {"name": persona_assignments.get(4, "Persona 4"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "4"},
+        "5": {"name": persona_assignments.get(5, "Persona 5"), "type": "FUNCTION", "value": "COMPLIMENT_CAT", "parameter": "5"},
+        "6": {"name": "Random Mix", "type": "FUNCTION", "value": "COMPLIMENT_MIX", "parameter": "0"},
+        "9": {"name": "Voice Admin Menu", "type": "FUNCTION", "value": "VOICE_MENU", "parameter": ""},
+        "90": {"name": "Toggle Alarms", "type": "FUNCTION", "value": "TOGGLE_ALARMS", "parameter": ""},
+        "91": {"name": "Skip Next Alarm", "type": "FUNCTION", "value": "SKIP_NEXT_ALARM", "parameter": ""},
+        "095": {"name": "System Reboot", "type": "FUNCTION", "value": "REBOOT", "parameter": ""},
+    }
+    with open(phonebook_path, "w", encoding="utf-8") as f:
+        json.dump(phonebook_entries, f, ensure_ascii=False, indent=2)
+    print(f"  [OK] Wrote phonebook: {phonebook_path}")
 
 def generate_tones(base_dir):
     """
@@ -980,21 +1080,23 @@ def generate_wake_up_rants():
     # Text, Filename, Lang, Model
     rants = [
         # German (Sassy/Frech) - Thorsten
-        ("Aufstehen, Sonnenschein! Oder auch nicht, mir egal. Aber der Wecker sagt ja.", "rant_de_sunshine.wav", "de", "de_DE-thorsten-high.onnx"),
-        ("Der frühe Vogel kann mich mal... aber du musst leider raus. Hopp hopp!", "rant_de_bird.wav", "de", "de_DE-thorsten-high.onnx"),
-        ("Guten Morgen! Dein Bett hat gerade angerufen, es will sich von dir trennen.", "rant_de_breakup.wav", "de", "de_DE-thorsten-high.onnx"),
-        ("Alarm! Alarm! Die Realität ruft an. Leider kannst du das nicht wegdrücken.", "rant_de_reality.wav", "de", "de_DE-thorsten-high.onnx"),
-        ("Na, auch schon wach? Ich mache das hier nur, weil ich programmiert wurde, dich zu nerven.", "rant_de_annoy.wav", "de", "de_DE-thorsten-high.onnx"),
+        ("Aufstehen, Sonnenschein! Oder auch nicht, mir egal. Aber der Wecker sagt ja.", "rant_de_sunshine.wav", "de", None),
+        ("Der frühe Vogel kann mich mal... aber du musst leider raus. Hopp hopp!", "rant_de_bird.wav", "de", None),
+        ("Guten Morgen! Dein Bett hat gerade angerufen, es will sich von dir trennen.", "rant_de_breakup.wav", "de", None),
+        ("Alarm! Alarm! Die Realität ruft an. Leider kannst du das nicht wegdrücken.", "rant_de_reality.wav", "de", None),
+        ("Na, auch schon wach? Ich mache das hier nur, weil ich programmiert wurde, dich zu nerven.", "rant_de_annoy.wav", "de", None),
         
         # English (Sassy) - Jenny
-        ("Rise and shine! The world awaits your glorious confusion.", "rant_en_confusion.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
-        ("Wake up! Your bed called, it's dumping you for the day.", "rant_en_breakup.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
-        ("Good morning starshine! The earth says hello... loudly!", "rant_en_starshine.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
-        ("I surrender! I surrender! Oh wait, it's just morning. Get up.", "rant_en_surrender.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
-        ("Alert! Alert! You are critically low on caffeine. Initiate wake up sequence.", "rant_en_caffeine.wav", "en", "en_GB-jenny_dioco-medium.onnx"),
+        ("Rise and shine! The world awaits your glorious confusion.", "rant_en_confusion.wav", "en", None),
+        ("Wake up! Your bed called, it's dumping you for the day.", "rant_en_breakup.wav", "en", None),
+        ("Good morning starshine! The earth says hello... loudly!", "rant_en_starshine.wav", "en", None),
+        ("I surrender! I surrender! Oh wait, it's just morning. Get up.", "rant_en_surrender.wav", "en", None),
+        ("Alert! Alert! You are critically low on caffeine. Initiate wake up sequence.", "rant_en_caffeine.wav", "en", None),
     ]
     
     for text, fname, lang, model in rants:
+        if lang not in ENABLED_LANGS:
+            continue
         out_path = target_dir / fname
         if not out_path.exists():
             try:
@@ -1016,6 +1118,8 @@ def generate_system_sounds():
     # 1. Generate Static System Prompts
     def process_system_prompt(item):
         rel_path, (text, lang, model) = item
+        if lang not in ENABLED_LANGS:
+            return
         out_path = SD_ROOT / rel_path
         out_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -1064,22 +1168,31 @@ def generate_system_sounds():
     completed = 0
     start_time = time.time()
 
-    # Using 1 worker to strictly ensure rate limit discipline
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future_to_task = {executor.submit(process_time_task, t): t for t in time_tasks}
-        
-        for future in concurrent.futures.as_completed(future_to_task):
-            completed += 1
-            if completed % 1 == 0: 
-                elapsed = time.time() - start_time
-                if completed > 0:
-                    avg_time = elapsed / completed
-                    remaining = avg_time * (total_time - completed)
-                else:
-                    remaining = 0
-                
-                percent = (completed / total_time) * 100
-                print(f"\r  [GEN] {completed}/{total_time} ({percent:.1f}%) | ETA: {format_time(remaining)}   ", end='', flush=True)
+    def run_time_batch(batch_tasks, max_workers):
+        nonlocal completed
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_task = {executor.submit(process_time_task, t): t for t in batch_tasks}
+
+            for future in concurrent.futures.as_completed(future_to_task):
+                completed += 1
+                if completed % 1 == 0:
+                    elapsed = time.time() - start_time
+                    if completed > 0:
+                        avg_time = elapsed / completed
+                        remaining = avg_time * (total_time - completed)
+                    else:
+                        remaining = 0
+
+                    percent = (completed / total_time) * 100
+                    print(f"\r  [GEN] {completed}/{total_time} ({percent:.1f}%) | ETA: {format_time(remaining)}   ", end='', flush=True)
+
+    time_tasks_de = [t for t in time_tasks if t[1] == 'de']
+    time_tasks_en = [t for t in time_tasks if t[1] == 'en']
+
+    if time_tasks_de:
+        run_time_batch(time_tasks_de, GTTS_DE_MAX_WORKERS)
+    if time_tasks_en:
+        run_time_batch(time_tasks_en, 4)
     print() # Newline
 
 

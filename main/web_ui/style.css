@@ -241,8 +241,8 @@ select.alarm-sound-select {
     repeating-linear-gradient(180deg, rgba(255,170,170,0.9) 0, rgba(255,170,170,0.9) 1px, transparent 1px, transparent 40px);
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
   box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-  border-top-right-radius: 25px;
-  border-bottom-right-radius: 25px;
+  border-top-right-radius: 12px;
+  border-bottom-right-radius: 12px;
 }
 .pb-table {
   width: 100%;
@@ -309,9 +309,12 @@ select.alarm-sound-select {
   padding-left: 10px;
   line-height: 1.2;
 }
-.pb-critical .pb-name-cell,
-.pb-critical .pb-input {
+.pb-critical .pb-name-cell {
   color: #d00;
+  font-weight: bold;
+}
+.pb-critical .pb-input {
+  color: #000;
   font-weight: bold;
 }
 .pb-save {
