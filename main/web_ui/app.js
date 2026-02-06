@@ -5,6 +5,7 @@ const state = {
     lang: 'de',
     settings: {}, // will hold wifi, volume etc
     loading: true,
+    phonebook: {},
     logLines: [],
     logTimer: null
 };
@@ -199,9 +200,9 @@ function render() {
     }
     
     // Post-render Logic (Listeners)
-    if (path === '/phonebook' && Object.keys(state.phonebook).length === 0) {
+    if (path === '/phonebook' && state.phonebook && Object.keys(state.phonebook).length === 0) {
         API.getPhonebook().then(pb => {
-            state.phonebook = pb;
+            state.phonebook = pb || {};
             render(); // Re-render with data
         });
     }
@@ -301,7 +302,7 @@ window.onpopstate = render;
 function renderPhonebook() {
     const isDe = state.lang === 'de';
     const tTitle = isDe ? "Telefonbuch" : "Phonebook";
-    const fullData = {};
+    const fullData = state.phonebook || {};
 
     const systemItems = [
         { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)', defNum: '1' },
@@ -312,10 +313,7 @@ function renderPhonebook() {
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
-        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI', defNum: '000' },
         { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '900' },
-        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms', defNum: '910' },
-        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm', defNum: '911' },
         { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '999' }
     ];
 
@@ -380,10 +378,7 @@ window.savePhonebook = () => {
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement' },
-        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI' },
         { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu' },
-        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms' },
-        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm' },
         { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot' }
     ];
 
@@ -602,11 +597,13 @@ function renderAdvanced() {
             </div>
 
             <!-- WIFI PANEL -->
-            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+              <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                  <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">WiFi Network</h4>
 
-                 <div class="wifi-ssid-text">${state.settings.wifi_ssid || 'No Net'}</div>
-                 <button onclick="nav('/setup')" class="wifi-scan-btn">SCAN</button>
+                  <div style="display:flex; flex-direction:column; gap:6px;">
+                     <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || 'No Net'}</div>
+                     <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">SCAN</button>
+                  </div>
             </div>
 
             <!-- CONSOLE PANEL -->
@@ -617,12 +614,12 @@ function renderAdvanced() {
             </div>
 
             <!-- VOLUME PANEL -->
-            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+            <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Volume</h4>
                 
                 <!-- Base Speaker -->
-                <div style="margin-top:12px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <div style="margin-top:8px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Base Speaker</label>
                         <span id="vol-disp-base" style="color:#d4af37; font-weight:bold;">${state.settings.volume || 60}%</span>
                     </div>
@@ -632,8 +629,8 @@ function renderAdvanced() {
                 </div>
 
                 <!-- Handset Speaker -->
-                <div style="margin-top:15px;">
-                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <div style="margin-top:10px;">
+                     <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Handset</label>
                         <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset || 60}%</span>
                     </div>

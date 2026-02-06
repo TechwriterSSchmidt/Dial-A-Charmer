@@ -8,6 +8,7 @@
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "audio_element.h"
@@ -38,6 +39,7 @@ audio_pipeline_handle_t pipeline;
 audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
 audio_board_handle_t board_handle = NULL; // Globale Reference
 led_strip_handle_t g_led_strip = NULL;
+SemaphoreHandle_t g_audio_mutex = NULL;
 
 // Logic State
 std::string dial_buffer = "";
@@ -65,9 +67,35 @@ int64_t g_timer_alarm_end_ms = 0;
 std::string g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
 bool g_startup_silence_playing = false;
 
+static bool is_lang_en() {
+    nvs_handle_t my_handle;
+    char val[8] = {0};
+    size_t len = sizeof(val);
+    bool is_en = false;
+
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        if (nvs_get_str(my_handle, "src_lang", val, &len) == ESP_OK) {
+            is_en = (strncmp(val, "en", 2) == 0);
+        }
+        nvs_close(my_handle);
+    }
+    return is_en;
+}
+
 // Helpers
 void stop_playback(); // forward decl
 void play_file(const char* path); // forward decl
+static void audio_lock() {
+    if (g_audio_mutex) {
+        xSemaphoreTake(g_audio_mutex, portMAX_DELAY);
+    }
+}
+
+static void audio_unlock() {
+    if (g_audio_mutex) {
+        xSemaphoreGive(g_audio_mutex);
+    }
+}
 static void start_timer_minutes(int minutes) {
     // Override any existing timer or pending timer announcements
     g_timer_active = true;
@@ -267,6 +295,8 @@ void play_file(const char* path) {
     }
 
     
+    audio_lock();
+
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
     g_gain_right_cur = 0.0f;
@@ -284,6 +314,7 @@ void play_file(const char* path) {
     audio_element_set_uri(fatfs_stream, path);
     audio_pipeline_run(pipeline);
     is_playing = true;
+    audio_unlock();
 }
 
 void wait_for_dialtone_silence_if_needed() {
@@ -389,10 +420,12 @@ void process_phonebook_function(PhonebookEntry entry) {
 
 void stop_playback() {
     if (is_playing) {
+        audio_lock();
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
         is_playing = false;
         g_last_playback_finished_ms = esp_timer_get_time() / 1000;
+        audio_unlock();
     }
 }
 
@@ -455,7 +488,22 @@ void on_hook_change(bool off_hook) {
         play_file("/sdcard/system/dialtone_1.wav");
     } else {
         // Receiver Hung Up
+        int64_t now = esp_timer_get_time() / 1000;
+        bool short_pickup = (now - g_off_hook_start_ms) < APP_DIAL_TIMEOUT_MS;
+        bool cancel_timer = short_pickup && g_timer_active && !g_timer_alarm_active && !g_any_digit_dialed;
+
         stop_playback();
+        if (cancel_timer) {
+            g_timer_active = false;
+            g_timer_minutes = 0;
+            g_timer_end_ms = 0;
+            g_timer_announce_pending = false;
+            g_timer_intro_playing = false;
+            const char *timer_deleted = is_lang_en()
+                ? "/sdcard/system/timer_deleted_en.wav"
+                : "/sdcard/system/timer_deleted_de.wav";
+            play_file(timer_deleted);
+        }
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -533,6 +581,11 @@ extern "C" void app_main(void)
         err = nvs_flash_init();
     }
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
+
+    g_audio_mutex = xSemaphoreCreateMutex();
+    if (!g_audio_mutex) {
+        ESP_LOGE(TAG, "Audio mutex init failed");
+    }
 
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
     xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
@@ -710,9 +763,11 @@ extern "C" void app_main(void)
                  g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  
                  // Stop anything currently playing
+                 audio_lock();
                  audio_pipeline_stop(pipeline);
                  audio_pipeline_wait_for_stop(pipeline);
                  audio_pipeline_terminate(pipeline);
+                 audio_unlock();
                  
                  // Enable Base Speaker for Alarm
                  update_audio_output();

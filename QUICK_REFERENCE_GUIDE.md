@@ -5,7 +5,6 @@
    - Lift the receiver. Wait for the **Dial Tone**.
    - **Important:** specific content must be dialed within **5 seconds**. 
    - *Behavior:* If no number is dialed, a **Busy Signal** plays. Hang up to reset.
-   - **Dial 0:** Gemini AI (if configured).
    - **Dial 1-5:** Persona Playlists (Configurable).
    - **Dial 6:** Random Mix (non-repeating until all tracks played).
 
@@ -22,10 +21,6 @@
 
 4. **Voice Menu & Admin:**
    - **Dial 9:** System Menu Instructions.
-   - **Dial 90:** Toggle **ALL** Alarms (On/Off).
-   - **Dial 91:** Skip **Next Repeating Alarm** (e.g. skip tomorrow morning).
-   - **Dial 095:** Force **Manual Re-Index** of SD Card (Use after adding files manually).
-   - **Dial 8:** Speak full system status (IP, Signal).
 
 ## 📂 Content Management (SD Card)
 Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` script automatically creates the required structure:
@@ -67,5 +62,4 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 - **WiFi**: Scan and connect logic.
 - **Timezone**: Set offset (e.g. UTC+1 Zurich).
 - **Half-Duplex**: Enhanced echo cancellation for AI features.
-- **AI Settings**: Gemini API Key for dynamic interaction.
 - **Firmware Update**: OTA upload for system updates.

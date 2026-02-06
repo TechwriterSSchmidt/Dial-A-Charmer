@@ -34,20 +34,13 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | Function | Action / Trigger | Description |
 | :--- | :--- | :--- |
 | **Kitchen Timer** | **Receiver On Hook** → Dial `1`-`120` | Sets a countdown timer in minutes. Phone rings when time expires. |
-| **Set One-Time Alarm** | **Receiver On Hook** → Hold Button + Dial `HHMM` | Sets a single priority alarm (e.g., dial `0730` for 7:30 AM). |
-| **Delete Alarm** | **Receiver On Hook** → Hold Button + Lift Receiver | Deletes the manual alarm or cancels a running timer. |
 | **Access Point** | **Receiver On Hook** → Hold Button (10s) | Activates configuration hotspot `Dial-A-Charmer` (Password: none). |
 | **Play Personnel** | **Receiver Lifted** → Dial `1`-`5` | Plays audio content from specific categories (Personas). |
 | **Random Mix** | **Receiver Lifted** → Dial `6` | Plays a randomized, non-repeating mix from all Persona MP3s. |
-| **Gemini AI** | **Receiver Lifted** → Dial `0` | Starts the Gemini AI interaction (if configured). |
-| **System Status** | **Receiver Lifted** → Dial `8` | Announces IP address and WiFi signal strength. |
 | **Voice Menu** | **Receiver Lifted** → Dial `9` | Plays spoken instructions for system codes. |
-| **Toggle Alarms** | **Receiver Lifted** → Dial `90` | Enables or disables all alarms globally. |
-| **Skip Next Alarm** | **Receiver Lifted** → Dial `91` | Skips only the next scheduled recurring alarm. |
-| **Re-Index SD** | **Receiver Lifted** → Dial `095` | Force manual re-scan of SD card content (temporarily disables Web UI). |
 | **Stop Ringing** | **Ringing** → Lift Receiver, then Hang Up | Stops the alarm or timer alert. |
 | **Snooze** | **Ringing** → Lift Receiver (Keep Off Hook) | Snoozes the alarm for the configured duration (default: 9 min). |
-| **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. If mDNS is unavailable, use the device IP announced by Dial `8`. |
+| **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
 
 ### System Capabilities
 
@@ -59,6 +52,22 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Audio Engine** | Multithreaded core supports stutter-free playback and half-duplex echo cancellation. |
 | **Persistence** | Alarms and settings are saved to NVS and survive reboots. Random Mix order is stored on SD and resumes after reboot. |
 | **OTA Updates** | Firmware can be updated wirelessly via the Web Interface. |
+
+## Phonebook Defaults
+
+The phonebook ships with default numbers. You can edit these entries in the Web UI (phonebook page).
+
+| Number | Name | Action |
+| :--- | :--- | :--- |
+| `1` | Persona 1 (Default) | Play Persona 1 compliments |
+| `2` | Persona 2 (Joke) | Play Persona 2 compliments |
+| `3` | Persona 3 (SciFi) | Play Persona 3 compliments |
+| `4` | Persona 4 (Captain) | Play Persona 4 compliments |
+| `5` | Persona 5 | Play Persona 5 compliments |
+| `11` | Random Mix (Surprise) | Play a randomized mix |
+| `110` | Zeitauskunft | Announce time (local) |
+| `900` | Voice Admin Menu | Play spoken admin menu |
+| `999` | System Reboot | Reboot device |
 
 ## Hardware Support & Pinout
 

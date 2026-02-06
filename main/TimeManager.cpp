@@ -3,6 +3,8 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -13,6 +15,8 @@
 static const char *TAG = "TIME_MANAGER";
 static bool _alarm_ringing = false;
 static int _last_triggered_day = -1; // To ensure we trigger only once per day
+static TaskHandle_t s_sntp_task = NULL;
+static bool s_sntp_synced = false;
 
 // --- RTC DS3231 Implementation (IDF 5.x New Driver) ---
 #define I2C_PORT_NUM I2C_NUM_1
@@ -45,6 +49,45 @@ static time_t timegm_utc(struct tm *timeinfo) {
     tzset();
 
     return ts;
+}
+
+static void sntp_monitor_task(void *pvParameters) {
+    int backoff_sec = 5;
+    const int max_backoff_sec = 300;
+    sntp_sync_status_t last_status = SNTP_SYNC_STATUS_RESET;
+
+    while (true) {
+        sntp_sync_status_t status = esp_sntp_get_sync_status();
+        if (status != last_status) {
+            if (status == SNTP_SYNC_STATUS_COMPLETED) {
+                ESP_LOGI(TAG, "SNTP sync status: completed");
+            } else if (status == SNTP_SYNC_STATUS_IN_PROGRESS) {
+                ESP_LOGW(TAG, "SNTP sync status: in progress");
+            } else {
+                ESP_LOGW(TAG, "SNTP sync status: reset");
+            }
+            last_status = status;
+        }
+
+        if (status == SNTP_SYNC_STATUS_COMPLETED || s_sntp_synced) {
+            s_sntp_synced = true;
+            vTaskDelay(pdMS_TO_TICKS(600000));
+            continue;
+        }
+
+        ESP_LOGW(TAG, "SNTP not synced, retry in %d seconds", backoff_sec);
+        vTaskDelay(pdMS_TO_TICKS(backoff_sec * 1000));
+
+        if (!s_sntp_synced) {
+            esp_sntp_stop();
+            esp_sntp_init();
+        }
+
+        if (backoff_sec < max_backoff_sec) {
+            backoff_sec *= 2;
+            if (backoff_sec > max_backoff_sec) backoff_sec = max_backoff_sec;
+        }
+    }
 }
 
 static void i2c_init_rtc() {
@@ -140,6 +183,7 @@ void time_sync_notification_cb(struct timeval *tv) {
     time(&now);
     gmtime_r(&now, &timeinfo);
     rtc_write_time(&timeinfo);
+    s_sntp_synced = true;
 }
 
 void TimeManager::init() {
@@ -155,6 +199,10 @@ void TimeManager::init() {
     esp_sntp_setservername(0, "pool.ntp.org");
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     esp_sntp_init();
+
+    if (!s_sntp_task) {
+        xTaskCreate(sntp_monitor_task, "sntp_monitor", 3072, NULL, 4, &s_sntp_task);
+    }
     
     // Set Timezone
     std::string tz = getTimezone();
