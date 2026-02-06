@@ -255,8 +255,8 @@ static esp_err_t api_ringtones_handler(httpd_req_t *req) {
     if (dir) {
         struct dirent *ent;
         while ((ent = readdir(dir)) != NULL) {
-	    // Filter for common audio files
-            if (strstr(ent->d_name, ".wav") || strstr(ent->d_name, ".mp3")) {
+            // Filter for WAV-only to match available decoder
+            if (strstr(ent->d_name, ".wav")) {
                 cJSON_AddItemToArray(root, cJSON_CreateString(ent->d_name));
             }
         }
@@ -276,7 +276,7 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
         char param[64];
         if (httpd_query_key_value(buf, "file", param, sizeof(param)) == ESP_OK) {
             // Basic security check: no parent directory traversal
-            if (strstr(param, "..") == NULL && (strstr(param, ".wav") || strstr(param, ".mp3"))) {
+            if (strstr(param, "..") == NULL && strstr(param, ".wav")) {
                 char filepath[128];
                 snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
                 
@@ -318,6 +318,23 @@ static esp_err_t api_logs_handler(httpd_req_t *req) {
     }
     cJSON_AddItemToObject(root, "lines", arr);
 
+    const char *json_str = cJSON_PrintUnformatted(root);
+    httpd_resp_send(req, json_str, strlen(json_str));
+    free((void *)json_str);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
+static esp_err_t api_time_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    
+    struct tm now = TimeManager::getCurrentTime();
+    char timeStr[16];
+    strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &now);
+    
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "time", timeStr);
+    
     const char *json_str = cJSON_PrintUnformatted(root);
     httpd_resp_send(req, json_str, strlen(json_str));
     free((void *)json_str);
@@ -373,6 +390,14 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     int32_t snooze = 5;
     if (err == ESP_OK) nvs_get_i32(my_handle, "snooze_min", &snooze);
     cJSON_AddNumberToObject(root, "snooze_min", snooze);
+
+    // Timer Ringtone
+    len = sizeof(val);
+    if (err == ESP_OK && nvs_get_str(my_handle, "timer_ringtone", val, &len) == ESP_OK) {
+        cJSON_AddStringToObject(root, "timer_ringtone", val);
+    } else {
+        cJSON_AddStringToObject(root, "timer_ringtone", "digital_alarm.wav");
+    }
     
     // --- Time & Timezone ---
     struct tm now = TimeManager::getCurrentTime();
@@ -463,6 +488,12 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         item = cJSON_GetObjectItem(root, "snooze_min");
         if (cJSON_IsNumber(item)) {
             nvs_set_i32(my_handle, "snooze_min", item->valueint);
+        }
+
+        // Timer Ringtone
+        item = cJSON_GetObjectItem(root, "timer_ringtone");
+        if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
+            nvs_set_str(my_handle, "timer_ringtone", item->valuestring);
         }
 
         // Timezone
@@ -924,6 +955,14 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &logs_uri);
+
+        httpd_uri_t time_uri = {
+            .uri       = "/api/time",
+            .method    = HTTP_GET,
+            .handler   = api_time_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &time_uri);
 
         // Files (Catch-all)
         // We register this last or use a greedy match

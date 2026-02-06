@@ -707,7 +707,7 @@ extern "C" void app_main(void)
              if (!g_timer_alarm_active) {
                  // Reuse the timer alarm logic for simplicity
                  g_timer_alarm_active = true;
-                 g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (60 * 1000); // Ring for 60s
+                 g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  
                  // Stop anything currently playing
                  audio_pipeline_stop(pipeline);

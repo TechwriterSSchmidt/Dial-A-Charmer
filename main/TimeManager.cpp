@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "driver/i2c_master.h"
 #include "app_config.h"
 
@@ -22,6 +23,29 @@ static i2c_master_dev_handle_t rtc_dev_handle = NULL;
 
 static uint8_t bcd2dec(uint8_t val) { return ((val / 16 * 10) + (val % 16)); }
 static uint8_t dec2bcd(uint8_t val) { return ((val / 10 * 16) + (val % 10)); }
+
+static time_t timegm_utc(struct tm *timeinfo) {
+    if (!timeinfo) return (time_t)-1;
+
+    char tz_backup[64] = {0};
+    const char *old_tz = getenv("TZ");
+    if (old_tz) {
+        strncpy(tz_backup, old_tz, sizeof(tz_backup) - 1);
+    }
+
+    setenv("TZ", "UTC0", 1);
+    tzset();
+    time_t ts = mktime(timeinfo);
+
+    if (old_tz) {
+        setenv("TZ", tz_backup, 1);
+    } else {
+        unsetenv("TZ");
+    }
+    tzset();
+
+    return ts;
+}
 
 static void i2c_init_rtc() {
 #if defined(APP_PIN_RTC_SDA) && defined(APP_PIN_RTC_SCL)
@@ -98,7 +122,7 @@ static void rtc_read_time() {
         t.tm_isdst = -1;
 
         // Set System Time
-        time_t timestamp = mktime(&t);
+        time_t timestamp = timegm_utc(&t);
         struct timeval tv = { .tv_sec = timestamp, .tv_usec = 0 };
         settimeofday(&tv, NULL);
         
@@ -114,7 +138,7 @@ void time_sync_notification_cb(struct timeval *tv) {
     time_t now;
     struct tm timeinfo;
     time(&now);
-    localtime_r(&now, &timeinfo);
+    gmtime_r(&now, &timeinfo);
     rtc_write_time(&timeinfo);
 }
 

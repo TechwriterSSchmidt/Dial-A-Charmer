@@ -73,11 +73,27 @@ const API = {
     getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
     getLogs: () => fetch('/api/logs').then(r => r.json()),
     getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
-    savePhonebook: (data) => fetch('/api/phonebook', { method: 'POST', body: JSON.stringify(data) })
+    savePhonebook: (data) => fetch('/api/phonebook', { method: 'POST', body: JSON.stringify(data) }),
+    getTime: () => fetch('/api/time').then(r => r.json())
 };
+
+// Update alarm clock time display
+function updateAlarmTime() {
+    const timeEl = document.getElementById('alarm-current-time');
+    if (timeEl && state.page === '/alarm') {
+        API.getTime()
+            .then(data => {
+                if (data.time) timeEl.textContent = data.time;
+            })
+            .catch(() => {});
+    }
+}
 
 async function init() {
     onInitStart();
+    
+    // Start alarm time polling
+    setInterval(updateAlarmTime, 1000);
     try {
         console.log("Fetching Settings...");
 
@@ -121,6 +137,7 @@ function t(key) {
 
 function render() {
     const path = window.location.pathname;
+    state.page = path;
     const app = document.getElementById('app');
     
     // Header Logic
@@ -170,6 +187,10 @@ function render() {
     html += renderFooter(path);
     
     app.innerHTML = html;
+
+    if (path === '/alarm') {
+        updateAlarmTime();
+    }
 
     if (path === '/configuration') {
         startLogPolling();
@@ -504,6 +525,9 @@ function renderSettings() {
 
     return `
         <div class="card">
+            <div class="alarm-header">
+                <div class="alarm-current-time" id="alarm-current-time">--:--:--</div>
+            </div>
             ${rows}
         </div>
     `;
@@ -619,6 +643,28 @@ function renderAdvanced() {
                 </div>
             </div>
 
+            <!-- TIMER RINGTONE PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Timer Alarm</h4>
+                
+                <div style="margin-top:12px;">
+                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase; display:block; margin-bottom:8px;">Ringtone</label>
+                    <select id="timer-ringtone-select" onchange="saveTimerRingtone(this.value); previewTone(this.value);" style="width:100%; padding:8px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.9rem;">
+                        ${(() => {
+                            const ringtones = state.ringtones || [];
+                            const current = state.settings.timer_ringtone || 'digital_alarm.wav';
+                            let opts = '';
+                            ringtones.forEach(r => {
+                                const sel = (r === current) ? 'selected' : '';
+                                opts += `<option value="${r}" ${sel}>${r}</option>`;
+                            });
+                            if (ringtones.length === 0) opts = `<option>${current}</option>`;
+                            return opts;
+                        })()}
+                    </select>
+                </div>
+            </div>
+
         </div>
     `;
 }
@@ -642,6 +688,12 @@ window.saveVol = (type, v) => {
          state.settings.volume_handset = val;
          API.saveSettings({volume_handset: val});
     }
+};
+
+window.saveTimerRingtone = (filename) => {
+    if (!filename) return;
+    state.settings.timer_ringtone = filename;
+    API.saveSettings({timer_ringtone: filename});
 };
 
 function renderSetup() {

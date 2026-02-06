@@ -212,6 +212,21 @@ select.alarm-sound-select {
     font-weight: bold;
 }
 
+/* Alarm Time Display */
+.alarm-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.alarm-current-time {
+    color: #d4af37;
+    font-family: 'Plaisir', serif;
+    font-size: 1.8rem;
+    font-weight: bold;
+    margin-top: 15px;
+    letter-spacing: 2px;
+}
+
 /* Phonebook - Notepad Style */
 .pb-wrapper {
   max-width: 550px;

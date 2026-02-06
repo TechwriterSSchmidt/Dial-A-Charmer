@@ -38,7 +38,10 @@
 #define APP_PIN_RTC_SCL 22
 
 // Timer alarm loop duration (minutes)
-#define APP_TIMER_ALARM_LOOP_MINUTES 5
+#define APP_TIMER_ALARM_LOOP_MINUTES 3
+
+// Daily alarm loop duration (minutes)
+#define APP_DAILY_ALARM_LOOP_MINUTES 7
 
 // Timing settings (ms)
 #define APP_DIAL_TIMEOUT_MS 2000
@@ -72,4 +75,4 @@
 
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0
-#define SYSTEM_MONITOR_INTERVAL_MS 5000
+#define SYSTEM_MONITOR_INTERVAL_MS 30000
