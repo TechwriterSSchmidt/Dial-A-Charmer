@@ -418,55 +418,80 @@ function renderSettings() {
     // Ensure alarms exist (backend should send them, but safe fallback)
     const alarms = state.settings.alarms || []; 
     
+    // Display order: Mon(1) ... Sun(0)
+    const displayOrder = [1, 2, 3, 4, 5, 6, 0];
+    const ringtones = state.ringtones || [];
+
     let rows = "";
-    
-    for (let i = 0; i < 7; i++) {
-        // Find existing alarm config for day i
-        const alarm = alarms.find(a => a.d === i) || { h: 7, m: 0, en: false, rmp: false, snd: "" };
-        const timeStr = String(alarm.h).padStart(2,'0') + ":" + String(alarm.m).padStart(2,'0');
-        const checked = alarm.en ? "checked" : "";
-        const rampChecked = alarm.rmp ? "checked" : "";
-        
-        const dayLabel = days[i];
-        
-        // Ringtone Select
-        let sndOpts = `<option value="">Default</option>`;
-        if (state.ringtones) {
-             state.ringtones.forEach(r => {
-                 const sel = (r === alarm.snd) ? "selected" : "";
-                 sndOpts += `<option value="${r}" ${sel}>${r}</option>`;
-             });
-        }
-        
-        rows += `
-            <div class="alarm-row" style="border-bottom:1px solid #333; padding:10px 0;">
-                <div style="display:flex; align-items:center; justify-content:space-between;">
-                    <span style="width:100px; font-weight:bold; color:#ccc;">${dayLabel}</span>
-                    <input type="time" id="time-${i}" value="${timeStr}" style="background:#222; color:#fff; border:1px solid #555; padding:5px; border-radius:4px;">
-                    <label class="switch">
-                        <input type="checkbox" id="check-${i}" ${checked}>
-                        <span class="slider round"></span>
-                    </label>
+    if (alarms.length === 0) {
+        rows = "<p style='text-align:center;'>Loading alarms...</p>";
+    } else {
+        displayOrder.forEach(dayIndex => {
+            const a = alarms.find(x => x.d === dayIndex);
+            if (!a) return;
+
+            const dayName = days[a.d] || "Day " + a.d;
+            const hh = String(a.h).padStart(2,'0');
+            const mm = String(a.m).padStart(2,'0');
+            const timeVal = `${hh}:${mm}`;
+            const checked = a.en ? "checked" : "";
+            const rampChecked = a.rmp ? "checked" : ""; // Rising volume
+            const currentSound = a.snd || "digital_alarm.wav";
+            
+            let soundOpts = "";
+            ringtones.forEach(r => {
+                const sel = (r === currentSound) ? "selected" : "";
+                soundOpts += `<option value="${r}" ${sel}>${r}</option>`;
+            });
+            if (ringtones.length === 0) soundOpts = `<option>${currentSound}</option>`;
+
+            rows += `
+            <div class="alarm-card" style="flex-direction: column; align-items: flex-start;">
+                <!-- Row 1: Day Name -->
+                <div style="width:100%; margin-bottom: 8px; border-bottom: 1px solid #444; padding-bottom: 4px;">
+                    <div class="alarm-day" style="font-family: 'Plaisir', serif;">${dayName}</div>
                 </div>
-                <!-- Advanced Alarm Options -->
-                <div style="margin-top:5px; padding-left:10px; font-size:0.8rem; display:flex; gap:10px; align-items:center;">
-                    <label style="color:#888;">${t('fade')}: <input type="checkbox" id="ramp-${i}" ${rampChecked}></label>
-                    <select id="snd-${i}" onchange="previewTone(this.value)" style="background:#111; color:#aaa; border:1px solid #333; max-width:120px;">
-                        ${sndOpts}
+
+                <!-- Row 2: Active (Left) - Time (Right) -->
+                <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom: 8px;">
+                    <div style="display:flex; align-items:center;">
+                        <label class="switch" title="${t('active')}">
+                            <input type="checkbox" id="check-${a.d}" ${checked}>
+                            <span class="slider"></span>
+                        </label>
+                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('active')}</span>
+                    </div>
+                    <input type="time" value="${timeVal}" id="time-${a.d}" class="alarm-time-input">
+                </div>
+                
+                <!-- Row 3: Fade (Left) - Sound (Right) -->
+                <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display:flex; align-items:center;">
+                        <!-- Scaled removed to match size -->
+                        <label class="switch" title="${t('fade')}">
+                            <input type="checkbox" id="ramp-${a.d}" ${rampChecked}>
+                            <span class="slider"></span>
+                        </label>
+                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('fade')}</span>
+                    </div>
+                    
+                    <select id="snd-${a.d}" onchange="previewTone(this.value)" class="alarm-sound-select">
+                        ${soundOpts}
                     </select>
                 </div>
             </div>
-        `;
-    } 
-    
-    // Snooze Logic ...
-    let snoozeOpts = "";
-    [5, 10, 15, 20, 30].forEach(m => {
-        const sel = (state.settings.snooze_min === m) ? "selected" : "";
-        snoozeOpts += `<option value="${m}" ${sel}>${m} min</option>`;
-    });
+            `;
+        });
 
-    rows += `
+        // Snooze Selection
+        const currentSnooze = state.settings.snooze_min || 5;
+        let snoozeOpts = "";
+        for (let i=1; i<=20; i++) {
+            const sel = (i === currentSnooze) ? "selected" : "";
+            snoozeOpts += `<option value="${i}" ${sel}>${i} min</option>`;
+        }
+
+        rows += `
         <div style="margin-top:20px; text-align:center; padding-top:10px; border-top:1px solid #444;">
             <label style="color:#d4af37; font-family: 'Plaisir', serif; margin-right:10px;">${t('snooze')}:</label>
             <select id="snooze-time" style="padding:5px; border-radius:4px; border:1px solid #666; background-color:#222; color:#f0e6d2; font-weight:bold; text-align:center; text-align-last:center;">
@@ -475,10 +500,10 @@ function renderSettings() {
         </div>
         <div style="text-align:center; margin-top:1rem;"><button onclick="saveAlarms()">${t('save')}</button></div>
         `;
+    }
 
     return `
         <div class="card">
-            <h3>${t('alarm_title')}</h3>
             ${rows}
         </div>
     `;

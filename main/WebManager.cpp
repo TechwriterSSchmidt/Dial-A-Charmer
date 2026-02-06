@@ -82,15 +82,22 @@ static void compact_log_line(const char *src, char *dst, size_t dst_size) {
         return;
     }
 
-    const char *open = strchr(src, '(');
+    // Skip log level character (E, W, I, D, V) if present
+    const char *start = src;
+    if (src[0] && (src[0] == 'E' || src[0] == 'W' || src[0] == 'I' || src[0] == 'D' || src[0] == 'V') && src[1] == ' ') {
+        start = src + 1;  // Skip level letter, keep the space
+    }
+
+    const char *open = strchr(start, '(');
     const char *close = open ? strchr(open, ')') : NULL;
 
+    // No timestamp found, just prefix with '>'
     if (!open || !close || close <= open + 1) {
-        strncpy(dst, src, dst_size - 1);
-        dst[dst_size - 1] = '\0';
+        snprintf(dst, dst_size, ">%s", start);
         return;
     }
 
+    // Check if content in parentheses is all digits (timestamp)
     bool all_digits = true;
     for (const char *p = open + 1; p < close; ++p) {
         if (*p < '0' || *p > '9') {
@@ -100,26 +107,37 @@ static void compact_log_line(const char *src, char *dst, size_t dst_size) {
     }
 
     if (!all_digits) {
-        strncpy(dst, src, dst_size - 1);
-        dst[dst_size - 1] = '\0';
+        snprintf(dst, dst_size, ">%s", start);
         return;
     }
 
-    size_t head_len = (size_t)(open - src);
-    size_t tail_len = strlen(close + 1);
-    size_t needed = head_len + 3 + tail_len + 1;
+    // Remove timestamp: copy head + tail
+    size_t head_len = (size_t)(open - start);
+    const char *tail = close + 1;
+    size_t tail_len = strlen(tail);
+    size_t needed = 1 + head_len + tail_len + 1;  // '>' + head + tail + '\0'
 
     if (needed > dst_size) {
-        strncpy(dst, src, dst_size - 1);
-        dst[dst_size - 1] = '\0';
+        snprintf(dst, dst_size, ">%s", start);
         return;
     }
 
-    memcpy(dst, src, head_len);
-    dst[head_len] = '+';
-    dst[head_len + 1] = ' ';
-    memcpy(dst + head_len + 2, close + 1, tail_len);
-    dst[head_len + 2 + tail_len] = '\0';
+    dst[0] = '>';
+    memcpy(dst + 1, start, head_len);
+    memcpy(dst + 1 + head_len, tail, tail_len);
+    dst[1 + head_len + tail_len] = '\0';
+
+    // Remove tag prefix (everything before and including first ':')
+    char *colon = strchr(dst + 1, ':');
+    if (colon) {
+        // Skip colon and any following spaces
+        const char *msg = colon + 1;
+        while (*msg == ' ') {
+            msg++;
+        }
+        // Move message to start (after '>')
+        memmove(dst + 1, msg, strlen(msg) + 1);
+    }
 }
 
 // DNS Server Task
