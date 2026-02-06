@@ -1240,17 +1240,17 @@ def generate_system_sounds():
                  print(f"  [COPY] Font {font.name}")
                  shutil.copy2(font, dest_file)
 
-    # 3c. Copy Web UI (from main/web_ui -> /sdcard/data)
-    web_ui_src = PROJECT_ROOT / "main" / "web_ui"
-    web_ui_dest = SD_ROOT / "data"
-    if web_ui_src.exists():
-         web_ui_dest.mkdir(parents=True, exist_ok=True)
-         for asset in web_ui_src.glob("*.*"):
-             dest_file = web_ui_dest / asset.name
-             shutil.copy2(asset, dest_file)
-             print(f"  [COPY] Web UI {asset.name}")
-    else:
-         print(f"  [WARN] Web UI source missing: {web_ui_src}")
+    # 3c. (DISABLED) web_ui is embedded in Flash now.
+    # web_ui_src = PROJECT_ROOT / "main" / "web_ui"
+    # web_ui_dest = SD_ROOT / "data"
+    # if web_ui_src.exists():
+    #      web_ui_dest.mkdir(parents=True, exist_ok=True)
+    #      for asset in web_ui_src.glob("*.*"):
+    #          dest_file = web_ui_dest / asset.name
+    #          shutil.copy2(asset, dest_file)
+    #          print(f"  [COPY] Web UI {asset.name}")
+    # else:
+    #      print(f"  [WARN] Web UI source missing: {web_ui_src}")
 
     # 4. Copy Ringtones (From multiple potential sources)
     ringtones_dest = SD_ROOT / "ringtones"

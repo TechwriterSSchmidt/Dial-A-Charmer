@@ -229,15 +229,15 @@ select.alarm-sound-select {
 .pb-notepad {
   width: 100%;
   min-height: 600px;
-  padding: 40px 20px 40px 0;
+  padding: 34px 20px 40px 0;
   box-sizing: border-box;
   background-color: #fffef0;
   background-image:
     radial-gradient(circle at 16px 90px, #080808 9px, transparent 10px),
     radial-gradient(circle at 16px 290px, #080808 9px, transparent 10px),
     radial-gradient(circle at 16px 490px, #080808 9px, transparent 10px),
-    linear-gradient(90deg, rgba(180,40,40,0.22) 0, rgba(180,40,40,0.22) 44px, transparent 44px),
-    linear-gradient(90deg, transparent 44px, #cc3333 44px, #cc3333 46px, transparent 46px),
+    linear-gradient(90deg, rgba(180,40,40,0.22) 0, rgba(180,40,40,0.22) 34px, transparent 34px),
+    linear-gradient(90deg, transparent 34px, #cc3333 34px, #cc3333 36px, transparent 36px),
     repeating-linear-gradient(180deg, rgba(255,170,170,0.9) 0, rgba(255,170,170,0.9) 1px, transparent 1px, transparent 30px);
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat;
   box-shadow: 0 10px 30px rgba(0,0,0,0.8);
@@ -257,46 +257,50 @@ select.alarm-sound-select {
   border: none;
   vertical-align: middle;
   height: 30px;
-  line-height: 30px;
+  line-height: 28px;
 }
 .pb-head th {
   height: 30px;
   vertical-align: middle;
   color: #cc0000;
   font-family: 'AA Triple', serif;
-  font-size: 1.0rem;
+  font-size: 0.9rem;
   border: none;
   line-height: 30px;
   text-align: left;
 }
 .pb-head-num {
-  width: 60px;
-  padding-left: 0;
+  width: 70px;
+  padding-left: 10px;
   padding-right: 10px;
   text-align: right;
 }
 .pb-head-name {
-  padding-left: 10px;
+  padding-left: 18px;
 }
 .pb-phone-icon {
   color: #cc0000;
-  font-size: 1.1rem;
+  font-size: 1.0rem;
   line-height: 1;
+  display: inline-block;
+  width: 100%;
+  text-align: right;
+  transform: translateY(-2px);
 }
 .pb-num-cell {
-  width: 60px;
-  padding-left: 0;
+  width: 70px;
+  padding-left: 12px;
   padding-right: 10px;
   text-align: right;
 }
 .pb-num-text {
   color: #000;
   font-family: 'Plaisir', 'Times New Roman', Times, serif;
-  font-size: 1.35rem;
+  font-size: 1.0rem;
   font-weight: bold;
   text-align: right;
   height: 30px;
-  line-height: 30px;
+  line-height: 28px;
 }
 .pb-input {
   width: 100%;
@@ -305,13 +309,13 @@ select.alarm-sound-select {
   color: #000;
   padding: 0;
   font-family: 'Plaisir', 'Times New Roman', Times, serif;
-  font-size: 1.35rem;
+  font-size: 1.0rem;
   font-weight: bold;
   text-align: right;
   outline: none;
   box-shadow: none;
   height: 30px;
-  line-height: 30px;
+  line-height: 28px;
   border-radius: 0;
 }
 .pb-input::placeholder {
@@ -323,10 +327,10 @@ select.alarm-sound-select {
 }
 .pb-name-cell {
   font-family: 'Plaisir', 'Times New Roman', Times, serif;
-  font-size: 1.15rem;
+  font-size: 0.9rem;
   color: #222;
-  padding-left: 10px;
-  line-height: 30px;
+  padding-left: 20px;
+  line-height: 28px;
 }
 .pb-critical .pb-name-cell {
   color: #d00;
@@ -349,7 +353,25 @@ select.alarm-sound-select {
   margin-top: 10px;
   gap: 10px;
 }
-.wifi-scan-btn,
+.wifi-scan-btn {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  font-size: 0.85rem;
+  line-height: 38px;
+  border-radius: 6px;
+  box-sizing: border-box;
+  background-color: #a52a2a;
+  color: #fff;
+  border: 1px solid #a52a2a;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.wifi-ssid-wrap {
+  display: flex;
+  align-items: center;
+}
 .wifi-ssid-field {
   width: 140px;
   height: 34px;
@@ -358,23 +380,17 @@ select.alarm-sound-select {
   line-height: 34px;
   border-radius: 4px;
   box-sizing: border-box;
-}
-.wifi-scan-btn {
-  background-color: #a52a2a;
-  color: #fff;
-  border: 1px solid #a52a2a;
-  cursor: pointer;
-  text-transform: uppercase;
-}
-.wifi-ssid-wrap {
-  display: flex;
-  align-items: center;
-}
-.wifi-ssid-field {
   background: #111;
   color: #fff;
   border: 1px solid #555;
   opacity: 1;
+}
+.wifi-ssid-text {
+  color: #d4af37;
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  margin: 6px 0 10px;
+  text-align: center;
 }
 
 /* CRT-style console frame */
@@ -393,15 +409,15 @@ select.alarm-sound-select {
   box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
   width: 100%;
   max-width: 520px;
-  min-height: 260px;
+  min-height: 170px;
   margin: 0 auto;
   box-sizing: border-box;
 }
 .crt-text {
   color: #d7b200;
   font-family: 'Courier New', Courier, monospace;
-  font-size: 0.8rem;
+  font-size: 0.65rem;
   letter-spacing: 1px;
-  line-height: 1.2;
+  line-height: 1.15;
   white-space: pre-wrap;
 }

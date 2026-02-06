@@ -24,6 +24,7 @@
 
 // App Includes
 #include "app_config.h"
+#include "led_strip.h" // Added for WS2812
 #include "RotaryDial.h"
 #include "PhonebookManager.h"
 #include "WebManager.h"
@@ -36,6 +37,7 @@ RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIA
 audio_pipeline_handle_t pipeline;
 audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
 audio_board_handle_t board_handle = NULL; // Globale Reference
+led_strip_handle_t g_led_strip = NULL;
 
 // Logic State
 std::string dial_buffer = "";
@@ -534,6 +536,25 @@ extern "C" void app_main(void)
 
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
     xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
+    #endif
+
+    // --- WS2812 Init ---
+    #ifdef APP_PIN_LED
+    ESP_LOGI(TAG, "Initializing WS2812 LED on GPIO %d", APP_PIN_LED);
+    led_strip_config_t strip_config = {
+        .strip_gpio_num = APP_PIN_LED,
+        .max_leds = 1, 
+    };
+    led_strip_rmt_config_t rmt_config = {
+        .resolution_hz = 10 * 1000 * 1000, // 10MHz
+    };
+    // Note: ensure espressif/led_strip component is added
+    if (led_strip_new_rmt_device(&strip_config, &rmt_config, &g_led_strip) == ESP_OK) {
+        led_strip_set_pixel(g_led_strip, 0, 50, 20, 0); // Orange startup
+        led_strip_refresh(g_led_strip);
+    } else {
+        ESP_LOGE(TAG, "Failed to init WS2812!");
+    }
     #endif
 
     board_handle = audio_board_init();

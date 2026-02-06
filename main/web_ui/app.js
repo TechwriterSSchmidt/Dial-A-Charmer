@@ -71,7 +71,9 @@ const API = {
     saveSettings: (data) => fetch('/api/settings', { method: 'POST', body: JSON.stringify(data) }),
     scanWifi: () => fetch('/api/wifi/scan').then(r => r.json()),
     getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
-    getLogs: () => fetch('/api/logs').then(r => r.json())
+    getLogs: () => fetch('/api/logs').then(r => r.json()),
+    getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
+    savePhonebook: (data) => fetch('/api/phonebook', { method: 'POST', body: JSON.stringify(data) })
 };
 
 async function init() {
@@ -195,7 +197,7 @@ function startLogPolling() {
     const fetchLogs = () => {
         API.getLogs().then(data => {
             if (!data || !Array.isArray(data.lines)) return;
-            state.logLines = data.lines.slice(-20);
+            state.logLines = data.lines.slice(-10);
             updateCrt(state.logLines);
         }).catch(() => {
             updateCrt(state.logLines);
@@ -416,9 +418,55 @@ function renderSettings() {
     // Ensure alarms exist (backend should send them, but safe fallback)
     const alarms = state.settings.alarms || []; 
     
-    } else {
-
+    let rows = "";
+    
+    for (let i = 0; i < 7; i++) {
+        // Find existing alarm config for day i
+        const alarm = alarms.find(a => a.d === i) || { h: 7, m: 0, en: false, rmp: false, snd: "" };
+        const timeStr = String(alarm.h).padStart(2,'0') + ":" + String(alarm.m).padStart(2,'0');
+        const checked = alarm.en ? "checked" : "";
+        const rampChecked = alarm.rmp ? "checked" : "";
+        
+        const dayLabel = days[i];
+        
+        // Ringtone Select
+        let sndOpts = `<option value="">Default</option>`;
+        if (state.ringtones) {
+             state.ringtones.forEach(r => {
+                 const sel = (r === alarm.snd) ? "selected" : "";
+                 sndOpts += `<option value="${r}" ${sel}>${r}</option>`;
+             });
+        }
+        
         rows += `
+            <div class="alarm-row" style="border-bottom:1px solid #333; padding:10px 0;">
+                <div style="display:flex; align-items:center; justify-content:space-between;">
+                    <span style="width:100px; font-weight:bold; color:#ccc;">${dayLabel}</span>
+                    <input type="time" id="time-${i}" value="${timeStr}" style="background:#222; color:#fff; border:1px solid #555; padding:5px; border-radius:4px;">
+                    <label class="switch">
+                        <input type="checkbox" id="check-${i}" ${checked}>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+                <!-- Advanced Alarm Options -->
+                <div style="margin-top:5px; padding-left:10px; font-size:0.8rem; display:flex; gap:10px; align-items:center;">
+                    <label style="color:#888;">${t('fade')}: <input type="checkbox" id="ramp-${i}" ${rampChecked}></label>
+                    <select id="snd-${i}" onchange="previewTone(this.value)" style="background:#111; color:#aaa; border:1px solid #333; max-width:120px;">
+                        ${sndOpts}
+                    </select>
+                </div>
+            </div>
+        `;
+    } 
+    
+    // Snooze Logic ...
+    let snoozeOpts = "";
+    [5, 10, 15, 20, 30].forEach(m => {
+        const sel = (state.settings.snooze_min === m) ? "selected" : "";
+        snoozeOpts += `<option value="${m}" ${sel}>${m} min</option>`;
+    });
+
+    rows += `
         <div style="margin-top:20px; text-align:center; padding-top:10px; border-top:1px solid #444;">
             <label style="color:#d4af37; font-family: 'Plaisir', serif; margin-right:10px;">${t('snooze')}:</label>
             <select id="snooze-time" style="padding:5px; border-radius:4px; border:1px solid #666; background-color:#222; color:#f0e6d2; font-weight:bold; text-align:center; text-align-last:center;">
@@ -427,10 +475,10 @@ function renderSettings() {
         </div>
         <div style="text-align:center; margin-top:1rem;"><button onclick="saveAlarms()">${t('save')}</button></div>
         `;
-    }
 
     return `
         <div class="card">
+            <h3>${t('alarm_title')}</h3>
             ${rows}
         </div>
     `;
@@ -507,18 +555,9 @@ function renderAdvanced() {
             <!-- WIFI PANEL -->
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                  <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">WiFi Network</h4>
-                 
-                 <div class="wifi-row">
-                    <!-- Scan Button (Left) -->
-                    <button onclick="nav('/setup')" class="wifi-scan-btn">SCAN</button>
-                    
-                    <!-- SSID Display (Right, styled like Select) -->
-                    <div class="wifi-ssid-wrap">
-                        <select disabled class="wifi-ssid-field">
-                            <option>${state.settings.wifi_ssid || 'No Net'}</option>
-                        </select>
-                    </div>
-                 </div>
+
+                 <div class="wifi-ssid-text">${state.settings.wifi_ssid || 'No Net'}</div>
+                 <button onclick="nav('/setup')" class="wifi-scan-btn">SCAN</button>
             </div>
 
             <!-- CONSOLE PANEL -->

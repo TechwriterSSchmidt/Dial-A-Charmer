@@ -77,6 +77,51 @@ static void init_log_capture() {
     }
 }
 
+static void compact_log_line(const char *src, char *dst, size_t dst_size) {
+    if (!src || !dst || dst_size == 0) {
+        return;
+    }
+
+    const char *open = strchr(src, '(');
+    const char *close = open ? strchr(open, ')') : NULL;
+
+    if (!open || !close || close <= open + 1) {
+        strncpy(dst, src, dst_size - 1);
+        dst[dst_size - 1] = '\0';
+        return;
+    }
+
+    bool all_digits = true;
+    for (const char *p = open + 1; p < close; ++p) {
+        if (*p < '0' || *p > '9') {
+            all_digits = false;
+            break;
+        }
+    }
+
+    if (!all_digits) {
+        strncpy(dst, src, dst_size - 1);
+        dst[dst_size - 1] = '\0';
+        return;
+    }
+
+    size_t head_len = (size_t)(open - src);
+    size_t tail_len = strlen(close + 1);
+    size_t needed = head_len + 3 + tail_len + 1;
+
+    if (needed > dst_size) {
+        strncpy(dst, src, dst_size - 1);
+        dst[dst_size - 1] = '\0';
+        return;
+    }
+
+    memcpy(dst, src, head_len);
+    dst[head_len] = '+';
+    dst[head_len + 1] = ' ';
+    memcpy(dst + head_len + 2, close + 1, tail_len);
+    dst[head_len + 2 + tail_len] = '\0';
+}
+
 // DNS Server Task
 static void dns_server_task(void *pvParameters) {
     uint8_t data[512];
@@ -249,7 +294,9 @@ static esp_err_t api_logs_handler(httpd_req_t *req) {
     cJSON *root = cJSON_CreateObject();
     cJSON *arr = cJSON_CreateArray();
     for (size_t i = 0; i < count; ++i) {
-        cJSON_AddItemToArray(arr, cJSON_CreateString(lines[i]));
+        char compacted[LOG_LINE_MAX];
+        compact_log_line(lines[i], compacted, sizeof(compacted));
+        cJSON_AddItemToArray(arr, cJSON_CreateString(compacted));
     }
     cJSON_AddItemToObject(root, "lines", arr);
 
@@ -473,6 +520,33 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_phonebook_get_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    std::string json = phonebook.getJson();
+    httpd_resp_send(req, json.c_str(), json.length());
+    return ESP_OK;
+}
+
+static esp_err_t api_phonebook_post_handler(httpd_req_t *req) {
+    char *buf = (char *)malloc(req->content_len + 1);
+    if (!buf) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+    int ret = httpd_req_recv(req, buf, req->content_len);
+    if (ret <= 0) {
+        free(buf);
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+    
+    phonebook.saveFromJson(std::string(buf));
+    free(buf);
+    
+    httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
 static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
     wifi_scan_config_t scan_config = {
         .ssid = NULL,
@@ -542,16 +616,21 @@ extern const char style_css_start[]  asm("_binary_style_css_start");
 extern const char style_css_end[]    asm("_binary_style_css_end");
 extern const char app_js_start[]     asm("_binary_app_js_start");
 extern const char app_js_end[]       asm("_binary_app_js_end");
+extern const char font_plaisir_start[] asm("_binary_3620_plaisir_app_otf_start");
+extern const char font_plaisir_end[]   asm("_binary_3620_plaisir_app_otf_end");
+extern const char font_aatriple_start[] asm("_binary_AATriple_otf_start");
+extern const char font_aatriple_end[]   asm("_binary_AATriple_otf_end");
 
 static esp_err_t static_file_handler(httpd_req_t *req) {
     const char* file_path = req->uri;
     const char* file_start = NULL;
     const char* file_end = NULL;
     const char* mime_type = "text/plain";
+    bool is_font = false;
 
     ESP_LOGI(TAG, "Handling URI: %s", file_path);
 
-    // Map URIs to embedded files
+    // 1. Try Embedded Files (Priority: Flash)
     // SPA Routing: Serve index.html for known client-side routes
     if (strcmp(file_path, "/") == 0 || 
         strcmp(file_path, "/index.html") == 0 ||
@@ -573,7 +652,18 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         file_start = app_js_start;
         file_end = app_js_end;
         mime_type = "application/javascript";
+    } else if (strncmp(file_path, "/fonts/3620-plaisir-app.otf", 27) == 0) {
+        file_start = font_plaisir_start;
+        file_end = font_plaisir_end;
+        mime_type = "application/font-otf";
+        is_font = true;
+    } else if (strncmp(file_path, "/fonts/AATriple.otf", 19) == 0) {
+        file_start = font_aatriple_start;
+        file_end = font_aatriple_end;
+        mime_type = "application/font-otf";
+        is_font = true;
     } else if (strcmp(file_path, "/favicon.ico") == 0) {
+
         httpd_resp_send_404(req);
         return ESP_OK;
     } else if (strcmp(file_path, "/hotspot-detect.html") == 0 || 
@@ -583,46 +673,57 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         // Captive Portal Hijack: Serve index.html
         file_start = index_html_start;
         file_end = index_html_end;
-        mime_type = "text/html";    }
+        mime_type = "text/html";
+    }
 
     if (file_start) {
         size_t file_size = file_end - file_start;
         // If EMBED_TXTFILES adds a null terminator, exclude it from serving
-        if (file_size > 0 && file_start[file_size - 1] == '\0') {
+        if (!is_font && file_size > 0 && file_start[file_size - 1] == '\0') {
             file_size--;
         }
 
         ESP_LOGI(TAG, "Serving embedded file: %s (Size: %d)", file_path, (int)file_size);
+        if (is_font) {
+            httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+        }
         httpd_resp_set_type(req, mime_type);
         httpd_resp_send(req, file_start, file_size);
         return ESP_OK;
     } else {
-#define HTTPD_MAX_URI_LEN 512
-
-        // Fallback to SD Card
-        char filepath[HTTPD_MAX_URI_LEN + 64];
+        // 2. Selective SD Card Serving (Ringtones ONLY)
+        // We do NOT serve arbitrary files from /sdcard/data to keep the system clean.
+        // Web Interface is fully embedded in Flash.
         
-        // SPECIAL ROUTING FOR FONTS
-        // If URI starts with /fonts/, map to /sdcard/fonts/
-        if (strncmp(file_path, "/fonts/", 7) == 0) {
-            snprintf(filepath, sizeof(filepath), "/sdcard%s", file_path);
-        } else if (strncmp(file_path, "/ringtones/", 11) == 0) {
-            snprintf(filepath, sizeof(filepath), "/sdcard%s", file_path);
-        } else {
-            // Default: map to /sdcard/data/
-            snprintf(filepath, sizeof(filepath), "/sdcard/data%s", file_path);
+        char filepath[600]; // Increased buffer size to avoid truncation warning
+        bool allow_sd = false;
+
+        if (strncmp(file_path, "/ringtones/", 11) == 0) {
+            // Check length to prevent overflow (buffer 600, "/sdcard" is 7)
+            if (strlen(file_path) < (sizeof(filepath) - 8)) {
+                snprintf(filepath, sizeof(filepath), "/sdcard%s", file_path);
+                allow_sd = true;
+            }
+        }
+
+        if (!allow_sd) {
+             // Not found in Flash, and not allowed from SD -> 404
+             ESP_LOGW(TAG, "404 Not Found (and not in SD whitelist): %s", file_path);
+             httpd_resp_send_404(req);
+             return ESP_FAIL;
         }
         
+        // Serve allowed SD file
         struct stat st;
         if (stat(filepath, &st) == -1) {
-            ESP_LOGW(TAG, "File not found: %s", filepath);
+            ESP_LOGW(TAG, "SD File allowed but not found: %s", filepath);
             httpd_resp_send_404(req);
             return ESP_FAIL;
         }
         
         FILE* f = fopen(filepath, "r");
         if (!f) {
-            ESP_LOGE(TAG, "Failed to open: %s", filepath);
+            ESP_LOGE(TAG, "Failed to open allowed SD file: %s", filepath);
             httpd_resp_send_404(req);
             return ESP_FAIL;
         }
@@ -781,6 +882,22 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &preview_uri);
+
+        httpd_uri_t pb_get_uri = {
+            .uri       = "/api/phonebook",
+            .method    = HTTP_GET,
+            .handler   = api_phonebook_get_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &pb_get_uri);
+
+        httpd_uri_t pb_post_uri = {
+            .uri       = "/api/phonebook",
+            .method    = HTTP_POST,
+            .handler   = api_phonebook_post_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &pb_post_uri);
 
         httpd_uri_t logs_uri = {
             .uri       = "/api/logs",

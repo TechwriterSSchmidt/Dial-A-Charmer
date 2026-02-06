@@ -4,7 +4,7 @@
 
 // Rotary Dial & Inputs
 #define APP_PIN_DIAL_PULSE 5   
-#define APP_PIN_DIAL_MODE  23
+#define APP_PIN_DIAL_MODE  -1 // Disabled to free GPIO 23
 #define APP_PIN_HOOK       19 // Key 3 (IO19)
 #define APP_PIN_EXTRA_BTN  36 // Key 1 (IO36)
 
@@ -12,12 +12,16 @@
 #define APP_PIN_KEY3       19
 #define APP_KEY3_ACTIVE_LOW true
 
-// Dial Mode: "Closed to GND" during dialing -> LOW. So Active Low.
+// Dial Mode behavior (Ignored if pin is -1)
 #define APP_DIAL_MODE_ACTIVE_LOW true 
 
 // Pulse: "Closed to GND" (Low) when idle. Opens (High) for pulse.
 // Logic counts when input matches the "Active Low" setting logic
 #define APP_DIAL_PULSE_ACTIVE_LOW true
+
+// SD Card
+#define APP_PIN_SD_CS      13
+#define APP_PIN_LED        23 // Reused from Dial Mode for WS2812
 
 #define APP_HOOK_ACTIVE_LOW  true 
 
@@ -64,6 +68,7 @@
 
 // SD Card
 #define APP_PIN_SD_CS      13
+// #define APP_PIN_LED        23 // Reused from Dial Mode for WS2812 - Defined above
 
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0
