@@ -508,6 +508,7 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         strcmp(file_path, "/settings") == 0 ||
         strcmp(file_path, "/phonebook") == 0 ||
         strcmp(file_path, "/advanced") == 0 ||
+        strcmp(file_path, "/configuration") == 0 ||
         strcmp(file_path, "/setup") == 0) {
             
         file_start = index_html_start;

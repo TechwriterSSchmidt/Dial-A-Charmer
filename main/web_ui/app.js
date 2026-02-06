@@ -299,7 +299,7 @@ function renderPhonebook() {
                 <table class="pb-table">
                     <thead>
                         <tr class="pb-head">
-                            <th class="pb-head-num">Tel.</th>
+                            <th class="pb-head-num"><span class="pb-phone-icon">&#9742;</span></th>
                             <th class="pb-head-name">Name</th>
                         </tr>
                     </thead>
@@ -549,17 +549,24 @@ function renderAdvanced() {
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                  <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">WiFi Network</h4>
                  
-                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
+                 <div class="wifi-row">
                     <!-- Scan Button (Left) -->
-                    <button onclick="nav('/setup')" style="width:140px; padding:6px; background-color:#a52a2a; color:white; border:1px solid #a52a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; text-transform:uppercase; line-height:1.2;">SCAN</button>
+                    <button onclick="nav('/setup')" class="wifi-scan-btn">SCAN</button>
                     
                     <!-- SSID Display (Right, styled like Select) -->
-                    <div style="text-align:right; display:flex; align-items:center;">
-                        <select disabled style="padding:6px; width:140px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem; opacity:1; line-height:1.2;">
+                    <div class="wifi-ssid-wrap">
+                        <select disabled class="wifi-ssid-field">
                             <option>${state.settings.wifi_ssid || 'No Net'}</option>
                         </select>
                     </div>
                  </div>
+            </div>
+
+            <!-- CONSOLE PANEL -->
+            <div class="crt-panel">
+                <div class="crt-screen">
+                    <div class="crt-text">READY&gt;_</div>
+                </div>
             </div>
 
             <!-- VOLUME PANEL -->

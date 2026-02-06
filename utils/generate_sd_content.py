@@ -36,7 +36,7 @@ GTTS_DE_MAX_WORKERS = 6
 ENABLED_LANGS = {"de", "en"}
 
 # Non-interactive mode for persona assignment
-NON_INTERACTIVE = True
+NON_INTERACTIVE = False
 PERSONA_DEFAULTS = {
     1: "TGIF",
     2: "badran",
@@ -704,6 +704,13 @@ def generate_sd_card_structure(categories):
             return sorted_cats[(persona_idx - 1) % len(sorted_cats)]
         return ""
 
+    def extract_category_from_wav_name(filename):
+        stem = Path(filename).stem
+        parts = stem.split('_')
+        if len(parts) < 3:
+            return stem
+        return "_".join(parts[:-2])
+
     persona_assignments = {}
 
     for persona_idx in range(1, 6):
@@ -779,6 +786,14 @@ def generate_sd_card_structure(categories):
                             copied_count += 1
             
             print(f"     Copied {copied_count} files.")
+
+            display_name = ""
+            if playlist_tracks["en"]:
+                display_name = extract_category_from_wav_name(Path(playlist_tracks["en"][0]).name)
+            elif playlist_tracks["de"]:
+                display_name = extract_category_from_wav_name(Path(playlist_tracks["de"][0]).name)
+            if display_name:
+                persona_assignments[persona_idx] = display_name
             
             # Generate Playlists
             playlist_dir = SD_ROOT / "playlists"
@@ -859,6 +874,10 @@ def generate_tones(base_dir):
     # 3. Beep (1000Hz, 200ms)
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-3.0)
     save(beep, "beep.wav")
+
+    # 3b. Silence (200ms)
+    silence = AudioSegment.silent(duration=200)
+    save(silence, "silence_200ms.wav")
 
     # 4. Error Tone (150Hz Sawtooth, 500ms)
     error = Sawtooth(150).to_audio_segment(duration=500).apply_gain(-3.0)
