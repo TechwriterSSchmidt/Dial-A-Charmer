@@ -186,7 +186,7 @@ SYSTEM_PROMPTS = {
     
     # German System Messages (Google TTS, female voice)
     "system/snooze_active_de.wav": ("Schlummermodus aktiv.", "de", None),
-    "system/system_ready_de.wav": ("System bereit.", "de", None),
+    "system/system_ready_de.wav": ("System ready.", "en", None),
     "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
     "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
     "system/number_invalid_de.wav": ("Kein Anschluss unter dieser Nummer.", "de", None),

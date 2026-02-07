@@ -15,7 +15,7 @@ TIME_CONFIG = {
 
 SYSTEM_PROMPTS_DE = {
     "system/snooze_active_de.wav": "Snooze aktiv.",
-    "system/system_ready_de.wav": "System bereit.",
+    "system/system_ready_de.wav": "System ready.",
     "system/time_unavailable_de.wav": "Zeit-Synchronisation fehlgeschlagen.",
     "system/timer_stopped_de.wav": "Timer abgebrochen.",
     "system/alarm_stopped_de.wav": "Alarm abgebrochen.",
