@@ -409,6 +409,8 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     uint8_t vol_a = APP_ALARM_DEFAULT_VOLUME;
     if (err == ESP_OK) nvs_get_u8(my_handle, "vol_alarm", &vol_a);
     cJSON_AddNumberToObject(root, "vol_alarm", vol_a);
+    // Send configured minimum to frontend
+    cJSON_AddNumberToObject(root, "vol_alarm_min", APP_ALARM_MIN_VOLUME);
 
     // Snooze Time
     int32_t snooze = APP_SNOOZE_DEFAULT_MINUTES;

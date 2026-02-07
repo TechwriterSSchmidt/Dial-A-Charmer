@@ -603,10 +603,10 @@ function renderAdvanced() {
                 <!-- Alarm Volume -->
                 <div style="margin-top:8px;">
                      <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Alarm (Min 60%)</label>
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Alarm (Min ${state.settings.vol_alarm_min}%)</label>
                         <span id="vol-disp-alarm" style="color:#d4af37; font-weight:bold;">${state.settings.vol_alarm || 90}%</span>
                     </div>
-                    <input type="range" min="60" max="100" value="${state.settings.vol_alarm || 90}" 
+                    <input type="range" min="${state.settings.vol_alarm_min || 60}" max="100" value="${state.settings.vol_alarm || 90}" 
                            oninput="document.getElementById('vol-disp-alarm').innerText=this.value+'%'"
                            onchange="saveVol('alarm', this.value)" style="width:100%"/>
                 </div>
