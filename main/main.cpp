@@ -1144,14 +1144,18 @@ extern "C" void app_main(void)
     // --- 4. Audio Pipeline Setup ---
     ESP_LOGI(TAG, "Creating audio pipeline...");
     audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
+    pipeline_cfg.rb_size = 16 * 1024;
     pipeline = audio_pipeline_init(&pipeline_cfg);
 
     fatfs_stream_cfg_t fatfs_cfg = FATFS_STREAM_CFG_DEFAULT();
     fatfs_cfg.type = AUDIO_STREAM_READER;
+    fatfs_cfg.buf_sz = 8 * 1024;
+    fatfs_cfg.out_rb_size = 16 * 1024;
     fatfs_stream = fatfs_stream_init(&fatfs_cfg);
 
     wav_decoder_cfg_t wav_cfg = DEFAULT_WAV_DECODER_CONFIG();
     wav_cfg.stack_in_ext = false; // Disable PSRAM stack to avoid FreeRTOS patch requirement
+    wav_cfg.out_rb_size = 16 * 1024;
     wav_decoder = wav_decoder_init(&wav_cfg);
 
     #ifdef __GNUC__
@@ -1183,6 +1187,8 @@ extern "C" void app_main(void)
     i2s_cfg.type = AUDIO_STREAM_WRITER;
     i2s_cfg.stack_in_ext = false; // Use internal RAM
     i2s_cfg.std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO; // Duplicate Mono to Stereo
+    i2s_cfg.out_rb_size = 16 * 1024;
+    i2s_cfg.buffer_len = 7200;
     i2s_writer = i2s_stream_init(&i2s_cfg);
 
     audio_pipeline_register(pipeline, fatfs_stream, "file");
