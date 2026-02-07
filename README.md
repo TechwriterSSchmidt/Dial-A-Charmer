@@ -4,7 +4,7 @@ Dial-A-Charmer is a vintage telephone brought back to life with more personality
 
 **Easy to Install:**
 1.  **ESP-IDF Build (Recommended):** Build and flash from source with ESP-IDF.
-2.  **Manual Flash:** Download the [latest firmware.bin](https://TechwriterSSchmidt.github.io/Dial-A-Charmer/firmware.bin) and upload it manually.
+2.  **Manual Flash:** Download the latest build from [firmware/dial-a-charmer-2026-02-07.bin](firmware/dial-a-charmer-2026-02-07.bin) and upload it manually.
 
 ## Support my projects
 
@@ -128,7 +128,7 @@ This all-in-one script prepares a complete `sd_card_content` folder for you. It 
     *   **Structure:** Creates all required folders (`persona_XX`, `system`, `time` etc.).
     *   **TTS Integration:** Automatically downloads high-quality Google TTS speech files for Numbers, Dates, and System Messages in both **German & English**.
     *   **Tone Synthesis:** Generates clean `wav` files for Dial Tone, Busy Signal, and Beeps using Python's audio libraries (no recording needed).
-    *   **Offline Fonts:** Downloads "Zen Tokyo Zoo" and "Pompiere" fonts to `/system/fonts/` so the Web UI looks perfect even without Internet.
+    *   **Offline Fonts:** Copies `AATriple.otf` and `3620-plaisir-app.otf` into `/fonts/` so the Web UI looks correct offline. License texts are included alongside the fonts in `/fonts/` and on the SD card. Thanks to the font creators. Sources: https://fontesk.com/triple-font/ and https://fontesk.com/plaisir-font/
 *   **Output:** Populates `sd_card_content/` which you just copy to your SD card.
 
 **`split_audio.py`**
