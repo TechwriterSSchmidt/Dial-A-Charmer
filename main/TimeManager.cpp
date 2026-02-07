@@ -29,6 +29,8 @@ static i2c_master_dev_handle_t rtc_dev_handle = NULL;
 static uint8_t bcd2dec(uint8_t val) { return ((val / 16 * 10) + (val % 16)); }
 static uint8_t dec2bcd(uint8_t val) { return ((val / 10 * 16) + (val % 10)); }
 
+static bool rtc_read_time_raw(struct tm *out_tm);
+
 static time_t timegm_utc(struct tm *timeinfo) {
     if (!timeinfo) return (time_t)-1;
 
@@ -146,34 +148,40 @@ static void rtc_write_time(struct tm *timeinfo) {
 }
 
 static void rtc_read_time() {
-    if (!rtc_dev_handle) return;
-    
+    struct tm t;
+    if (!rtc_read_time_raw(&t)) {
+        ESP_LOGE(TAG, "DS3231 Read Failed (or no RTC present)");
+        return;
+    }
+
+    // Set System Time
+    time_t timestamp = timegm_utc(&t);
+    struct timeval tv = { .tv_sec = timestamp, .tv_usec = 0 };
+    settimeofday(&tv, NULL);
+
+    ESP_LOGI(TAG, "System Time set from DS3231: %s", asctime(&t));
+}
+
+static bool rtc_read_time_raw(struct tm *out_tm) {
+    if (!rtc_dev_handle || !out_tm) return false;
+
     uint8_t reg = 0x00;
     uint8_t data[7];
-    
+
     esp_err_t ret = i2c_master_transmit_receive(rtc_dev_handle, &reg, 1, data, 7, -1);
+    if (ret != ESP_OK) return false;
 
-    if (ret == ESP_OK) {
-        struct tm t;
-        memset(&t, 0, sizeof(struct tm));
-        t.tm_sec  = bcd2dec(data[0]);
-        t.tm_min  = bcd2dec(data[1]);
-        t.tm_hour = bcd2dec(data[2]);
-        t.tm_wday = bcd2dec(data[3]) - 1;
-        t.tm_mday = bcd2dec(data[4]);
-        t.tm_mon  = bcd2dec(data[5] & 0x7F) - 1; 
-        t.tm_year = bcd2dec(data[6]) + 100;
-        t.tm_isdst = -1;
+    memset(out_tm, 0, sizeof(struct tm));
+    out_tm->tm_sec  = bcd2dec(data[0]);
+    out_tm->tm_min  = bcd2dec(data[1]);
+    out_tm->tm_hour = bcd2dec(data[2]);
+    out_tm->tm_wday = bcd2dec(data[3]) - 1;
+    out_tm->tm_mday = bcd2dec(data[4]);
+    out_tm->tm_mon  = bcd2dec(data[5] & 0x7F) - 1;
+    out_tm->tm_year = bcd2dec(data[6]) + 100;
+    out_tm->tm_isdst = -1;
 
-        // Set System Time
-        time_t timestamp = timegm_utc(&t);
-        struct timeval tv = { .tv_sec = timestamp, .tv_usec = 0 };
-        settimeofday(&tv, NULL);
-        
-        ESP_LOGI(TAG, "System Time set from DS3231: %s", asctime(&t));
-    } else {
-         ESP_LOGE(TAG, "DS3231 Read Failed (or no RTC present)");
-    }
+    return true;
 }
 
 // Callback for SNTP
@@ -322,6 +330,17 @@ struct tm TimeManager::getCurrentTime() {
     time(&now);
     localtime_r(&now, &timeinfo);
     return timeinfo;
+}
+
+struct tm TimeManager::getCurrentTimeRtc() {
+    struct tm rtc_tm;
+    if (rtc_read_time_raw(&rtc_tm)) {
+        time_t ts = timegm_utc(&rtc_tm);
+        struct tm local_tm;
+        localtime_r(&ts, &local_tm);
+        return local_tm;
+    }
+    return getCurrentTime();
 }
 
 bool TimeManager::checkAlarm() {

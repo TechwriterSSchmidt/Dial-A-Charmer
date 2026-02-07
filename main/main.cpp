@@ -115,7 +115,7 @@ static std::string time_path(const char *name) {
 }
 
 static void announce_time_now() {
-    struct tm now = TimeManager::getCurrentTime();
+    struct tm now = TimeManager::getCurrentTimeRtc();
     if (now.tm_year < 120) {
         start_voice_queue({system_path("time_unavailable")});
         return;
@@ -847,20 +847,10 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing WS2812 LED on GPIO %d", APP_PIN_LED);
     led_strip_config_t strip_config = {
         .strip_gpio_num = APP_PIN_LED,
-        .max_leds = 1,
-        .led_pixel_format = LED_PIXEL_FORMAT_GRB,
-        .led_model = LED_MODEL_WS2812,
-        .flags = {
-            .invert_out = 0,
-        },
+        .max_leds = 1, 
     };
     led_strip_rmt_config_t rmt_config = {
-        .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = 10 * 1000 * 1000, // 10MHz
-        .mem_block_symbols = 0,
-        .flags = {
-            .with_dma = 0,
-        },
     };
     // Note: ensure espressif/led_strip component is added
     if (led_strip_new_rmt_device(&strip_config, &rmt_config, &g_led_strip) == ESP_OK) {

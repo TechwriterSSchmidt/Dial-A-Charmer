@@ -317,29 +317,6 @@ select.alarm-sound-select {
   height: 30px;
   line-height: 28px;
 }
-.pb-input {
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: #000;
-  padding: 0;
-  font-family: 'Plaisir', 'Times New Roman', Times, serif;
-  font-size: 1.0rem;
-  font-weight: bold;
-  text-align: right;
-  outline: none;
-  box-shadow: none;
-  height: 30px;
-  line-height: 28px;
-  border-radius: 0;
-}
-.pb-input::placeholder {
-  color: #aaa;
-  opacity: 0.6;
-}
-.pb-input:focus {
-  background: rgba(255,255,0,0.12);
-}
 .pb-name-cell {
   font-family: 'Plaisir', 'Times New Roman', Times, serif;
   font-size: 0.9rem;
@@ -355,41 +332,46 @@ select.alarm-sound-select {
   color: #000;
   font-weight: bold;
 }
-.pb-critical .pb-input {
-  color: #000;
-  font-weight: bold;
-}
 
 .pb-sub .pb-num-cell {
-  padding: 0 10px;
-  width: 60px;
-  text-align: center;
-  font-size: 0.75rem;
-  color: #666;
+  padding: 0 6px 0 2px;
+  width: 52px;
+  text-align: right;
+  font-size: 0.56rem;
+  color: #000;
 }
 
-.pb-sub {
-  background: rgba(212, 175, 55, 0.03);
-  border-left: 3px solid rgba(212, 175, 55, 0.3);
-}
-
-.pb-sub .pb-name-cell {
-  padding-left: 15px;
+.pb-sub .pb-num-cell::before {
+  content: '> ';
+  color: #444;
+  margin-right: 2px;
 }
 
 .pb-sub-text {
-  font-size: 0.82rem;
-  color: #555;
-  line-height: 26px;
-  font-style: italic;
+  font-size: 0.58rem;
+  color: #444;
+  padding-left: 4px;
+  line-height: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
 }
 
-.pb-sub-text::before {
-  content: '▸ ';
-  color: #d4af37;
-  font-style: normal;
-  margin-right: 6px;
+
+.pb-sub {
+  background: rgba(0, 0, 0, 0.02);
+  border-left: 3px solid rgba(0, 0, 0, 0.12);
+  height: 16px;
 }
+
+.pb-sub .pb-name-cell {
+  padding: 0 4px;
+}
+
+.pb-sub td {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 
 /* WiFi panel alignment */
 .wifi-row {

@@ -576,26 +576,6 @@ static esp_err_t api_phonebook_get_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-static esp_err_t api_phonebook_post_handler(httpd_req_t *req) {
-    char *buf = (char *)malloc(req->content_len + 1);
-    if (!buf) {
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-    int ret = httpd_req_recv(req, buf, req->content_len);
-    if (ret <= 0) {
-        free(buf);
-        return ESP_FAIL;
-    }
-    buf[ret] = '\0';
-    
-    phonebook.saveFromJson(std::string(buf));
-    free(buf);
-    
-    httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
-}
-
 static esp_err_t api_wifi_scan_handler(httpd_req_t *req) {
     wifi_scan_config_t scan_config = {
         .ssid = NULL,
@@ -939,14 +919,6 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &pb_get_uri);
-
-        httpd_uri_t pb_post_uri = {
-            .uri       = "/api/phonebook",
-            .method    = HTTP_POST,
-            .handler   = api_phonebook_post_handler,
-            .user_ctx  = NULL
-        };
-        httpd_register_uri_handler(server, &pb_post_uri);
 
         httpd_uri_t logs_uri = {
             .uri       = "/api/logs",

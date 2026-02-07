@@ -25,6 +25,7 @@ public:
     static void stopAlarm();
     
     static struct tm getCurrentTime();
+    static struct tm getCurrentTimeRtc();
 
     // SNTP Sync
     static time_t getLastNtpSync();

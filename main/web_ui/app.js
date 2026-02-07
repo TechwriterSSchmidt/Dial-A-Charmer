@@ -74,7 +74,6 @@ const API = {
     getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
     getLogs: () => fetch('/api/logs').then(r => r.json()),
     getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
-    savePhonebook: (data) => fetch('/api/phonebook', { method: 'POST', body: JSON.stringify(data) }),
     getTime: () => fetch('/api/time').then(r => r.json())
 };
 
@@ -301,7 +300,6 @@ window.onpopstate = render;
 // --- SPECIFIC PAGES ---
 function renderPhonebook() {
     const isDe = state.lang === 'de';
-    const tTitle = isDe ? "Telefonbuch" : "Phonebook";
     const fullData = state.phonebook || {};
 
     const systemItems = [
@@ -372,7 +370,6 @@ function renderPhonebook() {
 
     return `
         <div class="pb-wrapper">
-            <div class="pb-title">${tTitle}</div>
             <div class="pb-notepad">
                 <table class="pb-table">
                     <thead>
@@ -390,66 +387,6 @@ function renderPhonebook() {
     `;
 }
 
-window.savePhonebook = () => {
-    const isDe = state.lang === 'de';
-    const fullData = state.phonebook || {};
-
-    const systemItems = [
-        { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)' },
-        { id: 'p2', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '2', defName: 'Persona 2 (Joke)' },
-        { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)' },
-        { id: 'p4', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '4', defName: 'Persona 4 (Captain)' },
-        { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5' },
-        { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)' },
-
-        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement' },
-        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu' },
-        { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot' }
-    ];
-
-    const newData = {};
-
-    for (const [key, entry] of Object.entries(fullData)) {
-        const isSystem = systemItems.some(item => {
-            const entryParam = entry.parameter || "";
-            const itemParam = item.param || "";
-            return entry.type === item.type && entry.value === item.val && entryParam === itemParam;
-        });
-        if (!isSystem) newData[key] = entry;
-    }
-
-    systemItems.forEach(item => {
-        const input = document.getElementById(`pb_input_${item.id}`);
-        if (!input) return;
-
-        const newKey = input.value.trim();
-        if (!newKey) return;
-
-        let name = item.defName;
-        for (const entry of Object.values(fullData)) {
-            const entryParam = entry.parameter || "";
-            const itemParam = item.param || "";
-            if (entry.type === item.type && entry.value === item.val && entryParam === itemParam) {
-                if (entry.name && entry.name !== "Unknown") name = entry.name;
-                break;
-            }
-        }
-
-        newData[newKey] = {
-            name: name,
-            type: item.type,
-            value: item.val,
-            parameter: item.param
-        };
-    });
-
-    document.getElementById('app').innerHTML = `<div style="text-align:center; padding:50px; color:#d4af37;"><h3>${isDe ? 'Speichern...' : 'Saving...'}</h3></div>`;
-
-    API.savePhonebook(newData).then(() => {
-        state.phonebook = newData;
-        render();
-    });
-};
 
 function renderSettings() {
     const DAYS_DE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
