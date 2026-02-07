@@ -8,6 +8,7 @@ import concurrent.futures
 import threading
 import time
 import subprocess
+import wave
 from pathlib import Path
 from gtts import gTTS
 from pydub import AudioSegment
@@ -21,7 +22,8 @@ SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
 
 # Piper Configuration
-PIPER_BIN = Path(shutil.which("piper") or "")
+_sys_piper = shutil.which("piper")
+PIPER_BIN = Path(_sys_piper) if _sys_piper else Path("piper_not_found_on_system_path")
 PIPER_BIN_VENV = PROJECT_ROOT / ".venv/bin/piper"
 PIPER_BIN_FALLBACK = PROJECT_ROOT / "utils/piper/piper/piper"
 PIPER_VOICES_DIR = PROJECT_ROOT / "utils/piper_voices"
@@ -29,7 +31,7 @@ PIPER_VOICES_DIR_EN = PIPER_VOICES_DIR / "en"
 PIPER_VOICES_DIR_DE = PIPER_VOICES_DIR / "de"
 USE_PIPER = False # Will be auto-detected
 
-# TTS Routing (Fixed): EN -> Piper, DE -> Google TTS
+# TTS Routing
 GTTS_DE_MAX_WORKERS = 6
 
 # Language generation toggle
@@ -152,41 +154,69 @@ SYSTEM_PROMPTS = {
     "system/snooze_active_en.wav": ("Snooze active.", "en", None),
     "system/system_ready_en.wav": ("System ready.", "en", None),
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", None),
-    "system/timer_stopped_en.wav": ("Timer cancelled.", "en", None),
-    "system/alarm_stopped_en.wav": ("Alarm cancelled.", "en", None),
-    "system/reindex_warning_en.wav": ("Please wait. Re-indexing content.", "en", None),
-    "system/alarm_active_en.wav": ("Alarm active.", "en", None),
-    "system/alarm_confirm_en.wav": ("Alarm confirmed.", "en", None),
-    "system/alarm_deleted_en.wav": ("Alarm deleted.", "en", None),
-    "system/alarm_skipped_en.wav": ("Alarm skipped.", "en", None),
-    "system/alarms_off_en.wav": ("Alarms disabled.", "en", None),
-    "system/alarms_on_en.wav": ("Alarms enabled.", "en", None),
-    "system/battery_crit_en.wav": ("Battery critical. Shutting down.", "en", None),
     "system/error_msg_en.wav": ("An error occurred.", "en", None),
+    "system/number_invalid_en.wav": ("The number you have dialed is not in service.", "en", None),
     "system/menu_en.wav": ("Main Menu.", "en", None),
-    "system/timer_confirm_en.wav": ("Timer started.", "en", None),
+    "system/timer_set_en.wav": ("Timer set for", "en", None),
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", None),
-    "system/timer_set_en.wav": ("Timer set.", "en", None),
+    "system/next_alarm_en.wav": ("Next alarm.", "en", None),
+    "system/next_alarm_none_en.wav": ("No alarms scheduled.", "en", None),
+    "system/night_on_en.wav": ("Night mode active. Signal lamp dimmed and volume reduced for 6 hours.", "en", None),
+    "system/night_off_en.wav": ("Night mode deactivated.", "en", None),
+    "system/pb_persona1_en.wav": ("Persona one.", "en", None),
+    "system/pb_persona2_en.wav": ("Persona two.", "en", None),
+    "system/pb_persona3_en.wav": ("Persona three.", "en", None),
+    "system/pb_persona4_en.wav": ("Persona four.", "en", None),
+    "system/pb_persona5_en.wav": ("Persona five.", "en", None),
+    "system/pb_random_mix_en.wav": ("Random mix.", "en", None),
+    "system/pb_time_en.wav": ("Time announcement.", "en", None),
+    "system/pb_menu_en.wav": ("Voice menu.", "en", None),
+    "system/pb_reboot_en.wav": ("System reboot.", "en", None),
+    "system/system_check_en.wav": ("System Status.", "en", None),
+    "system/ip_en.wav": ("IP address.", "en", None),
+    "system/dot_en.wav": ("dot", "en", None),
+    "system/wifi_en.wav": ("WiFi signal.", "en", None),
+    "system/dbm_en.wav": ("d b m.", "en", None),
+    "system/ntp_en.wav": ("Last N T P sync.", "en", None),
+    "system/minutes_en.wav": ("minutes.", "en", None),
+    "system/sd_free_en.wav": ("SD free.", "en", None),
+    "system/mb_en.wav": ("megabytes.", "en", None),
+    "system/sd_ok_en.wav": ("SD card ok.", "en", None),
+    "system/sd_missing_en.wav": ("SD card missing.", "en", None),
     
     # German System Messages (Google TTS, female voice)
-    "system/snooze_active_de.wav": ("Snooze aktiv.", "de", None),
-    "system/system_ready_de.wav": ("System bereit.", "de", None),
+    "system/snooze_active_de.wav": ("Schlummermodus aktiv.", "de", None),
+    "system/system_ready_de.wav": ("System ready.", "en", None),
     "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
-    "system/timer_stopped_de.wav": ("Timer abgebrochen.", "de", None),
-    "system/alarm_stopped_de.wav": ("Alarm abgebrochen.", "de", None),
-    "system/reindex_warning_de.wav": ("Bitte warten. Inhalte werden neu indexiert.", "de", None),
-    "system/alarm_active_de.wav": ("Alarm aktiv.", "de", None),
-    "system/alarm_confirm_de.wav": ("Alarm bestätigt.", "de", None),
-    "system/alarm_deleted_de.wav": ("Alarm gelöscht.", "de", None),
-    "system/alarm_skipped_de.wav": ("Alarm übersprungen.", "de", None),
-    "system/alarms_off_de.wav": ("Alarme deaktiviert.", "de", None),
-    "system/alarms_on_de.wav": ("Alarme aktiviert.", "de", None),
-    "system/battery_crit_de.wav": ("Batterie kritisch. System wird heruntergefahren.", "de", None),
     "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
+    "system/number_invalid_de.wav": ("Kein Anschluss unter dieser Nummer.", "de", None),
     "system/menu_de.wav": ("Hauptmenü.", "de", None),
-    "system/timer_confirm_de.wav": ("Timer gestartet.", "de", None),
     "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
-    "system/timer_set_de.wav": ("Timer gesetzt.", "de", None),
+    "system/timer_set_de.wav": ("Timer gesetzt für", "de", None),
+    "system/next_alarm_de.wav": ("Nächster Wecker.", "de", None),
+    "system/next_alarm_none_de.wav": ("Kein Wecker aktiv.", "de", None),
+    "system/night_on_de.wav": ("Nachtmodus aktiv. Signallampe gedimmt und Lautstärke reduziert für 6 Stunden.", "de", None),
+    "system/night_off_de.wav": ("Nachtmodus deaktiviert.", "de", None),
+    "system/pb_persona1_de.wav": ("Persona eins.", "de", None),
+    "system/pb_persona2_de.wav": ("Persona zwei.", "de", None),
+    "system/pb_persona3_de.wav": ("Persona drei.", "de", None),
+    "system/pb_persona4_de.wav": ("Persona vier.", "de", None),
+    "system/pb_persona5_de.wav": ("Persona fünf.", "de", None),
+    "system/pb_random_mix_de.wav": ("Zufallsmix.", "de", None),
+    "system/pb_time_de.wav": ("Zeitauskunft.", "de", None),
+    "system/pb_menu_de.wav": ("Sprachmenü.", "de", None),
+    "system/pb_reboot_de.wav": ("System Neustart.", "de", None),
+    "system/system_check_de.wav": ("Systemstatus.", "de", None),
+    "system/ip_de.wav": ("IP Adresse.", "de", None),
+    "system/dot_de.wav": ("Punkt", "de", None),
+    "system/wifi_de.wav": ("WLAN Signal.", "de", None),
+    "system/dbm_de.wav": ("d b m.", "de", None),
+    "system/ntp_de.wav": ("Letzter N T P Abgleich.", "de", None),
+    "system/minutes_de.wav": ("Minuten.", "de", None),
+    "system/sd_free_de.wav": ("SD frei.", "de", None),
+    "system/mb_de.wav": ("Megabyte.", "de", None),
+    "system/sd_ok_de.wav": ("SD Karte ok.", "de", None),
+    "system/sd_missing_de.wav": ("SD Karte fehlt.", "de", None),
 }
 
 # Static Files to Copy (Source Path relative to template, Destination relative to SD Root)
@@ -243,9 +273,9 @@ def generate_tones(base_dir):
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-5.0)
     save(beep, "beep.wav")
 
-    # 4b. Silence (200ms)
-    silence = AudioSegment.silent(duration=200)
-    save(silence, "silence_200ms.wav")
+    # 4b. Silence (300ms)
+    silence = AudioSegment.silent(duration=300)
+    save(silence, "silence_300ms.wav")
     
     # 5. Click (User Interaction)
     click = Sine(2500).to_audio_segment(duration=30).apply_gain(-10.0).fade_out(10)
@@ -400,6 +430,15 @@ def check_piper_status():
 
 def generate_speech(text, lang, output_path, model_name=None, force_piper=False):
     """Generates audio using Piper (EN) or Google TTS (DE)."""
+
+    def write_pcm_wav(segment, out_path):
+        """Write a minimal PCM WAV (16-bit, 44.1kHz, mono) without extra chunks."""
+        segment = segment.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
+        with wave.open(str(out_path), 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(AUDIO_RATE)
+            wav_file.writeframes(segment.raw_data)
     
     # German: Google TTS only
     if lang == 'de' and not force_piper:
@@ -415,8 +454,7 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
             
             # Convert
             sound = AudioSegment.from_mp3(temp_mp3)
-            sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-            sound.export(str(output_path), format="wav")
+            write_pcm_wav(sound, output_path)
             
             if os.path.exists(temp_mp3):
                 os.remove(temp_mp3)
@@ -462,8 +500,7 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
 
     try:
         sound = AudioSegment.from_wav(str(output_path))
-        sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-        sound.export(str(output_path), format="wav")
+        write_pcm_wav(sound, output_path)
     except Exception as e:
         raise Exception(f"Piper WAV normalize failed: {e}")
     
@@ -865,9 +902,9 @@ def generate_tones(base_dir):
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-3.0)
     save(beep, "beep.wav")
 
-    # 3b. Silence (200ms)
-    silence = AudioSegment.silent(duration=200)
-    save(silence, "silence_200ms.wav")
+    # 3b. Silence (300ms)
+    silence = AudioSegment.silent(duration=300)
+    save(silence, "silence_300ms.wav")
 
     # 4. Error Tone (150Hz Sawtooth, 500ms)
     error = Sawtooth(150).to_audio_segment(duration=500).apply_gain(-3.0)

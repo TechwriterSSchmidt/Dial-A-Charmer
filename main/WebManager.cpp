@@ -6,6 +6,8 @@
 #include <sys/param.h>
 #include <dirent.h>
 #include <sys/types.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_wifi.h"
@@ -26,6 +28,24 @@ extern void play_file(const char* path);
 
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
+
+static std::string get_first_ringtone_name() {
+    const char *dir_path = "/sdcard/ringtones";
+    DIR *dir = opendir(dir_path);
+    if (!dir) return "";
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        const char *name = ent->d_name;
+        size_t len = strlen(name);
+        if (len > 4 && strcasecmp(name + len - 4, ".wav") == 0) {
+            closedir(dir);
+            return name;
+        }
+    }
+    closedir(dir);
+    return "";
+}
 
 // Log capture (last 20 lines)
 static const size_t LOG_LINE_MAX = 256;
@@ -174,7 +194,7 @@ static void dns_server_task(void *pvParameters) {
             break;
         }
 
-        // Simple DNS Hijack: Respond with 192.168.4.1 to everything
+        // DNS Hijack: Resolve all queries to 192.168.4.1
         if (len > 12) {
             // Keep ID
             // Flags -> Standard Query Response, No Error
@@ -381,23 +401,48 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(root, "volume", vol);
 
     // Handset Volume (New)
-    uint8_t vol_h = 60;
+    uint8_t vol_h = APP_DEFAULT_HANDSET_VOLUME;
     if (err == ESP_OK) nvs_get_u8(my_handle, "volume_handset", &vol_h);
     cJSON_AddNumberToObject(root, "volume_handset", vol_h);
 
+    // Alarm Volume
+    uint8_t vol_a = APP_ALARM_DEFAULT_VOLUME;
+    if (err == ESP_OK) nvs_get_u8(my_handle, "vol_alarm", &vol_a);
+    cJSON_AddNumberToObject(root, "vol_alarm", vol_a);
+    // Send configured minimum to frontend
+    cJSON_AddNumberToObject(root, "vol_alarm_min", APP_ALARM_MIN_VOLUME);
 
     // Snooze Time
-    int32_t snooze = 5;
+    int32_t snooze = APP_SNOOZE_DEFAULT_MINUTES;
     if (err == ESP_OK) nvs_get_i32(my_handle, "snooze_min", &snooze);
     cJSON_AddNumberToObject(root, "snooze_min", snooze);
 
     // Timer Ringtone
     len = sizeof(val);
-    if (err == ESP_OK && nvs_get_str(my_handle, "timer_ringtone", val, &len) == ESP_OK) {
-        cJSON_AddStringToObject(root, "timer_ringtone", val);
+    std::string ringtone_name;
+    if (err == ESP_OK && nvs_get_str(my_handle, "timer_ringtone", val, &len) == ESP_OK && val[0] != '\0') {
+        ringtone_name = val;
     } else {
-        cJSON_AddStringToObject(root, "timer_ringtone", "digital_alarm.wav");
+        ringtone_name = APP_DEFAULT_TIMER_RINGTONE;
     }
+
+    if (!ringtone_name.empty()) {
+        char path[128];
+        snprintf(path, sizeof(path), "/sdcard/ringtones/%s", ringtone_name.c_str());
+        struct stat st;
+        if (stat(path, &st) != 0) {
+            std::string fallback = get_first_ringtone_name();
+            if (!fallback.empty()) {
+                ringtone_name = fallback;
+            }
+        }
+    }
+
+    if (ringtone_name.empty()) {
+        ringtone_name = APP_DEFAULT_TIMER_RINGTONE;
+    }
+
+    cJSON_AddStringToObject(root, "timer_ringtone", ringtone_name.c_str());
     
     // --- Time & Timezone ---
     struct tm now = TimeManager::getCurrentTime();
@@ -485,6 +530,11 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_u8(my_handle, "volume_handset", (uint8_t)item->valueint);
         }
 
+        item = cJSON_GetObjectItem(root, "vol_alarm");
+        if (cJSON_IsNumber(item)) {
+            nvs_set_u8(my_handle, "vol_alarm", (uint8_t)item->valueint);
+        }
+
         item = cJSON_GetObjectItem(root, "snooze_min");
         if (cJSON_IsNumber(item)) {
             nvs_set_i32(my_handle, "snooze_min", item->valueint);
@@ -494,27 +544,13 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         item = cJSON_GetObjectItem(root, "timer_ringtone");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
             nvs_set_str(my_handle, "timer_ringtone", item->valuestring);
+            ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
         }
 
-        // Timezone
+        // Timezone configuration
         item = cJSON_GetObjectItem(root, "timezone");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
-            // Save inside TimeManager (it handles NVS internally too, but distinct key/handle)
-            // But we can just call it here. 
-            // Note: Since TimeManager opens NVS "dialcharm" too, we must ensure handles don't conflict 
-            // or just rely on TimeManager's logic.
-            // Since we are holding 'my_handle' open here, checking concurrency... 
-            // NVS single partition open is fine usually, but cleaner to close first?
-            // Actually TimeManager uses its own nvs_open/close.
-            // To avoid "NVS_ERR_NVS_PART_ALREADY_OPEN" or similar if logic restricted, 
-            // we should probably just save it via TimeManager AFTER closing here, or just save key here manually if we know it.
-            // TimeManager uses key "time_zone". Let's save it directly to 'my_handle' to avoid overhead!
-            
             nvs_set_str(my_handle, "time_zone", item->valuestring);
-            
-            // Also update runtime - warning: this updates env var so we need to do it.
-            // But we can't do it easily inside this NVS block for TimeManager state. 
-            // Better: Let's extract the string and call TimeManager::setTimezone() *after* this block.
         }
 
         // --- Alarms ---
@@ -573,26 +609,6 @@ static esp_err_t api_phonebook_get_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     std::string json = phonebook.getJson();
     httpd_resp_send(req, json.c_str(), json.length());
-    return ESP_OK;
-}
-
-static esp_err_t api_phonebook_post_handler(httpd_req_t *req) {
-    char *buf = (char *)malloc(req->content_len + 1);
-    if (!buf) {
-        httpd_resp_send_500(req);
-        return ESP_FAIL;
-    }
-    int ret = httpd_req_recv(req, buf, req->content_len);
-    if (ret <= 0) {
-        free(buf);
-        return ESP_FAIL;
-    }
-    buf[ret] = '\0';
-    
-    phonebook.saveFromJson(std::string(buf));
-    free(buf);
-    
-    httpd_resp_send(req, "{\"status\":\"ok\"}", HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
 
@@ -842,6 +858,10 @@ void WebManager::setupWifi() {
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
         ESP_ERROR_CHECK(esp_wifi_start());
+        
+        // Enable Power Save Mode (DTIM sleep)
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+
         ESP_ERROR_CHECK(esp_wifi_connect());
         
         // Wait for connection (Blocking for simplicity in this phase, or use event group)
@@ -939,14 +959,6 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &pb_get_uri);
-
-        httpd_uri_t pb_post_uri = {
-            .uri       = "/api/phonebook",
-            .method    = HTTP_POST,
-            .handler   = api_phonebook_post_handler,
-            .user_ctx  = NULL
-        };
-        httpd_register_uri_handler(server, &pb_post_uri);
 
         httpd_uri_t logs_uri = {
             .uri       = "/api/logs",

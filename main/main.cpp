@@ -2,13 +2,19 @@
 #include <string>
 #include <vector>
 #include <dirent.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include <stdlib.h>
 #include "esp_system.h"
 #include "esp_timer.h"
 #include "esp_random.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
+#include "esp_vfs_fat.h"
 #include "nvs_flash.h"
 #include "audio_element.h"
 #include "audio_pipeline.h"
@@ -19,16 +25,16 @@
 #include "periph_sdcard.h"
 #include "fatfs_stream.h"
 #include "i2s_stream.h"
-// #include "driver/i2s.h" // Removed to avoid CONFLICT with legacy driver used by ADF
+// #include "driver/i2s.h" // Simplified Includes
 #include "wav_decoder.h"
 
 // App Includes
 #include "app_config.h"
-#include "led_strip.h" // Added for WS2812
+#include "led_strip.h" 
 #include "RotaryDial.h"
 #include "PhonebookManager.h"
 #include "WebManager.h"
-#include "TimeManager.h" // Added TimeManager
+#include "TimeManager.h" 
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 
@@ -36,8 +42,10 @@ static const char *TAG = "DIAL_A_CHARMER_ESP";
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
 audio_pipeline_handle_t pipeline;
 audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
-audio_board_handle_t board_handle = NULL; // Globale Reference
+audio_board_handle_t board_handle = NULL; 
 led_strip_handle_t g_led_strip = NULL;
+SemaphoreHandle_t g_audio_mutex = NULL;
+SemaphoreHandle_t g_led_mutex = NULL;
 
 // Logic State
 std::string dial_buffer = "";
@@ -46,7 +54,7 @@ const int DIAL_TIMEOUT_MS = APP_DIAL_TIMEOUT_MS;
 const int PERSONA_PAUSE_MS = APP_PERSONA_PAUSE_MS;
 const int DIALTONE_SILENCE_MS = APP_DIALTONE_SILENCE_MS;
 bool is_playing = false;
-bool g_output_mode_handset = false; // False = Speaker, True = Handset
+bool g_output_mode_handset = false; 
 bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
@@ -62,12 +70,435 @@ bool g_timer_intro_playing = false;
 int g_timer_announce_minutes = 0;
 bool g_timer_alarm_active = false;
 int64_t g_timer_alarm_end_ms = 0;
-std::string g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
+std::string g_current_alarm_file = "";
 bool g_startup_silence_playing = false;
+bool g_voice_menu_active = false;
+int64_t g_voice_menu_started_ms = 0;
+std::vector<std::string> g_voice_queue;
+bool g_voice_queue_active = false;
+bool g_night_mode_active = false;
+int64_t g_night_mode_end_ms = 0;
+uint8_t g_led_r = 50;
+uint8_t g_led_g = 20;
+uint8_t g_led_b = 0;
+uint8_t g_night_prev_r = 50;
+uint8_t g_night_prev_g = 20;
+uint8_t g_night_prev_b = 0;
+bool g_led_booting = true;
+bool g_snooze_active = false;
+bool g_daily_alarm_active = false;
+bool g_sd_error = false;
+bool g_force_base_output = false;
+// Alarm State
+int g_saved_volume = -1;
+
+// Helper Forward Declarations
+static void start_voice_queue(const std::vector<std::string> &files);
+void play_file(const char* path);
+void update_audio_output();
+
+static bool is_lang_en() {
+    nvs_handle_t my_handle;
+    char val[8] = {0};
+    size_t len = sizeof(val);
+    bool is_en = false;
+
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        if (nvs_get_str(my_handle, "src_lang", val, &len) == ESP_OK) {
+            is_en = (strncmp(val, "en", 2) == 0);
+        }
+        nvs_close(my_handle);
+    }
+    return is_en;
+}
+
+static const char *lang_code() {
+    return is_lang_en() ? "en" : "de";
+}
+
+static std::string system_path(const char *base) {
+    return std::string("/sdcard/system/") + base + "_" + lang_code() + ".wav";
+}
+
+static std::string time_path(const char *name) {
+    return std::string("/sdcard/time/") + lang_code() + "/" + name;
+}
+
+static void announce_time_now() {
+    struct tm now = TimeManager::getCurrentTimeRtc();
+    if (now.tm_year < 120) {
+        start_voice_queue({system_path("time_unavailable")});
+        return;
+    }
+
+    std::vector<std::string> files;
+    files.push_back(time_path("intro.wav"));
+
+    char buf[32];
+    snprintf(buf, sizeof(buf), "h_%d.wav", now.tm_hour);
+    files.push_back(time_path(buf));
+
+    snprintf(buf, sizeof(buf), "m_%02d.wav", now.tm_min);
+    files.push_back(time_path(buf));
+
+    if (!is_lang_en()) {
+        files.push_back(time_path("uhr.wav"));
+    }
+
+    start_voice_queue(files);
+}
+
+static void set_led_color(uint8_t r, uint8_t g, uint8_t b) {
+    g_led_r = r;
+    g_led_g = g;
+    g_led_b = b;
+    if (g_led_strip) {
+        if (g_led_mutex) {
+            xSemaphoreTake(g_led_mutex, portMAX_DELAY);
+        }
+        led_strip_set_pixel(g_led_strip, 0, r, g, b);
+        led_strip_refresh(g_led_strip);
+        if (g_led_mutex) {
+            xSemaphoreGive(g_led_mutex);
+        }
+    }
+}
+
+enum LedState {
+    LED_BOOTING,
+    LED_IDLE,
+    LED_ALARM,
+    LED_TIMER,
+    LED_SNOOZE,
+    LED_ERROR,
+};
+
+static void apply_led_color(uint8_t r, uint8_t g, uint8_t b) {
+    if (g_night_mode_active) {
+        r = (uint8_t)((r * APP_NIGHTMODE_LED_PERCENT) / 100);
+        g = (uint8_t)((g * APP_NIGHTMODE_LED_PERCENT) / 100);
+        b = (uint8_t)((b * APP_NIGHTMODE_LED_PERCENT) / 100);
+    }
+    set_led_color(r, g, b);
+}
+
+static LedState get_led_state() {
+    if (g_led_booting) return LED_BOOTING;
+    if (g_sd_error) return LED_ERROR;
+    if (g_timer_alarm_active) return g_daily_alarm_active ? LED_ALARM : LED_TIMER;
+    if (g_snooze_active) return LED_SNOOZE;
+    return LED_IDLE;
+}
+
+static void led_task(void *pvParameters) {
+    (void)pvParameters;
+    int step = 0;
+    int error_phase = 0;
+    int error_ticks = 0;
+    const int tick_ms = 50;
+
+    while (true) {
+        LedState state = get_led_state();
+
+        if (state == LED_BOOTING) {
+            // Pulse between blue and gold
+            int phase = step % 200;
+            int t = (phase <= 100) ? phase : (200 - phase);
+            uint8_t r = (uint8_t)((80 * t) / 100);
+            uint8_t g = (uint8_t)((40 * t) / 100);
+            uint8_t b = (uint8_t)(120 - ((100 * t) / 100));
+            apply_led_color(r, g, b);
+            step += 2;
+        } else if (state == LED_IDLE) {
+            // Vintage orange glow with subtle flicker
+            uint8_t r = 50;
+            uint8_t g = 20;
+            uint8_t b = 0;
+            if ((step % 5) == 0) {
+                int8_t flicker = (int8_t)((esp_random() % 5) - 2);
+                int rr = r + flicker;
+                int gg = g + (flicker / 2);
+                if (rr < 0) rr = 0;
+                if (gg < 0) gg = 0;
+                r = (uint8_t)rr;
+                g = (uint8_t)gg;
+            }
+            apply_led_color(r, g, b);
+            step++;
+        } else if (state == LED_ALARM) {
+            // Warm white pulsing
+            int phase = step % 200;
+            int t = (phase <= 100) ? phase : (200 - phase);
+            uint8_t intensity = (uint8_t)(30 + ((70 * t) / 100));
+            uint8_t r = (uint8_t)((255 * intensity) / 100);
+            uint8_t g = (uint8_t)((220 * intensity) / 100);
+            uint8_t b = (uint8_t)((180 * intensity) / 100);
+            apply_led_color(r, g, b);
+            step += 3;
+        } else if (state == LED_TIMER) {
+            // Fast red pulsing
+            int phase = step % 100;
+            int t = (phase <= 50) ? phase : (100 - phase);
+            uint8_t intensity = (uint8_t)(15 + ((85 * t) / 50));
+            uint8_t r = (uint8_t)((255 * intensity) / 100);
+            apply_led_color(r, 0, 0);
+            step += 5;
+        } else if (state == LED_SNOOZE) {
+            // Warm white solid
+            apply_led_color(200, 170, 130);
+            step++;
+        } else {
+            // SOS pattern in red
+            static const int pattern_ms[] = {200, 200, 200, 200, 200, 400, 600, 200, 600, 200, 600, 400, 200, 200, 200, 200, 200, 1000};
+            static const bool pattern_on[] = {true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false, true, false};
+            const int pattern_len = (int)(sizeof(pattern_ms) / sizeof(pattern_ms[0]));
+
+            if (error_ticks <= 0) {
+                error_phase = (error_phase + 1) % pattern_len;
+                error_ticks = pattern_ms[error_phase] / tick_ms;
+                if (error_ticks <= 0) error_ticks = 1;
+            }
+
+            if (pattern_on[error_phase]) {
+                apply_led_color(255, 0, 0);
+            } else {
+                apply_led_color(0, 0, 0);
+            }
+            error_ticks--;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(tick_ms));
+    }
+}
+
+static void set_night_mode(bool enable) {
+    if (enable) {
+        g_night_mode_active = true;
+        g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
+            (int64_t)APP_NIGHTMODE_DURATION_HOURS * 60 * 60 * 1000;
+        g_night_prev_r = g_led_r;
+        g_night_prev_g = g_led_g;
+        g_night_prev_b = g_led_b;
+        uint8_t r = (uint8_t)((g_night_prev_r * APP_NIGHTMODE_LED_PERCENT) / 100);
+        uint8_t g = (uint8_t)((g_night_prev_g * APP_NIGHTMODE_LED_PERCENT) / 100);
+        uint8_t b = (uint8_t)((g_night_prev_b * APP_NIGHTMODE_LED_PERCENT) / 100);
+        set_led_color(r, g, b);
+    } else {
+        g_night_mode_active = false;
+        set_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
+    }
+    update_audio_output();
+}
+
+static void start_voice_queue(const std::vector<std::string> &files) {
+    if (files.empty()) return;
+    g_voice_queue = files;
+    g_voice_queue_active = true;
+    play_file(g_voice_queue.front().c_str());
+    g_voice_queue.erase(g_voice_queue.begin());
+}
+
+static bool play_next_in_queue() {
+    if (g_voice_queue_active && !g_voice_queue.empty()) {
+        play_file(g_voice_queue.front().c_str());
+        g_voice_queue.erase(g_voice_queue.begin());
+        return true;
+    }
+    if (g_voice_queue_active) {
+        g_voice_queue_active = false;
+    }
+    return false;
+}
+
+static bool get_next_alarm(struct tm *out_tm, DayAlarm *out_alarm) {
+    if (!out_tm || !out_alarm) return false;
+    time_t now_t;
+    time(&now_t);
+    struct tm now;
+    localtime_r(&now_t, &now);
+
+    for (int i = 0; i < 7; ++i) {
+        int day = (now.tm_wday + i) % 7;
+        DayAlarm a = TimeManager::getAlarm(day);
+        if (!a.active) continue;
+
+        time_t day_t = now_t + (int64_t)i * 24 * 60 * 60;
+        struct tm t;
+        localtime_r(&day_t, &t);
+        t.tm_hour = a.hour;
+        t.tm_min = a.minute;
+        t.tm_sec = 0;
+
+        time_t candidate = mktime(&t);
+        if (candidate <= now_t) continue;
+
+        *out_tm = t;
+        *out_alarm = a;
+        return true;
+    }
+    return false;
+}
+
+static void add_number_audio(std::vector<std::string> &files, int value) {
+    if (value < 0) value = -value;
+    if (value > 300) value = 300;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "m_%02d.wav", value);
+    files.push_back(time_path(buf));
+}
+
+static void handle_voice_menu_digit(int digit) {
+    if (digit == 1) {
+        struct tm next_tm;
+        DayAlarm next_alarm;
+        if (!get_next_alarm(&next_tm, &next_alarm)) {
+            start_voice_queue({system_path("next_alarm_none")});
+            return;
+        }
+
+        std::vector<std::string> files;
+        files.push_back(system_path("next_alarm"));
+
+        char buf[32];
+        snprintf(buf, sizeof(buf), "wday_%d.wav", next_tm.tm_wday);
+        files.push_back(time_path(buf));
+
+        snprintf(buf, sizeof(buf), "h_%d.wav", next_tm.tm_hour);
+        files.push_back(time_path(buf));
+
+        snprintf(buf, sizeof(buf), "m_%02d.wav", next_tm.tm_min);
+        files.push_back(time_path(buf));
+
+        if (!is_lang_en()) {
+            files.push_back(time_path("uhr.wav"));
+        }
+
+        start_voice_queue(files);
+    } else if (digit == 2) {
+        if (g_night_mode_active) {
+            set_night_mode(false);
+            start_voice_queue({system_path("night_off")});
+        } else {
+            set_night_mode(true);
+            start_voice_queue({system_path("night_on")});
+        }
+    } else if (digit == 3) {
+        std::vector<std::string> files;
+        // files.push_back(system_path("phonebook_export")); // Removed as we are now just announcing
+        files.push_back(system_path("pb_persona1"));
+        files.push_back(system_path("pb_persona2"));
+        files.push_back(system_path("pb_persona3"));
+        files.push_back(system_path("pb_persona4"));
+        files.push_back(system_path("pb_persona5"));
+        files.push_back(system_path("pb_random_mix"));
+        files.push_back(system_path("pb_time"));
+        files.push_back(system_path("pb_menu"));
+        files.push_back(system_path("pb_reboot"));
+        start_voice_queue(files);
+    } else if (digit == 4) {
+        std::vector<std::string> files;
+        files.push_back(system_path("system_check"));
+
+        esp_netif_ip_info_t ip_info = {};
+        esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK) {
+            uint32_t ip = ip_info.ip.addr;
+            files.push_back(system_path("ip"));
+            add_number_audio(files, (ip) & 0xFF);
+            files.push_back(system_path("dot"));
+            add_number_audio(files, (ip >> 8) & 0xFF);
+            files.push_back(system_path("dot"));
+            add_number_audio(files, (ip >> 16) & 0xFF);
+            files.push_back(system_path("dot"));
+            add_number_audio(files, (ip >> 24) & 0xFF);
+        }
+
+        wifi_ap_record_t ap_info = {};
+        if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+            files.push_back(system_path("wifi"));
+            add_number_audio(files, ap_info.rssi);
+            files.push_back(system_path("dbm"));
+        }
+
+        time_t last_sync = TimeManager::getLastNtpSync();
+        if (last_sync > 0) {
+            time_t now;
+            time(&now);
+            int mins = (int)((now - last_sync) / 60);
+            files.push_back(system_path("ntp"));
+            add_number_audio(files, mins);
+            files.push_back(system_path("minutes"));
+        } else {
+            files.push_back(system_path("time_unavailable"));
+        }
+
+        uint64_t total_bytes = 0;
+        uint64_t free_bytes = 0;
+        if (esp_vfs_fat_info("/sdcard", &total_bytes, &free_bytes) == ESP_OK) {
+            uint32_t free_mb = (uint32_t)(free_bytes / (1024 * 1024));
+            files.push_back(system_path("sd_free"));
+            add_number_audio(files, (int)free_mb);
+            files.push_back(system_path("mb"));
+            files.push_back(system_path("sd_ok"));
+        } else {
+            files.push_back(system_path("sd_missing"));
+        }
+
+        start_voice_queue(files);
+    } else {
+        start_voice_queue({system_path("error_msg")});
+    }
+}
 
 // Helpers
 void stop_playback(); // forward decl
 void play_file(const char* path); // forward decl
+static void audio_lock() {
+    if (g_audio_mutex) {
+        xSemaphoreTake(g_audio_mutex, portMAX_DELAY);
+    }
+}
+
+static void audio_unlock() {
+    if (g_audio_mutex) {
+        xSemaphoreGive(g_audio_mutex);
+    }
+}
+
+static void restore_volume_after_alarm() {
+    if (g_saved_volume != -1 && board_handle && board_handle->audio_hal) {
+         ESP_LOGI(TAG, "Restoring volume to %d", g_saved_volume);
+         audio_hal_set_volume(board_handle->audio_hal, g_saved_volume);
+         g_saved_volume = -1;
+    }
+}
+
+static void force_alarm_volume() {
+    if (board_handle && board_handle->audio_hal) {
+        int vol = 0;
+        audio_hal_get_volume(board_handle->audio_hal, &vol);
+        if (g_saved_volume == -1) {
+             g_saved_volume = vol;
+        }
+
+        // Load Alarm Volume from NVS
+        uint8_t target_vol = APP_ALARM_DEFAULT_VOLUME;
+        nvs_handle_t my_handle;
+        if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+            nvs_get_u8(my_handle, "vol_alarm", &target_vol);
+            nvs_close(my_handle);
+        }
+
+        // Enforce Minimum
+        if (target_vol < APP_ALARM_MIN_VOLUME) {
+            target_vol = APP_ALARM_MIN_VOLUME;
+        }
+
+        ESP_LOGI(TAG, "Forcing Alarm Volume: %d (Saved: %d)", target_vol, g_saved_volume);
+        audio_hal_set_volume(board_handle->audio_hal, target_vol);
+    }
+}
+
 static void start_timer_minutes(int minutes) {
     // Override any existing timer or pending timer announcements
     g_timer_active = true;
@@ -77,14 +508,66 @@ static void start_timer_minutes(int minutes) {
     g_timer_intro_playing = false;
 }
 
+static std::string get_first_ringtone_path() {
+    const char *dir_path = "/sdcard/ringtones";
+    DIR *dir = opendir(dir_path);
+    if (!dir) return "";
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        const char *name = ent->d_name;
+        size_t len = strlen(name);
+        if (len > 4 && strcasecmp(name + len - 4, ".wav") == 0) {
+            std::string path = std::string(dir_path) + "/" + name;
+            closedir(dir);
+            return path;
+        }
+    }
+    closedir(dir);
+    return "";
+}
+
+static std::string get_timer_ringtone_path() {
+    nvs_handle_t my_handle;
+    char val[64] = {0};
+    size_t len = sizeof(val);
+
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        if (nvs_get_str(my_handle, "timer_ringtone", val, &len) != ESP_OK) {
+            val[0] = '\0';
+        }
+        nvs_close(my_handle);
+    }
+
+    if (val[0] != '\0') {
+        std::string path = std::string("/sdcard/ringtones/") + val;
+        struct stat st;
+        if (stat(path.c_str(), &st) == 0) {
+            return path;
+        }
+        ESP_LOGW(TAG, "Timer ringtone missing, falling back: %s", path.c_str());
+    }
+
+    std::string fallback = get_first_ringtone_path();
+    if (!fallback.empty()) {
+        ESP_LOGI(TAG, "Using first ringtone fallback: %s", fallback.c_str());
+        return fallback;
+    }
+
+    return std::string("/sdcard/ringtones/") + (val[0] != '\0' ? val : APP_DEFAULT_TIMER_RINGTONE);
+}
+
 static void announce_timer_minutes(int minutes) {
     char path[128];
     if (minutes < 10) {
-        snprintf(path, sizeof(path), "/sdcard/time/de/m_0%d.wav", minutes);
+        snprintf(path, sizeof(path), "m_0%d.wav", minutes);
     } else {
-        snprintf(path, sizeof(path), "/sdcard/time/de/m_%d.wav", minutes);
+        snprintf(path, sizeof(path), "m_%d.wav", minutes);
     }
-    play_file(path);
+    std::vector<std::string> files;
+    files.push_back(time_path(path));
+    files.push_back(system_path("minutes"));
+    start_voice_queue(files);
 }
 
 // Software gain (no register writes) with soft ramp to reduce clicks
@@ -201,7 +684,7 @@ void update_audio_output() {
     // Determine Effective Output Mode
     // Force Base Speaker (false) if Alarm or Timer Announcement active
     bool effective_handset = g_output_mode_handset;
-    if (g_timer_alarm_active || g_timer_announce_pending) {
+    if (g_timer_alarm_active || g_timer_announce_pending || g_force_base_output) {
         effective_handset = false; 
     }
 
@@ -210,17 +693,21 @@ void update_audio_output() {
 
     // Update Volume based on EFFECTIVE mode
     nvs_handle_t my_handle;
-    uint8_t vol = 60; // Default Base Speaker
+    uint8_t vol = APP_DEFAULT_BASE_VOLUME; // Default Base Speaker
     
     if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
         if (effective_handset) {
-            if (nvs_get_u8(my_handle, "volume_handset", &vol) != ESP_OK) vol = 60;
+            if (nvs_get_u8(my_handle, "volume_handset", &vol) != ESP_OK) vol = APP_DEFAULT_HANDSET_VOLUME;
         } else {
-            if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = 60;
+            if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = APP_DEFAULT_BASE_VOLUME;
         }
         nvs_close(my_handle);
     }
     
+    if (g_night_mode_active) {
+        vol = APP_NIGHTMODE_VOLUME_PERCENT;
+    }
+
     audio_hal_set_volume(board_handle->audio_hal, vol);
 }
 std::string get_random_file(std::string folderPath) {
@@ -267,6 +754,8 @@ void play_file(const char* path) {
     }
 
     
+    audio_lock();
+
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
     g_gain_right_cur = 0.0f;
@@ -284,6 +773,7 @@ void play_file(const char* path) {
     audio_element_set_uri(fatfs_stream, path);
     audio_pipeline_run(pipeline);
     is_playing = true;
+    audio_unlock();
 }
 
 void wait_for_dialtone_silence_if_needed() {
@@ -313,25 +803,27 @@ void play_busy_tone() {
 
 void play_timer_alarm() {
     g_timer_alarm_active = true;
+    g_daily_alarm_active = false;
+    g_snooze_active = false;
     g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
     stop_playback();
     update_audio_output(); // Force Base Speaker
     // Play the currently selected alarm (Daily or Default)
     if (g_current_alarm_file.empty()) {
-        g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
+        g_current_alarm_file = get_timer_ringtone_path();
     }
     play_file(g_current_alarm_file.c_str());
 }
 
 static int get_snooze_minutes() {
     nvs_handle_t my_handle;
-    int32_t val = 5; // Default
+    int32_t val = APP_SNOOZE_DEFAULT_MINUTES;
     if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
         nvs_get_i32(my_handle, "snooze_min", &val);
         nvs_close(my_handle);
     }
-    if (val < 1) val = 1;
-    if (val > 60) val = 60;
+    if (val < APP_SNOOZE_MIN_MINUTES) val = APP_SNOOZE_MIN_MINUTES;
+    if (val > APP_SNOOZE_MAX_MINUTES) val = APP_SNOOZE_MAX_MINUTES;
     return (int)val;
 }
 
@@ -340,19 +832,19 @@ void process_phonebook_function(PhonebookEntry entry) {
     if (entry.type == "FUNCTION") {
         if (entry.value == "COMPLIMENT_CAT") {
             // Parameter is "1", "2", etc. Map to persona_0X
-            std::string folder = "/sdcard/persona_0" + entry.parameter + "/de";
+            std::string folder = "/sdcard/persona_0" + entry.parameter + "/" + lang_code();
             std::string file = get_random_file(folder);
             if (!file.empty()) {
                 wait_for_dialtone_silence_if_needed();
                 g_persona_playback_active = true;
                 play_file(file.c_str());
             }
-            else play_file("/sdcard/system/error_msg_de.wav");
+            else play_file(system_path("error_msg").c_str());
         }
         else if (entry.value == "COMPLIMENT_MIX") {
             // Pick random persona 1-5
             int persona = (esp_random() % 5) + 1;
-            std::string folder = "/sdcard/persona_0" + std::to_string(persona) + "/de";
+            std::string folder = "/sdcard/persona_0" + std::to_string(persona) + "/" + lang_code();
             std::string file = get_random_file(folder);
             if (!file.empty()) {
                 wait_for_dialtone_silence_if_needed();
@@ -361,20 +853,22 @@ void process_phonebook_function(PhonebookEntry entry) {
             }
         }
         else if (entry.value == "ANNOUNCE_TIME") {
-            play_file("/sdcard/system/time_unavailable_de.wav");
+            announce_time_now();
         }
         else if (entry.value == "REBOOT") {
              ESP_LOGW(TAG, "Rebooting system...");
-             play_file("/sdcard/system/system_ready_de.wav"); // Ack before reboot
+               play_file(system_path("system_ready").c_str()); // Ack before reboot
              vTaskDelay(pdMS_TO_TICKS(2000));
              esp_restart();
         }
         else if (entry.value == "VOICE_MENU") {
-            play_file("/sdcard/system/menu_de.wav");
+            g_voice_menu_active = true;
+            g_voice_menu_started_ms = esp_timer_get_time() / 1000;
+            play_file(system_path("menu").c_str());
         }
         else {
             ESP_LOGW(TAG, "Unknown Function: %s", entry.value.c_str());
-            play_file("/sdcard/system/error_msg_de.wav");
+            play_file(system_path("error_msg").c_str());
         }
     } 
     else if (entry.type == "TTS" || entry.type == "AUDIO") {
@@ -389,10 +883,12 @@ void process_phonebook_function(PhonebookEntry entry) {
 
 void stop_playback() {
     if (is_playing) {
+        audio_lock();
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
         is_playing = false;
         g_last_playback_finished_ms = esp_timer_get_time() / 1000;
+        audio_unlock();
     }
 }
 
@@ -411,13 +907,28 @@ void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
     // Handle Timer/Alarm Mute
     if (g_timer_alarm_active) {
-        ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
         TimeManager::stopAlarm();
         g_timer_alarm_active = false;
-        stop_playback();        update_audio_output(); // Restore audio routing        
+        stop_playback();
+
+        if (!g_daily_alarm_active) {
+            ESP_LOGI(TAG, "Timer expired -> deleted via Key 5");
+            g_daily_alarm_active = false;
+            g_snooze_active = false;
+            g_force_base_output = true;
+            update_audio_output();
+            play_file(system_path("timer_deleted").c_str());
+            return;
+        }
+
+        ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
+        g_daily_alarm_active = false;
+        g_snooze_active = true;
+        update_audio_output(); // Restore audio routing
+        play_file(system_path("snooze_active").c_str());
         int snooze = get_snooze_minutes();
         ESP_LOGI(TAG, "Snoozing for %d minutes", snooze);
-        
+
         // Start Timer (Silent, no announcement)
         start_timer_minutes(snooze);
         // Important: start_timer_minutes sets g_timer_intro_playing=false by default (line 69 impl)
@@ -441,6 +952,7 @@ void on_hook_change(bool off_hook) {
 
     if (off_hook) {
         // Receiver Picked Up
+        bool skip_dialtone = false;
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -449,10 +961,24 @@ void on_hook_change(bool off_hook) {
         if (g_timer_alarm_active) {
             TimeManager::stopAlarm();
             g_timer_alarm_active = false;
-            update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
+            if (!g_daily_alarm_active) {
+                ESP_LOGI(TAG, "Timer expired -> deleted via pickup");
+                g_daily_alarm_active = false;
+                g_snooze_active = false;
+                g_force_base_output = true;
+                update_audio_output();
+                play_file(system_path("timer_deleted").c_str());
+                skip_dialtone = true;
+            } else {
+                g_daily_alarm_active = false;
+                g_snooze_active = false;
+                update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
+            }
         }
         // Play dial tone
-        play_file("/sdcard/system/dialtone_1.wav");
+        if (!skip_dialtone) {
+            play_file("/sdcard/system/dialtone_1.wav");
+        }
     } else {
         // Receiver Hung Up
         stop_playback();
@@ -534,6 +1060,15 @@ extern "C" void app_main(void)
     }
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
 
+    g_audio_mutex = xSemaphoreCreateMutex();
+    if (!g_audio_mutex) {
+        ESP_LOGE(TAG, "Audio mutex init failed");
+    }
+    g_led_mutex = xSemaphoreCreateMutex();
+    if (!g_led_mutex) {
+        ESP_LOGE(TAG, "LED mutex init failed");
+    }
+
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
     xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
     #endif
@@ -550,10 +1085,12 @@ extern "C" void app_main(void)
     };
     // Note: ensure espressif/led_strip component is added
     if (led_strip_new_rmt_device(&strip_config, &rmt_config, &g_led_strip) == ESP_OK) {
-        led_strip_set_pixel(g_led_strip, 0, 50, 20, 0); // Orange startup
-        led_strip_refresh(g_led_strip);
+        set_led_color(50, 20, 0); // Orange startup
     } else {
         ESP_LOGE(TAG, "Failed to init WS2812!");
+    }
+    if (g_led_strip) {
+        xTaskCreate(led_task, "led_task", 2048, NULL, 1, NULL);
     }
     #endif
 
@@ -578,7 +1115,7 @@ extern "C" void app_main(void)
     ESP_LOGW(TAG, "Power Amplifier control DISABLED via config");
 #endif
     
-    audio_hal_set_volume(board_handle->audio_hal, 60); // Set volume
+    audio_hal_set_volume(board_handle->audio_hal, APP_DEFAULT_BASE_VOLUME); // Set volume
 
     // --- 3. SD Card Peripheral ---
     ESP_LOGI(TAG, "Starting SD Card...");
@@ -593,10 +1130,30 @@ extern "C" void app_main(void)
     esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
     esp_periph_start(set, sdcard_handle);
     
+    int64_t sd_start_ms = esp_timer_get_time() / 1000;
+    const int64_t sd_timeout_ms = 5000;
     while (!periph_sdcard_is_mounted(sdcard_handle)) {
+        if ((esp_timer_get_time() / 1000) - sd_start_ms > sd_timeout_ms) {
+            ESP_LOGE(TAG, "SD Card mount timeout");
+            g_sd_error = true;
+            break;
+        }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-    ESP_LOGI(TAG, "SD Card mounted successfully");
+    if (periph_sdcard_is_mounted(sdcard_handle)) {
+        ESP_LOGI(TAG, "SD Card mounted successfully");
+        g_sd_error = false;
+    }
+
+    if (g_sd_error) {
+        ESP_LOGE(TAG, "SD Card not available. Starting in degraded mode.");
+        // Bring up web UI for diagnostics/configuration.
+        webManager.begin();
+        g_led_booting = false;
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
 
     // --- 1. Input Initialization (Moved to ensure ISR service order) ---
     ESP_LOGI(TAG, "Initializing Rotary Dial (Mode Pin: %d)...", APP_PIN_DIAL_MODE);
@@ -624,14 +1181,18 @@ extern "C" void app_main(void)
     // --- 4. Audio Pipeline Setup ---
     ESP_LOGI(TAG, "Creating audio pipeline...");
     audio_pipeline_cfg_t pipeline_cfg = DEFAULT_AUDIO_PIPELINE_CONFIG();
+    pipeline_cfg.rb_size = 16 * 1024;
     pipeline = audio_pipeline_init(&pipeline_cfg);
 
     fatfs_stream_cfg_t fatfs_cfg = FATFS_STREAM_CFG_DEFAULT();
     fatfs_cfg.type = AUDIO_STREAM_READER;
+    fatfs_cfg.buf_sz = 8 * 1024;
+    fatfs_cfg.out_rb_size = 16 * 1024;
     fatfs_stream = fatfs_stream_init(&fatfs_cfg);
 
     wav_decoder_cfg_t wav_cfg = DEFAULT_WAV_DECODER_CONFIG();
     wav_cfg.stack_in_ext = false; // Disable PSRAM stack to avoid FreeRTOS patch requirement
+    wav_cfg.out_rb_size = 16 * 1024;
     wav_decoder = wav_decoder_init(&wav_cfg);
 
     #ifdef __GNUC__
@@ -663,6 +1224,8 @@ extern "C" void app_main(void)
     i2s_cfg.type = AUDIO_STREAM_WRITER;
     i2s_cfg.stack_in_ext = false; // Use internal RAM
     i2s_cfg.std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO; // Duplicate Mono to Stereo
+    i2s_cfg.out_rb_size = 16 * 1024;
+    i2s_cfg.buffer_len = 7200;
     i2s_writer = i2s_stream_init(&i2s_cfg);
 
     audio_pipeline_register(pipeline, fatfs_stream, "file");
@@ -687,7 +1250,7 @@ extern "C" void app_main(void)
     // Play Startup Sound
     ESP_LOGI(TAG, "Playing Startup Sound...");
     g_startup_silence_playing = true;
-    audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_200ms.wav");
+    audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_300ms.wav");
     audio_pipeline_run(pipeline);
 
         // Initialize TimeManager (SNTP)
@@ -699,6 +1262,7 @@ extern "C" void app_main(void)
     xTaskCreate(input_task, "input_task", 4096, &dial, 10, NULL);
 
     // --- 5. Main Event Loop ---
+    g_led_booting = false;
     while (1) {
         // --- Regular Tasks ---
         // Check Daily Alarm
@@ -707,12 +1271,16 @@ extern "C" void app_main(void)
              if (!g_timer_alarm_active) {
                  // Reuse the timer alarm logic for simplicity
                  g_timer_alarm_active = true;
+                     g_daily_alarm_active = true;
+                     g_snooze_active = false;
                  g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  
                  // Stop anything currently playing
+                 audio_lock();
                  audio_pipeline_stop(pipeline);
                  audio_pipeline_wait_for_stop(pipeline);
                  audio_pipeline_terminate(pipeline);
+                 audio_unlock();
                  
                  // Enable Base Speaker for Alarm
                  update_audio_output();
@@ -729,15 +1297,33 @@ extern "C" void app_main(void)
                  } else {
                      g_alarm_fade_factor = 1.0f;
                  }
+                 
+                 // FORCE VOLUME FOR ALARM
+                 force_alarm_volume();
 
                  char path[128];
                  if (!today.ringtone.empty()) {
                      snprintf(path, sizeof(path), "/sdcard/ringtones/%s", today.ringtone.c_str());
+                     struct stat st;
+                     if (stat(path, &st) != 0) {
+                         std::string fallback = get_first_ringtone_path();
+                        ESP_LOGW(TAG, "Alarm ringtone missing, falling back: %s", path);
+                        if (!fallback.empty()) {
+                            ESP_LOGI(TAG, "Using first ringtone fallback: %s", fallback.c_str());
+                        }
+                         g_current_alarm_file = fallback.empty() ? std::string(path) : fallback;
+                     } else {
+                         g_current_alarm_file = std::string(path);
+                     }
                  } else {
-                     snprintf(path, sizeof(path), "/sdcard/ringtones/digital_alarm.wav");
+                     std::string fallback = get_first_ringtone_path();
+                    if (!fallback.empty()) {
+                        ESP_LOGI(TAG, "Using first ringtone fallback: %s", fallback.c_str());
+                    }
+                     g_current_alarm_file = fallback.empty()
+                         ? std::string("/sdcard/ringtones/") + APP_DEFAULT_TIMER_RINGTONE
+                         : fallback;
                  }
-                 
-                 g_current_alarm_file = std::string(path);
                  play_file(g_current_alarm_file.c_str());
              }
         }
@@ -753,20 +1339,31 @@ extern "C" void app_main(void)
             if (!dial.isDialing() && (now - last_digit_time) > DIAL_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Dial Timeout. Processing Number: %s", dial_buffer.c_str());
                 
+                // Voice menu (single digit)
+                if (g_voice_menu_active && g_off_hook) {
+                    if (dial_buffer.size() == 1) {
+                        int digit = dial_buffer[0] - '0';
+                        handle_voice_menu_digit(digit);
+                    } else {
+                        start_voice_queue({system_path("error_msg")});
+                    }
+                    g_voice_menu_active = false;
+                }
                 // On-hook -> Timer mode (1-3 digits, up to 500 minutes)
-                if (!g_off_hook) {
+                else if (!g_off_hook) {
                     if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
                         int minutes = atoi(dial_buffer.c_str());
-                        if (minutes >= 1 && minutes <= 500) {
+                        if (minutes >= APP_TIMER_MIN_MINUTES && minutes <= APP_TIMER_MAX_MINUTES) {
                             ESP_LOGI(TAG, "Timer set: %d minutes", minutes);
                             // Reset alarm file to default for kitchen timer
-                            g_current_alarm_file = "/sdcard/ringtones/digital_alarm.wav";
-                            
+                            g_current_alarm_file = get_timer_ringtone_path();
+                            g_snooze_active = false;
+
                             start_timer_minutes(minutes);
                             g_timer_announce_minutes = minutes;
                             g_timer_announce_pending = true;
                             g_timer_intro_playing = true;
-                            play_file("/sdcard/system/timer_set_de.wav");
+                            play_file(system_path("timer_set").c_str());
                         } else {
                             ESP_LOGW(TAG, "Invalid timer value: %d", minutes);
                             play_file("/sdcard/system/error_tone.wav");
@@ -783,11 +1380,23 @@ extern "C" void app_main(void)
                          process_phonebook_function(entry);
                     } else {
                         ESP_LOGI(TAG, "Number %s not found.", dial_buffer.c_str());
-                        play_file("/sdcard/system/call_terminated.wav");
+                        std::vector<std::string> sequence;
+                        sequence.push_back(system_path("number_invalid"));
+                        sequence.push_back("/sdcard/system/busy_tone.wav");
+                        sequence.push_back("/sdcard/system/busy_tone.wav");
+                        start_voice_queue(sequence);
                     }
                 }
-                
+
                 dial_buffer = ""; // Reset buffer
+            }
+        }
+
+        // Night mode timeout
+        if (g_night_mode_active) {
+            int64_t now = esp_timer_get_time() / 1000;
+            if (now >= g_night_mode_end_ms) {
+                set_night_mode(false);
             }
         }
 
@@ -806,6 +1415,8 @@ extern "C" void app_main(void)
             if (now >= g_timer_end_ms) {
                 ESP_LOGI(TAG, "Timer expired -> alarm");
                 g_timer_active = false;
+                g_daily_alarm_active = false;
+                g_snooze_active = false;
                 play_timer_alarm();
             }
         }
@@ -842,9 +1453,12 @@ extern "C" void app_main(void)
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
                     ESP_LOGI(TAG, "Audio Finished.");
                     stop_playback();
+                    if (play_next_in_queue()) {
+                        continue;
+                    }
                     if (g_startup_silence_playing) {
                         g_startup_silence_playing = false;
-                        play_file("/sdcard/system/system_ready_en.wav");
+                        play_file(system_path("system_ready").c_str());
                         continue;
                     }
                     if (g_timer_intro_playing && g_timer_announce_pending) {
@@ -852,6 +1466,10 @@ extern "C" void app_main(void)
                         g_timer_announce_pending = false;
                         announce_timer_minutes(g_timer_announce_minutes);
                         continue;
+                    }
+                    if (g_force_base_output) {
+                        g_force_base_output = false;
+                        update_audio_output();
                     }
                     if (g_timer_alarm_active) {
                         int64_t now = esp_timer_get_time() / 1000;

@@ -3,6 +3,8 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <sys/time.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,9 +14,12 @@
 
 static const char *TAG = "TIME_MANAGER";
 static bool _alarm_ringing = false;
-static int _last_triggered_day = -1; // To ensure we trigger only once per day
+static int _last_triggered_day = -1; // Ensure trigger only once per day
+static TaskHandle_t s_sntp_task = NULL;
+static bool s_sntp_synced = false;
+static time_t s_last_ntp_sync = 0;
 
-// --- RTC DS3231 Implementation (IDF 5.x New Driver) ---
+// RTC DS3231 Implementation
 #define I2C_PORT_NUM I2C_NUM_1
 #define DS3231_ADDR 0x68
 
@@ -23,6 +28,8 @@ static i2c_master_dev_handle_t rtc_dev_handle = NULL;
 
 static uint8_t bcd2dec(uint8_t val) { return ((val / 16 * 10) + (val % 16)); }
 static uint8_t dec2bcd(uint8_t val) { return ((val / 10 * 16) + (val % 10)); }
+
+static bool rtc_read_time_raw(struct tm *out_tm);
 
 static time_t timegm_utc(struct tm *timeinfo) {
     if (!timeinfo) return (time_t)-1;
@@ -45,6 +52,45 @@ static time_t timegm_utc(struct tm *timeinfo) {
     tzset();
 
     return ts;
+}
+
+static void sntp_monitor_task(void *pvParameters) {
+    int backoff_sec = 5;
+    const int max_backoff_sec = 300;
+    sntp_sync_status_t last_status = SNTP_SYNC_STATUS_RESET;
+
+    while (true) {
+        sntp_sync_status_t status = esp_sntp_get_sync_status();
+        if (status != last_status) {
+            if (status == SNTP_SYNC_STATUS_COMPLETED) {
+                ESP_LOGI(TAG, "SNTP sync status: completed");
+            } else if (status == SNTP_SYNC_STATUS_IN_PROGRESS) {
+                ESP_LOGW(TAG, "SNTP sync status: in progress");
+            } else {
+                ESP_LOGW(TAG, "SNTP sync status: reset");
+            }
+            last_status = status;
+        }
+
+        if (status == SNTP_SYNC_STATUS_COMPLETED || s_sntp_synced) {
+            s_sntp_synced = true;
+            vTaskDelay(pdMS_TO_TICKS(600000));
+            continue;
+        }
+
+        ESP_LOGW(TAG, "SNTP not synced, retry in %d seconds", backoff_sec);
+        vTaskDelay(pdMS_TO_TICKS(backoff_sec * 1000));
+
+        if (!s_sntp_synced) {
+            esp_sntp_stop();
+            esp_sntp_init();
+        }
+
+        if (backoff_sec < max_backoff_sec) {
+            backoff_sec *= 2;
+            if (backoff_sec > max_backoff_sec) backoff_sec = max_backoff_sec;
+        }
+    }
 }
 
 static void i2c_init_rtc() {
@@ -102,34 +148,40 @@ static void rtc_write_time(struct tm *timeinfo) {
 }
 
 static void rtc_read_time() {
-    if (!rtc_dev_handle) return;
-    
+    struct tm t;
+    if (!rtc_read_time_raw(&t)) {
+        ESP_LOGE(TAG, "DS3231 Read Failed (or no RTC present)");
+        return;
+    }
+
+    // Set System Time
+    time_t timestamp = timegm_utc(&t);
+    struct timeval tv = { .tv_sec = timestamp, .tv_usec = 0 };
+    settimeofday(&tv, NULL);
+
+    ESP_LOGI(TAG, "System Time set from DS3231: %s", asctime(&t));
+}
+
+static bool rtc_read_time_raw(struct tm *out_tm) {
+    if (!rtc_dev_handle || !out_tm) return false;
+
     uint8_t reg = 0x00;
     uint8_t data[7];
-    
+
     esp_err_t ret = i2c_master_transmit_receive(rtc_dev_handle, &reg, 1, data, 7, -1);
+    if (ret != ESP_OK) return false;
 
-    if (ret == ESP_OK) {
-        struct tm t;
-        memset(&t, 0, sizeof(struct tm));
-        t.tm_sec  = bcd2dec(data[0]);
-        t.tm_min  = bcd2dec(data[1]);
-        t.tm_hour = bcd2dec(data[2]);
-        t.tm_wday = bcd2dec(data[3]) - 1;
-        t.tm_mday = bcd2dec(data[4]);
-        t.tm_mon  = bcd2dec(data[5] & 0x7F) - 1; 
-        t.tm_year = bcd2dec(data[6]) + 100;
-        t.tm_isdst = -1;
+    memset(out_tm, 0, sizeof(struct tm));
+    out_tm->tm_sec  = bcd2dec(data[0]);
+    out_tm->tm_min  = bcd2dec(data[1]);
+    out_tm->tm_hour = bcd2dec(data[2]);
+    out_tm->tm_wday = bcd2dec(data[3]) - 1;
+    out_tm->tm_mday = bcd2dec(data[4]);
+    out_tm->tm_mon  = bcd2dec(data[5] & 0x7F) - 1;
+    out_tm->tm_year = bcd2dec(data[6]) + 100;
+    out_tm->tm_isdst = -1;
 
-        // Set System Time
-        time_t timestamp = timegm_utc(&t);
-        struct timeval tv = { .tv_sec = timestamp, .tv_usec = 0 };
-        settimeofday(&tv, NULL);
-        
-        ESP_LOGI(TAG, "System Time set from DS3231: %s", asctime(&t));
-    } else {
-         ESP_LOGE(TAG, "DS3231 Read Failed (or no RTC present)");
-    }
+    return true;
 }
 
 // Callback for SNTP
@@ -140,6 +192,8 @@ void time_sync_notification_cb(struct timeval *tv) {
     time(&now);
     gmtime_r(&now, &timeinfo);
     rtc_write_time(&timeinfo);
+    s_sntp_synced = true;
+    s_last_ntp_sync = now;
 }
 
 void TimeManager::init() {
@@ -155,6 +209,10 @@ void TimeManager::init() {
     esp_sntp_setservername(0, "pool.ntp.org");
     sntp_set_time_sync_notification_cb(time_sync_notification_cb);
     esp_sntp_init();
+
+    if (!s_sntp_task) {
+        xTaskCreate(sntp_monitor_task, "sntp_monitor", 3072, NULL, 4, &s_sntp_task);
+    }
     
     // Set Timezone
     std::string tz = getTimezone();
@@ -180,6 +238,10 @@ void TimeManager::setTimezone(const char* tz) {
         // struct tm now = getCurrentTime();
         // rtc_write_time(&now); 
     }
+}
+
+time_t TimeManager::getLastNtpSync() {
+    return s_last_ntp_sync;
 }
 
 std::string TimeManager::getTimezone() {
@@ -216,7 +278,7 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
         if (ringtone && strlen(ringtone) > 0) {
             nvs_set_str(my_handle, key_snd, ringtone);
         } else {
-            nvs_set_str(my_handle, key_snd, "digital_alarm.wav");
+            nvs_set_str(my_handle, key_snd, APP_DEFAULT_TIMER_RINGTONE);
         }
         
         nvs_commit(my_handle);
@@ -226,7 +288,7 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
 }
 
 DayAlarm TimeManager::getAlarm(int dayIndex) {
-    DayAlarm alarm = {7, 0, false, false, "digital_alarm.wav"}; // Default
+    DayAlarm alarm = {7, 0, false, false, APP_DEFAULT_TIMER_RINGTONE}; // Default
     if (dayIndex < 0 || dayIndex > 6) return alarm;
 
     nvs_handle_t my_handle;
@@ -268,6 +330,17 @@ struct tm TimeManager::getCurrentTime() {
     time(&now);
     localtime_r(&now, &timeinfo);
     return timeinfo;
+}
+
+struct tm TimeManager::getCurrentTimeRtc() {
+    struct tm rtc_tm;
+    if (rtc_read_time_raw(&rtc_tm)) {
+        time_t ts = timegm_utc(&rtc_tm);
+        struct tm local_tm;
+        localtime_r(&ts, &local_tm);
+        return local_tm;
+    }
+    return getCurrentTime();
 }
 
 bool TimeManager::checkAlarm() {

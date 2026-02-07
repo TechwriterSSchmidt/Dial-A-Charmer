@@ -26,14 +26,12 @@
 #define APP_HOOK_ACTIVE_LOW  true 
 
 // Power Amplifier
-// GPIO 21 is safe to use for Amp because we moved SDA to 18
 #define APP_PIN_PA_ENABLE  21 
 #define APP_PA_ENABLE_DELAY_MS 250 // Wait for DAC/I2S voltage to stabilize
 #define APP_PA_DISABLE_DELAY_MS 50
 
 // RTC (DS3231)
-// Using GPIO 18 (Was Key 5 / Extra Btn) for SDA
-// Using GPIO 22 (Green LED) for SCL
+// I2C Pins
 #define APP_PIN_RTC_SDA 18
 #define APP_PIN_RTC_SCL 22
 
@@ -49,10 +47,31 @@
 #define APP_DIALTONE_SILENCE_MS 1000
 #define APP_BUSY_TIMEOUT_MS 5000
 
+// Timer settings
+#define APP_TIMER_MIN_MINUTES 1
+#define APP_TIMER_MAX_MINUTES 500
+#define APP_DEFAULT_TIMER_RINGTONE "standard_ringtone.wav"
+
+// Snooze settings
+#define APP_SNOOZE_DEFAULT_MINUTES 5
+#define APP_SNOOZE_MIN_MINUTES 1
+#define APP_SNOOZE_MAX_MINUTES 60
+
 // Software gain defaults
 #define APP_GAIN_DEFAULT_LEFT 0.5f
 #define APP_GAIN_DEFAULT_RIGHT 0.5f
 #define APP_GAIN_RAMP_MS 40
+
+// Volume defaults (0-100)
+#define APP_DEFAULT_BASE_VOLUME 60
+#define APP_DEFAULT_HANDSET_VOLUME 50
+#define APP_ALARM_MIN_VOLUME 55
+#define APP_ALARM_DEFAULT_VOLUME 90
+
+// Night mode settings
+#define APP_NIGHTMODE_DURATION_HOURS 6
+#define APP_NIGHTMODE_LED_PERCENT 5
+#define APP_NIGHTMODE_VOLUME_PERCENT 50
 
 // Phonebook default numbers (max 3 digits)
 #define APP_PB_NUM_PERSONA_1 "1"
@@ -62,16 +81,13 @@
 #define APP_PB_NUM_PERSONA_5 "5"
 #define APP_PB_NUM_RANDOM_MIX "11"
 #define APP_PB_NUM_TIME "110"
-#define APP_PB_NUM_GEMINI "000"
-#define APP_PB_NUM_VOICE_MENU "900"
-#define APP_PB_NUM_TOGGLE_ALARMS "910"
-#define APP_PB_NUM_SKIP_ALARM "911"
+#define APP_PB_NUM_VOICE_MENU "0"
 #define APP_PB_NUM_REBOOT "999"
 
 
 // SD Card
 #define APP_PIN_SD_CS      13
-// #define APP_PIN_LED        23 // Reused from Dial Mode for WS2812 - Defined above
+// APP_PIN_LED defined above
 
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0

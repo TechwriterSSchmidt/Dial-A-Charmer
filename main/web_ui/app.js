@@ -5,6 +5,7 @@ const state = {
     lang: 'de',
     settings: {}, // will hold wifi, volume etc
     loading: true,
+    phonebook: {},
     logLines: [],
     logTimer: null
 };
@@ -73,7 +74,6 @@ const API = {
     getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
     getLogs: () => fetch('/api/logs').then(r => r.json()),
     getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
-    savePhonebook: (data) => fetch('/api/phonebook', { method: 'POST', body: JSON.stringify(data) }),
     getTime: () => fetch('/api/time').then(r => r.json())
 };
 
@@ -199,9 +199,9 @@ function render() {
     }
     
     // Post-render Logic (Listeners)
-    if (path === '/phonebook' && Object.keys(state.phonebook).length === 0) {
+    if (path === '/phonebook' && state.phonebook && Object.keys(state.phonebook).length === 0) {
         API.getPhonebook().then(pb => {
-            state.phonebook = pb;
+            state.phonebook = pb || {};
             render(); // Re-render with data
         });
     }
@@ -300,8 +300,7 @@ window.onpopstate = render;
 // --- SPECIFIC PAGES ---
 function renderPhonebook() {
     const isDe = state.lang === 'de';
-    const tTitle = isDe ? "Telefonbuch" : "Phonebook";
-    const fullData = {};
+    const fullData = state.phonebook || {};
 
     const systemItems = [
         { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)', defNum: '1' },
@@ -312,10 +311,7 @@ function renderPhonebook() {
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
-        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI', defNum: '000' },
-        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '900' },
-        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms', defNum: '910' },
-        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm', defNum: '911' },
+        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '0' },
         { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '999' }
     ];
 
@@ -345,11 +341,35 @@ function renderPhonebook() {
                 <td class="pb-name-cell">${currentName}</td>
             </tr>
         `;
+
+        if (item.id === 'menu') {
+            const sub = isDe
+                ? [
+                    ['1', 'Nächster Wecker'],
+                    ['2', 'Nachtmodus'],
+                    ['3', 'Telefonbuch ansagen'],
+                    ['4', 'Systemstatus']
+                ]
+                : [
+                    ['1', 'Next Alarm'],
+                    ['2', 'Night Mode'],
+                    ['3', 'Phonebook Export'],
+                    ['4', 'System Check']
+                ];
+
+            sub.forEach(([num, text]) => {
+                rows += `
+                    <tr class="pb-sub">
+                        <td class="pb-num-cell">${num}</td>
+                        <td class="pb-name-cell pb-sub-text">${text}</td>
+                    </tr>
+                `;
+            });
+        }
     });
 
     return `
         <div class="pb-wrapper">
-            <div class="pb-title">${tTitle}</div>
             <div class="pb-notepad">
                 <table class="pb-table">
                     <thead>
@@ -367,69 +387,6 @@ function renderPhonebook() {
     `;
 }
 
-window.savePhonebook = () => {
-    const isDe = state.lang === 'de';
-    const fullData = state.phonebook || {};
-
-    const systemItems = [
-        { id: 'p1', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '1', defName: 'Persona 1 (Default)' },
-        { id: 'p2', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '2', defName: 'Persona 2 (Joke)' },
-        { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)' },
-        { id: 'p4', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '4', defName: 'Persona 4 (Captain)' },
-        { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5' },
-        { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)' },
-
-        { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement' },
-        { id: 'gem', type: 'FUNCTION', val: 'GEMINI_CHAT', param: '', defName: 'Gemini AI' },
-        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu' },
-        { id: 'tog', type: 'FUNCTION', val: 'TOGGLE_ALARMS', param: '', defName: isDe ? 'Wecker schalten' : 'Toggle Alarms' },
-        { id: 'skip', type: 'FUNCTION', val: 'SKIP_NEXT_ALARM', param: '', defName: isDe ? 'Naechsten Wecker ueberspringen' : 'Skip Next Alarm' },
-        { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot' }
-    ];
-
-    const newData = {};
-
-    for (const [key, entry] of Object.entries(fullData)) {
-        const isSystem = systemItems.some(item => {
-            const entryParam = entry.parameter || "";
-            const itemParam = item.param || "";
-            return entry.type === item.type && entry.value === item.val && entryParam === itemParam;
-        });
-        if (!isSystem) newData[key] = entry;
-    }
-
-    systemItems.forEach(item => {
-        const input = document.getElementById(`pb_input_${item.id}`);
-        if (!input) return;
-
-        const newKey = input.value.trim();
-        if (!newKey) return;
-
-        let name = item.defName;
-        for (const entry of Object.values(fullData)) {
-            const entryParam = entry.parameter || "";
-            const itemParam = item.param || "";
-            if (entry.type === item.type && entry.value === item.val && entryParam === itemParam) {
-                if (entry.name && entry.name !== "Unknown") name = entry.name;
-                break;
-            }
-        }
-
-        newData[newKey] = {
-            name: name,
-            type: item.type,
-            value: item.val,
-            parameter: item.param
-        };
-    });
-
-    document.getElementById('app').innerHTML = `<div style="text-align:center; padding:50px; color:#d4af37;"><h3>${isDe ? 'Speichern...' : 'Saving...'}</h3></div>`;
-
-    API.savePhonebook(newData).then(() => {
-        state.phonebook = newData;
-        render();
-    });
-};
 
 function renderSettings() {
     const DAYS_DE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
@@ -602,11 +559,13 @@ function renderAdvanced() {
             </div>
 
             <!-- WIFI PANEL -->
-            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+              <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                  <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">WiFi Network</h4>
 
-                 <div class="wifi-ssid-text">${state.settings.wifi_ssid || 'No Net'}</div>
-                 <button onclick="nav('/setup')" class="wifi-scan-btn">SCAN</button>
+                  <div style="display:flex; flex-direction:column; gap:6px;">
+                     <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || 'No Net'}</div>
+                     <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">SCAN</button>
+                  </div>
             </div>
 
             <!-- CONSOLE PANEL -->
@@ -617,12 +576,12 @@ function renderAdvanced() {
             </div>
 
             <!-- VOLUME PANEL -->
-            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+            <div style="background:#222; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Volume</h4>
                 
                 <!-- Base Speaker -->
-                <div style="margin-top:12px;">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <div style="margin-top:6px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Base Speaker</label>
                         <span id="vol-disp-base" style="color:#d4af37; font-weight:bold;">${state.settings.volume || 60}%</span>
                     </div>
@@ -632,14 +591,24 @@ function renderAdvanced() {
                 </div>
 
                 <!-- Handset Speaker -->
-                <div style="margin-top:15px;">
-                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <div style="margin-top:8px;">
+                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Handset</label>
-                        <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset || 60}%</span>
+                        <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset}%</span>
                     </div>
-                    <input type="range" min="0" max="100" value="${state.settings.volume_handset || 60}" 
+                    <input type="range" min="0" max="100" value="${state.settings.volume_handset}" 
                            oninput="document.getElementById('vol-disp-handset').innerText=this.value+'%'"
                            onchange="saveVol('handset', this.value)" style="width:100%"/>
+                </div>
+                <!-- Alarm Volume -->
+                <div style="margin-top:8px;">
+                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Alarm (Min ${state.settings.vol_alarm_min}%)</label>
+                        <span id="vol-disp-alarm" style="color:#d4af37; font-weight:bold;">${state.settings.vol_alarm || 90}%</span>
+                    </div>
+                    <input type="range" min="${state.settings.vol_alarm_min || 60}" max="100" value="${state.settings.vol_alarm || 90}" 
+                           oninput="document.getElementById('vol-disp-alarm').innerText=this.value+'%'"
+                           onchange="saveVol('alarm', this.value)" style="width:100%"/>
                 </div>
             </div>
 
@@ -648,11 +617,10 @@ function renderAdvanced() {
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Timer Alarm</h4>
                 
                 <div style="margin-top:12px;">
-                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase; display:block; margin-bottom:8px;">Ringtone</label>
                     <select id="timer-ringtone-select" onchange="saveTimerRingtone(this.value); previewTone(this.value);" style="width:100%; padding:8px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.9rem;">
                         ${(() => {
                             const ringtones = state.ringtones || [];
-                            const current = state.settings.timer_ringtone || 'digital_alarm.wav';
+                            const current = state.settings.timer_ringtone;
                             let opts = '';
                             ringtones.forEach(r => {
                                 const sel = (r === current) ? 'selected' : '';
@@ -684,9 +652,12 @@ window.saveVol = (type, v) => {
     if (type === 'base') {
         state.settings.volume = val;
         API.saveSettings({volume: val});
-    } else {
+    } else if (type === 'handset') {
          state.settings.volume_handset = val;
          API.saveSettings({volume_handset: val});
+    } else if (type === 'alarm') {
+         state.settings.vol_alarm = val;
+         API.saveSettings({vol_alarm: val});
     }
 };
 

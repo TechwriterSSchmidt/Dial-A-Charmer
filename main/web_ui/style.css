@@ -62,6 +62,65 @@ input, select {
     box-sizing: border-box;
     border-radius: 12px; /* Soft Rounded Edges */
 }
+
+/* Range Input Fixes for Full Width */
+input[type=range] {
+    -webkit-appearance: none; /* Override default look */
+    width: 100%; /* Force full width */
+    margin: 10px 0; /* Add some vertical spacing */
+    background: transparent; /* Needed for webkit */
+    padding: 0; /* Remove padding that might shrink the track */
+    border: none; /* Remove border from container */
+}
+
+/* Range Track */
+input[type=range]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 12px;
+    cursor: pointer;
+    background: #333;
+    border-radius: 6px;
+    border: 1px solid #555;
+}
+input[type=range]::-moz-range-track {
+    width: 100%;
+    height: 12px;
+    cursor: pointer;
+    background: #333;
+    border-radius: 6px;
+    border: 1px solid #555;
+}
+
+/* Range Thumb (Handle) */
+input[type=range]::-webkit-slider-thumb {
+    height: 24px;
+    width: 24px;
+    border-radius: 50%;
+    background: #d4af37;
+    cursor: pointer;
+    -webkit-appearance: none;
+    margin-top: -7px; /* Center on track (height 12px, thumb 24px -> -6px off, -1 border = -7) */
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    border: 1px solid #fff;
+}
+input[type=range]::-moz-range-thumb {
+    height: 24px;
+    width: 24px;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    background: #d4af37;
+    cursor: pointer;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+
+/* Focus States */
+input[type=range]:focus {
+    outline: none;
+}
+input[type=range]:focus::-webkit-slider-runnable-track {
+    background: #444;
+}
+
 input:focus, select:focus {
     outline: none;
     border-color: #d4af37;
@@ -317,29 +376,6 @@ select.alarm-sound-select {
   height: 30px;
   line-height: 28px;
 }
-.pb-input {
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: #000;
-  padding: 0;
-  font-family: 'Plaisir', 'Times New Roman', Times, serif;
-  font-size: 1.0rem;
-  font-weight: bold;
-  text-align: right;
-  outline: none;
-  box-shadow: none;
-  height: 30px;
-  line-height: 28px;
-  border-radius: 0;
-}
-.pb-input::placeholder {
-  color: #aaa;
-  opacity: 0.6;
-}
-.pb-input:focus {
-  background: rgba(255,255,0,0.12);
-}
 .pb-name-cell {
   font-family: 'Plaisir', 'Times New Roman', Times, serif;
   font-size: 0.9rem;
@@ -355,10 +391,46 @@ select.alarm-sound-select {
   color: #000;
   font-weight: bold;
 }
-.pb-critical .pb-input {
+
+.pb-sub .pb-num-cell {
+  padding: 0 6px 0 2px;
+  width: 52px;
+  text-align: right;
+  font-size: 0.56rem;
   color: #000;
-  font-weight: bold;
 }
+
+.pb-sub .pb-num-cell::before {
+  content: '> ';
+  color: #444;
+  margin-right: 2px;
+}
+
+.pb-sub-text {
+  font-size: 0.58rem;
+  color: #444;
+  padding-left: 4px;
+  line-height: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+
+.pb-sub {
+  background: rgba(0, 0, 0, 0.02);
+  border-left: 3px solid rgba(0, 0, 0, 0.12);
+  height: 16px;
+}
+
+.pb-sub .pb-name-cell {
+  padding: 0 4px;
+}
+
+.pb-sub td {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 
 /* WiFi panel alignment */
 .wifi-row {

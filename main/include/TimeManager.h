@@ -25,6 +25,10 @@ public:
     static void stopAlarm();
     
     static struct tm getCurrentTime();
+    static struct tm getCurrentTimeRtc();
+
+    // SNTP Sync
+    static time_t getLastNtpSync();
 
     // Timezone Handling
     static void setTimezone(const char* tz);
