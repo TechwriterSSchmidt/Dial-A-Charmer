@@ -8,6 +8,7 @@ import concurrent.futures
 import threading
 import time
 import subprocess
+import wave
 from pathlib import Path
 from gtts import gTTS
 from pydub import AudioSegment
@@ -429,6 +430,15 @@ def check_piper_status():
 
 def generate_speech(text, lang, output_path, model_name=None, force_piper=False):
     """Generates audio using Piper (EN) or Google TTS (DE)."""
+
+    def write_pcm_wav(segment, out_path):
+        """Write a minimal PCM WAV (16-bit, 44.1kHz, mono) without extra chunks."""
+        segment = segment.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
+        with wave.open(str(out_path), 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(AUDIO_RATE)
+            wav_file.writeframes(segment.raw_data)
     
     # German: Google TTS only
     if lang == 'de' and not force_piper:
@@ -444,8 +454,7 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
             
             # Convert
             sound = AudioSegment.from_mp3(temp_mp3)
-            sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-            sound.export(str(output_path), format="wav")
+            write_pcm_wav(sound, output_path)
             
             if os.path.exists(temp_mp3):
                 os.remove(temp_mp3)
@@ -491,8 +500,7 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
 
     try:
         sound = AudioSegment.from_wav(str(output_path))
-        sound = sound.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-        sound.export(str(output_path), format="wav")
+        write_pcm_wav(sound, output_path)
     except Exception as e:
         raise Exception(f"Piper WAV normalize failed: {e}")
     
