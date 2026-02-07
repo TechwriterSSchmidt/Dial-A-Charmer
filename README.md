@@ -51,10 +51,10 @@ The phonebook ships with default numbers. You can edit these entries in the Web 
 
 | Number | Name | Action |
 | :--- | :--- | :--- |
-| `1` | Persona 1 (Default) | Play Persona 1 compliments |
-| `2` | Persona 2 (Joke) | Play Persona 2 compliments |
-| `3` | Persona 3 (SciFi) | Play Persona 3 compliments |
-| `4` | Persona 4 (Captain) | Play Persona 4 compliments |
+| `1` | Persona 1 | Play Persona 1 compliments |
+| `2` | Persona 2 | Play Persona 2 compliments |
+| `3` | Persona 3 | Play Persona 3 compliments |
+| `4` | Persona 4 | Play Persona 4 compliments |
 | `5` | Persona 5 | Play Persona 5 compliments |
 | `11` | Random Mix (Surprise) | Play a randomized mix |
 | `110` | Zeitauskunft | Announce time (local) |
