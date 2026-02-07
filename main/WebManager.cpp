@@ -856,6 +856,10 @@ void WebManager::setupWifi() {
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
         ESP_ERROR_CHECK(esp_wifi_start());
+        
+        // Enable Power Save Mode (DTIM sleep)
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+
         ESP_ERROR_CHECK(esp_wifi_connect());
         
         // Wait for connection (Blocking for simplicity in this phase, or use event group)
