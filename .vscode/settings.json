@@ -7,6 +7,8 @@
     "IDF_PATH": "/home/sebastian/.espressif/v5.5.2/esp-idf",
     "ADF_PATH": "${workspaceFolder}/esp-adf"
   },
+  "cmake.generator": "Ninja",
+  "cmake.configureOnOpen": false,
   "cmake.configureEnvironment": {
     "IDF_PATH": "/home/sebastian/.espressif/v5.5.2/esp-idf",
     "PATH": "/home/sebastian/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin:/home/sebastian/.espressif/tools/python/v5.5.2/venv/bin:${env:PATH}"

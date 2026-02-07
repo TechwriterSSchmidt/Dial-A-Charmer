@@ -21,7 +21,8 @@ SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
 
 # Piper Configuration
-PIPER_BIN = Path(shutil.which("piper") or "")
+_sys_piper = shutil.which("piper")
+PIPER_BIN = Path(_sys_piper) if _sys_piper else Path("piper_not_found_on_system_path")
 PIPER_BIN_VENV = PROJECT_ROOT / ".venv/bin/piper"
 PIPER_BIN_FALLBACK = PROJECT_ROOT / "utils/piper/piper/piper"
 PIPER_VOICES_DIR = PROJECT_ROOT / "utils/piper_voices"
@@ -293,9 +294,9 @@ def generate_tones(base_dir):
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-5.0)
     save(beep, "beep.wav")
 
-    # 4b. Silence (200ms)
-    silence = AudioSegment.silent(duration=200)
-    save(silence, "silence_200ms.wav")
+    # 4b. Silence (300ms)
+    silence = AudioSegment.silent(duration=300)
+    save(silence, "silence_300ms.wav")
     
     # 5. Click (User Interaction)
     click = Sine(2500).to_audio_segment(duration=30).apply_gain(-10.0).fade_out(10)
@@ -915,9 +916,9 @@ def generate_tones(base_dir):
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-3.0)
     save(beep, "beep.wav")
 
-    # 3b. Silence (200ms)
-    silence = AudioSegment.silent(duration=200)
-    save(silence, "silence_200ms.wav")
+    # 3b. Silence (300ms)
+    silence = AudioSegment.silent(duration=300)
+    save(silence, "silence_300ms.wav")
 
     # 4. Error Tone (150Hz Sawtooth, 500ms)
     error = Sawtooth(150).to_audio_segment(duration=500).apply_gain(-3.0)

@@ -990,7 +990,7 @@ extern "C" void app_main(void)
     // Play Startup Sound
     ESP_LOGI(TAG, "Playing Startup Sound...");
     g_startup_silence_playing = true;
-    audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_200ms.wav");
+    audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_300ms.wav");
     audio_pipeline_run(pipeline);
 
         // Initialize TimeManager (SNTP)
