@@ -45,6 +45,7 @@ audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
 audio_board_handle_t board_handle = NULL; // Globale Reference
 led_strip_handle_t g_led_strip = NULL;
 SemaphoreHandle_t g_audio_mutex = NULL;
+SemaphoreHandle_t g_led_mutex = NULL;
 
 // Logic State
 std::string dial_buffer = "";
@@ -149,8 +150,14 @@ static void set_led_color(uint8_t r, uint8_t g, uint8_t b) {
     g_led_g = g;
     g_led_b = b;
     if (g_led_strip) {
+        if (g_led_mutex) {
+            xSemaphoreTake(g_led_mutex, portMAX_DELAY);
+        }
         led_strip_set_pixel(g_led_strip, 0, r, g, b);
         led_strip_refresh(g_led_strip);
+        if (g_led_mutex) {
+            xSemaphoreGive(g_led_mutex);
+        }
     }
 }
 
@@ -515,11 +522,14 @@ static std::string get_timer_ringtone_path() {
 static void announce_timer_minutes(int minutes) {
     char path[128];
     if (minutes < 10) {
-        snprintf(path, sizeof(path), "/sdcard/time/de/m_0%d.wav", minutes);
+        snprintf(path, sizeof(path), "m_0%d.wav", minutes);
     } else {
-        snprintf(path, sizeof(path), "/sdcard/time/de/m_%d.wav", minutes);
+        snprintf(path, sizeof(path), "m_%d.wav", minutes);
     }
-    play_file(path);
+    std::vector<std::string> files;
+    files.push_back(time_path(path));
+    files.push_back(system_path("minutes"));
+    start_voice_queue(files);
 }
 
 // Software gain (no register writes) with soft ramp to reduce clicks
@@ -992,6 +1002,10 @@ extern "C" void app_main(void)
     if (!g_audio_mutex) {
         ESP_LOGE(TAG, "Audio mutex init failed");
     }
+    g_led_mutex = xSemaphoreCreateMutex();
+    if (!g_led_mutex) {
+        ESP_LOGE(TAG, "LED mutex init failed");
+    }
 
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
     xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
@@ -1039,7 +1053,7 @@ extern "C" void app_main(void)
     ESP_LOGW(TAG, "Power Amplifier control DISABLED via config");
 #endif
     
-    audio_hal_set_volume(board_handle->audio_hal, 60); // Set volume
+    audio_hal_set_volume(board_handle->audio_hal, APP_DEFAULT_BASE_VOLUME); // Set volume
 
     // --- 3. SD Card Peripheral ---
     ESP_LOGI(TAG, "Starting SD Card...");
@@ -1054,10 +1068,30 @@ extern "C" void app_main(void)
     esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
     esp_periph_start(set, sdcard_handle);
     
+    int64_t sd_start_ms = esp_timer_get_time() / 1000;
+    const int64_t sd_timeout_ms = 5000;
     while (!periph_sdcard_is_mounted(sdcard_handle)) {
+        if ((esp_timer_get_time() / 1000) - sd_start_ms > sd_timeout_ms) {
+            ESP_LOGE(TAG, "SD Card mount timeout");
+            g_sd_error = true;
+            break;
+        }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
-    ESP_LOGI(TAG, "SD Card mounted successfully");
+    if (periph_sdcard_is_mounted(sdcard_handle)) {
+        ESP_LOGI(TAG, "SD Card mounted successfully");
+        g_sd_error = false;
+    }
+
+    if (g_sd_error) {
+        ESP_LOGE(TAG, "SD Card not available. Starting in degraded mode.");
+        // Bring up web UI for diagnostics/configuration.
+        webManager.begin();
+        g_led_booting = false;
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
 
     // --- 1. Input Initialization (Moved to ensure ISR service order) ---
     ESP_LOGI(TAG, "Initializing Rotary Dial (Mode Pin: %d)...", APP_PIN_DIAL_MODE);
@@ -1353,7 +1387,7 @@ extern "C" void app_main(void)
                     }
                     if (g_startup_silence_playing) {
                         g_startup_silence_playing = false;
-                        play_file("/sdcard/system/system_ready_en.wav");
+                        play_file(system_path("system_ready").c_str());
                         continue;
                     }
                     if (g_timer_intro_playing && g_timer_announce_pending) {
