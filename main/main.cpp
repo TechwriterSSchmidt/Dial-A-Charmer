@@ -88,6 +88,7 @@ bool g_led_booting = true;
 bool g_snooze_active = false;
 bool g_daily_alarm_active = false;
 bool g_sd_error = false;
+bool g_force_base_output = false;
 
 // Forward decls for helpers used early.
 static void start_voice_queue(const std::vector<std::string> &files);
@@ -646,7 +647,7 @@ void update_audio_output() {
     // Determine Effective Output Mode
     // Force Base Speaker (false) if Alarm or Timer Announcement active
     bool effective_handset = g_output_mode_handset;
-    if (g_timer_alarm_active || g_timer_announce_pending) {
+    if (g_timer_alarm_active || g_timer_announce_pending || g_force_base_output) {
         effective_handset = false; 
     }
 
@@ -869,17 +870,28 @@ void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
     // Handle Timer/Alarm Mute
     if (g_timer_alarm_active) {
-        ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
         TimeManager::stopAlarm();
         g_timer_alarm_active = false;
+        stop_playback();
+
+        if (!g_daily_alarm_active) {
+            ESP_LOGI(TAG, "Timer expired -> deleted via Key 5");
+            g_daily_alarm_active = false;
+            g_snooze_active = false;
+            g_force_base_output = true;
+            update_audio_output();
+            play_file(system_path("timer_deleted").c_str());
+            return;
+        }
+
+        ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
         g_daily_alarm_active = false;
         g_snooze_active = true;
-        stop_playback();
         update_audio_output(); // Restore audio routing
         play_file(system_path("snooze_active").c_str());
         int snooze = get_snooze_minutes();
         ESP_LOGI(TAG, "Snoozing for %d minutes", snooze);
-        
+
         // Start Timer (Silent, no announcement)
         start_timer_minutes(snooze);
         // Important: start_timer_minutes sets g_timer_intro_playing=false by default (line 69 impl)
@@ -903,6 +915,7 @@ void on_hook_change(bool off_hook) {
 
     if (off_hook) {
         // Receiver Picked Up
+        bool skip_dialtone = false;
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -911,12 +924,24 @@ void on_hook_change(bool off_hook) {
         if (g_timer_alarm_active) {
             TimeManager::stopAlarm();
             g_timer_alarm_active = false;
-            g_daily_alarm_active = false;
-            g_snooze_active = false;
-            update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
+            if (!g_daily_alarm_active) {
+                ESP_LOGI(TAG, "Timer expired -> deleted via pickup");
+                g_daily_alarm_active = false;
+                g_snooze_active = false;
+                g_force_base_output = true;
+                update_audio_output();
+                play_file(system_path("timer_deleted").c_str());
+                skip_dialtone = true;
+            } else {
+                g_daily_alarm_active = false;
+                g_snooze_active = false;
+                update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
+            }
         }
         // Play dial tone
-        play_file("/sdcard/system/dialtone_1.wav");
+        if (!skip_dialtone) {
+            play_file("/sdcard/system/dialtone_1.wav");
+        }
     } else {
         // Receiver Hung Up
         stop_playback();
@@ -1395,6 +1420,10 @@ extern "C" void app_main(void)
                         g_timer_announce_pending = false;
                         announce_timer_minutes(g_timer_announce_minutes);
                         continue;
+                    }
+                    if (g_force_base_output) {
+                        g_force_base_output = false;
+                        update_audio_output();
                     }
                     if (g_timer_alarm_active) {
                         int64_t now = esp_timer_get_time() / 1000;
