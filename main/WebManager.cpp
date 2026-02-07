@@ -6,6 +6,8 @@
 #include <sys/param.h>
 #include <dirent.h>
 #include <sys/types.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_wifi.h"
@@ -26,6 +28,24 @@ extern void play_file(const char* path);
 
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
+
+static std::string get_first_ringtone_name() {
+    const char *dir_path = "/sdcard/ringtones";
+    DIR *dir = opendir(dir_path);
+    if (!dir) return "";
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        const char *name = ent->d_name;
+        size_t len = strlen(name);
+        if (len > 4 && strcasecmp(name + len - 4, ".wav") == 0) {
+            closedir(dir);
+            return name;
+        }
+    }
+    closedir(dir);
+    return "";
+}
 
 // Log capture (last 20 lines)
 static const size_t LOG_LINE_MAX = 256;
@@ -381,23 +401,42 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(root, "volume", vol);
 
     // Handset Volume (New)
-    uint8_t vol_h = 60;
+    uint8_t vol_h = APP_DEFAULT_HANDSET_VOLUME;
     if (err == ESP_OK) nvs_get_u8(my_handle, "volume_handset", &vol_h);
     cJSON_AddNumberToObject(root, "volume_handset", vol_h);
 
 
     // Snooze Time
-    int32_t snooze = 5;
+    int32_t snooze = APP_SNOOZE_DEFAULT_MINUTES;
     if (err == ESP_OK) nvs_get_i32(my_handle, "snooze_min", &snooze);
     cJSON_AddNumberToObject(root, "snooze_min", snooze);
 
     // Timer Ringtone
     len = sizeof(val);
-    if (err == ESP_OK && nvs_get_str(my_handle, "timer_ringtone", val, &len) == ESP_OK) {
-        cJSON_AddStringToObject(root, "timer_ringtone", val);
+    std::string ringtone_name;
+    if (err == ESP_OK && nvs_get_str(my_handle, "timer_ringtone", val, &len) == ESP_OK && val[0] != '\0') {
+        ringtone_name = val;
     } else {
-        cJSON_AddStringToObject(root, "timer_ringtone", "digital_alarm.wav");
+        ringtone_name = APP_DEFAULT_TIMER_RINGTONE;
     }
+
+    if (!ringtone_name.empty()) {
+        char path[128];
+        snprintf(path, sizeof(path), "/sdcard/ringtones/%s", ringtone_name.c_str());
+        struct stat st;
+        if (stat(path, &st) != 0) {
+            std::string fallback = get_first_ringtone_name();
+            if (!fallback.empty()) {
+                ringtone_name = fallback;
+            }
+        }
+    }
+
+    if (ringtone_name.empty()) {
+        ringtone_name = APP_DEFAULT_TIMER_RINGTONE;
+    }
+
+    cJSON_AddStringToObject(root, "timer_ringtone", ringtone_name.c_str());
     
     // --- Time & Timezone ---
     struct tm now = TimeManager::getCurrentTime();
@@ -494,6 +533,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         item = cJSON_GetObjectItem(root, "timer_ringtone");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
             nvs_set_str(my_handle, "timer_ringtone", item->valuestring);
+            ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
         }
 
         // Timezone

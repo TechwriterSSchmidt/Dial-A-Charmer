@@ -49,10 +49,24 @@
 #define APP_DIALTONE_SILENCE_MS 1000
 #define APP_BUSY_TIMEOUT_MS 5000
 
+// Timer settings
+#define APP_TIMER_MIN_MINUTES 1
+#define APP_TIMER_MAX_MINUTES 500
+#define APP_DEFAULT_TIMER_RINGTONE "standard_ringtone.wav"
+
+// Snooze settings
+#define APP_SNOOZE_DEFAULT_MINUTES 5
+#define APP_SNOOZE_MIN_MINUTES 1
+#define APP_SNOOZE_MAX_MINUTES 60
+
 // Software gain defaults
 #define APP_GAIN_DEFAULT_LEFT 0.5f
 #define APP_GAIN_DEFAULT_RIGHT 0.5f
 #define APP_GAIN_RAMP_MS 40
+
+// Volume defaults (0-100)
+#define APP_DEFAULT_BASE_VOLUME 60
+#define APP_DEFAULT_HANDSET_VOLUME 50
 
 // Night mode settings
 #define APP_NIGHTMODE_DURATION_HOURS 6

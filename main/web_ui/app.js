@@ -594,9 +594,9 @@ function renderAdvanced() {
                 <div style="margin-top:8px;">
                      <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Handset</label>
-                        <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset || 60}%</span>
+                        <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset}%</span>
                     </div>
-                    <input type="range" min="0" max="100" value="${state.settings.volume_handset || 60}" 
+                    <input type="range" min="0" max="100" value="${state.settings.volume_handset}" 
                            oninput="document.getElementById('vol-disp-handset').innerText=this.value+'%'"
                            onchange="saveVol('handset', this.value)" style="width:100%"/>
                 </div>
@@ -607,11 +607,10 @@ function renderAdvanced() {
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Timer Alarm</h4>
                 
                 <div style="margin-top:12px;">
-                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase; display:block; margin-bottom:8px;">Ringtone</label>
                     <select id="timer-ringtone-select" onchange="saveTimerRingtone(this.value); previewTone(this.value);" style="width:100%; padding:8px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.9rem;">
                         ${(() => {
                             const ringtones = state.ringtones || [];
-                            const current = state.settings.timer_ringtone || 'digital_alarm.wav';
+                            const current = state.settings.timer_ringtone;
                             let opts = '';
                             ringtones.forEach(r => {
                                 const sel = (r === current) ? 'selected' : '';

@@ -278,7 +278,7 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
         if (ringtone && strlen(ringtone) > 0) {
             nvs_set_str(my_handle, key_snd, ringtone);
         } else {
-            nvs_set_str(my_handle, key_snd, "digital_alarm.wav");
+            nvs_set_str(my_handle, key_snd, APP_DEFAULT_TIMER_RINGTONE);
         }
         
         nvs_commit(my_handle);
@@ -288,7 +288,7 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
 }
 
 DayAlarm TimeManager::getAlarm(int dayIndex) {
-    DayAlarm alarm = {7, 0, false, false, "digital_alarm.wav"}; // Default
+    DayAlarm alarm = {7, 0, false, false, APP_DEFAULT_TIMER_RINGTONE}; // Default
     if (dayIndex < 0 || dayIndex > 6) return alarm;
 
     nvs_handle_t my_handle;
