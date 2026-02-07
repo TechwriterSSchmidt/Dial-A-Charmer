@@ -311,7 +311,7 @@ function renderPhonebook() {
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
-        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '112' },
+        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '0' },
         { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '999' }
     ];
 
@@ -345,10 +345,10 @@ function renderPhonebook() {
         if (item.id === 'menu') {
             const sub = isDe
                 ? [
-                    ['1', 'Wecker morgen'],
+                    ['1', 'Nächster Wecker'],
                     ['2', 'Nachtmodus'],
-                    ['3', 'Telefonbuch Export'],
-                    ['4', 'System Check']
+                    ['3', 'Telefonbuch ansagen'],
+                    ['4', 'Systemstatus']
                 ]
                 : [
                     ['1', 'Next Alarm'],

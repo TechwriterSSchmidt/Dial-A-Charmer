@@ -261,7 +261,7 @@ static void handle_voice_menu_digit(int digit) {
         }
     } else if (digit == 3) {
         std::vector<std::string> files;
-        files.push_back(system_path("phonebook_export"));
+        // files.push_back(system_path("phonebook_export")); // Removed as we are now just announcing
         files.push_back(system_path("pb_persona1"));
         files.push_back(system_path("pb_persona2"));
         files.push_back(system_path("pb_persona3"));
@@ -739,22 +739,7 @@ void on_hook_change(bool off_hook) {
         play_file("/sdcard/system/dialtone_1.wav");
     } else {
         // Receiver Hung Up
-        int64_t now = esp_timer_get_time() / 1000;
-        bool short_pickup = (now - g_off_hook_start_ms) < APP_DIAL_TIMEOUT_MS;
-        bool cancel_timer = short_pickup && g_timer_active && !g_timer_alarm_active && !g_any_digit_dialed;
-
         stop_playback();
-        if (cancel_timer) {
-            g_timer_active = false;
-            g_timer_minutes = 0;
-            g_timer_end_ms = 0;
-            g_timer_announce_pending = false;
-            g_timer_intro_playing = false;
-            const char *timer_deleted = is_lang_en()
-                ? "/sdcard/system/timer_deleted_en.wav"
-                : "/sdcard/system/timer_deleted_de.wav";
-            play_file(timer_deleted);
-        }
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -1083,25 +1068,7 @@ extern "C" void app_main(void)
                             g_timer_intro_playing = true;
                             play_file(system_path("timer_set").c_str());
                         } else {
-                            ESP_LOGW(TAG, "Invalid timer value: %d", minutes);
-                            play_file("/sdcard/system/error_tone.wav");
-                        }
-                    } else {
-                        ESP_LOGW(TAG, "Timer requires 1-3 digits. Got: %s", dial_buffer.c_str());
-                        play_file("/sdcard/system/error_tone.wav");
-                    }
-                } else {
-                    // Lookup
-                    if (phonebook.hasEntry(dial_buffer)) {
-                         PhonebookEntry entry = phonebook.getEntry(dial_buffer);
-                         ESP_LOGI(TAG, "Phonebook Match: %s (%s)", entry.name.c_str(), entry.value.c_str());
-                         process_phonebook_function(entry);
-                    } else {
-                        ESP_LOGI(TAG, "Number %s not found.", dial_buffer.c_str());
-                        play_file("/sdcard/system/call_terminated.wav");
-                    }
-                }
-                
+                else if (g_off_hook)
                 dial_buffer = ""; // Reset buffer
             }
         }
