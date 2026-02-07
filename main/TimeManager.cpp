@@ -14,12 +14,12 @@
 
 static const char *TAG = "TIME_MANAGER";
 static bool _alarm_ringing = false;
-static int _last_triggered_day = -1; // To ensure we trigger only once per day
+static int _last_triggered_day = -1; // Ensure trigger only once per day
 static TaskHandle_t s_sntp_task = NULL;
 static bool s_sntp_synced = false;
 static time_t s_last_ntp_sync = 0;
 
-// --- RTC DS3231 Implementation (IDF 5.x New Driver) ---
+// RTC DS3231 Implementation
 #define I2C_PORT_NUM I2C_NUM_1
 #define DS3231_ADDR 0x68
 

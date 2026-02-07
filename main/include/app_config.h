@@ -26,14 +26,12 @@
 #define APP_HOOK_ACTIVE_LOW  true 
 
 // Power Amplifier
-// GPIO 21 is safe to use for Amp because we moved SDA to 18
 #define APP_PIN_PA_ENABLE  21 
 #define APP_PA_ENABLE_DELAY_MS 250 // Wait for DAC/I2S voltage to stabilize
 #define APP_PA_DISABLE_DELAY_MS 50
 
 // RTC (DS3231)
-// Using GPIO 18 (Was Key 5 / Extra Btn) for SDA
-// Using GPIO 22 (Green LED) for SCL
+// I2C Pins
 #define APP_PIN_RTC_SDA 18
 #define APP_PIN_RTC_SCL 22
 
@@ -67,6 +65,8 @@
 // Volume defaults (0-100)
 #define APP_DEFAULT_BASE_VOLUME 60
 #define APP_DEFAULT_HANDSET_VOLUME 50
+#define APP_ALARM_MIN_VOLUME 55
+#define APP_ALARM_DEFAULT_VOLUME 90
 
 // Night mode settings
 #define APP_NIGHTMODE_DURATION_HOURS 6
@@ -87,7 +87,7 @@
 
 // SD Card
 #define APP_PIN_SD_CS      13
-// #define APP_PIN_LED        23 // Reused from Dial Mode for WS2812 - Defined above
+// APP_PIN_LED defined above
 
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0

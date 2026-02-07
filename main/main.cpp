@@ -25,16 +25,16 @@
 #include "periph_sdcard.h"
 #include "fatfs_stream.h"
 #include "i2s_stream.h"
-// #include "driver/i2s.h" // Removed to avoid CONFLICT with legacy driver used by ADF
+// #include "driver/i2s.h" // Simplified Includes
 #include "wav_decoder.h"
 
 // App Includes
 #include "app_config.h"
-#include "led_strip.h" // Added for WS2812
+#include "led_strip.h" 
 #include "RotaryDial.h"
 #include "PhonebookManager.h"
 #include "WebManager.h"
-#include "TimeManager.h" // Added TimeManager
+#include "TimeManager.h" 
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 
@@ -42,7 +42,7 @@ static const char *TAG = "DIAL_A_CHARMER_ESP";
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
 audio_pipeline_handle_t pipeline;
 audio_element_handle_t fatfs_stream, wav_decoder, i2s_writer, gain_element;
-audio_board_handle_t board_handle = NULL; // Globale Reference
+audio_board_handle_t board_handle = NULL; 
 led_strip_handle_t g_led_strip = NULL;
 SemaphoreHandle_t g_audio_mutex = NULL;
 SemaphoreHandle_t g_led_mutex = NULL;
@@ -54,7 +54,7 @@ const int DIAL_TIMEOUT_MS = APP_DIAL_TIMEOUT_MS;
 const int PERSONA_PAUSE_MS = APP_PERSONA_PAUSE_MS;
 const int DIALTONE_SILENCE_MS = APP_DIALTONE_SILENCE_MS;
 bool is_playing = false;
-bool g_output_mode_handset = false; // False = Speaker, True = Handset
+bool g_output_mode_handset = false; 
 bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
@@ -89,8 +89,10 @@ bool g_snooze_active = false;
 bool g_daily_alarm_active = false;
 bool g_sd_error = false;
 bool g_force_base_output = false;
+// Alarm State
+int g_saved_volume = -1;
 
-// Forward decls for helpers used early.
+// Helper Forward Declarations
 static void start_voice_queue(const std::vector<std::string> &files);
 void play_file(const char* path);
 void update_audio_output();
@@ -462,6 +464,41 @@ static void audio_unlock() {
         xSemaphoreGive(g_audio_mutex);
     }
 }
+
+static void restore_volume_after_alarm() {
+    if (g_saved_volume != -1 && board_handle && board_handle->audio_hal) {
+         ESP_LOGI(TAG, "Restoring volume to %d", g_saved_volume);
+         audio_hal_set_volume(board_handle->audio_hal, g_saved_volume);
+         g_saved_volume = -1;
+    }
+}
+
+static void force_alarm_volume() {
+    if (board_handle && board_handle->audio_hal) {
+        int vol = 0;
+        audio_hal_get_volume(board_handle->audio_hal, &vol);
+        if (g_saved_volume == -1) {
+             g_saved_volume = vol;
+        }
+
+        // Load Alarm Volume from NVS
+        uint8_t target_vol = APP_ALARM_DEFAULT_VOLUME;
+        nvs_handle_t my_handle;
+        if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+            nvs_get_u8(my_handle, "vol_alarm", &target_vol);
+            nvs_close(my_handle);
+        }
+
+        // Enforce Minimum
+        if (target_vol < APP_ALARM_MIN_VOLUME) {
+            target_vol = APP_ALARM_MIN_VOLUME;
+        }
+
+        ESP_LOGI(TAG, "Forcing Alarm Volume: %d (Saved: %d)", target_vol, g_saved_volume);
+        audio_hal_set_volume(board_handle->audio_hal, target_vol);
+    }
+}
+
 static void start_timer_minutes(int minutes) {
     // Override any existing timer or pending timer announcements
     g_timer_active = true;
@@ -1260,6 +1297,9 @@ extern "C" void app_main(void)
                  } else {
                      g_alarm_fade_factor = 1.0f;
                  }
+                 
+                 // FORCE VOLUME FOR ALARM
+                 force_alarm_volume();
 
                  char path[128];
                  if (!today.ringtone.empty()) {

@@ -194,7 +194,7 @@ static void dns_server_task(void *pvParameters) {
             break;
         }
 
-        // Simple DNS Hijack: Respond with 192.168.4.1 to everything
+        // DNS Hijack: Resolve all queries to 192.168.4.1
         if (len > 12) {
             // Keep ID
             // Flags -> Standard Query Response, No Error
@@ -405,6 +405,10 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     if (err == ESP_OK) nvs_get_u8(my_handle, "volume_handset", &vol_h);
     cJSON_AddNumberToObject(root, "volume_handset", vol_h);
 
+    // Alarm Volume
+    uint8_t vol_a = APP_ALARM_DEFAULT_VOLUME;
+    if (err == ESP_OK) nvs_get_u8(my_handle, "vol_alarm", &vol_a);
+    cJSON_AddNumberToObject(root, "vol_alarm", vol_a);
 
     // Snooze Time
     int32_t snooze = APP_SNOOZE_DEFAULT_MINUTES;
@@ -524,6 +528,11 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_u8(my_handle, "volume_handset", (uint8_t)item->valueint);
         }
 
+        item = cJSON_GetObjectItem(root, "vol_alarm");
+        if (cJSON_IsNumber(item)) {
+            nvs_set_u8(my_handle, "vol_alarm", (uint8_t)item->valueint);
+        }
+
         item = cJSON_GetObjectItem(root, "snooze_min");
         if (cJSON_IsNumber(item)) {
             nvs_set_i32(my_handle, "snooze_min", item->valueint);
@@ -536,25 +545,10 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
         }
 
-        // Timezone
+        // Timezone configuration
         item = cJSON_GetObjectItem(root, "timezone");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
-            // Save inside TimeManager (it handles NVS internally too, but distinct key/handle)
-            // But we can just call it here. 
-            // Note: Since TimeManager opens NVS "dialcharm" too, we must ensure handles don't conflict 
-            // or just rely on TimeManager's logic.
-            // Since we are holding 'my_handle' open here, checking concurrency... 
-            // NVS single partition open is fine usually, but cleaner to close first?
-            // Actually TimeManager uses its own nvs_open/close.
-            // To avoid "NVS_ERR_NVS_PART_ALREADY_OPEN" or similar if logic restricted, 
-            // we should probably just save it via TimeManager AFTER closing here, or just save key here manually if we know it.
-            // TimeManager uses key "time_zone". Let's save it directly to 'my_handle' to avoid overhead!
-            
             nvs_set_str(my_handle, "time_zone", item->valuestring);
-            
-            // Also update runtime - warning: this updates env var so we need to do it.
-            // But we can't do it easily inside this NVS block for TimeManager state. 
-            // Better: Let's extract the string and call TimeManager::setTimezone() *after* this block.
         }
 
         // --- Alarms ---

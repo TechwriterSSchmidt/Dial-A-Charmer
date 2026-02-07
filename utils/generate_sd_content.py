@@ -31,7 +31,7 @@ PIPER_VOICES_DIR_EN = PIPER_VOICES_DIR / "en"
 PIPER_VOICES_DIR_DE = PIPER_VOICES_DIR / "de"
 USE_PIPER = False # Will be auto-detected
 
-# TTS Routing (Fixed): EN -> Piper, DE -> Google TTS
+# TTS Routing
 GTTS_DE_MAX_WORKERS = 6
 
 # Language generation toggle
