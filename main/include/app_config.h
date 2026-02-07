@@ -39,7 +39,10 @@
 #define APP_TIMER_ALARM_LOOP_MINUTES 3
 
 // Daily alarm loop duration (minutes)
-#define APP_DAILY_ALARM_LOOP_MINUTES 7
+#define APP_DAILY_ALARM_LOOP_MINUTES 5
+
+// Daily alarm volume ramp duration (ms)
+#define APP_ALARM_RAMP_DURATION_MS 120000
 
 // Timing settings (ms)
 #define APP_DIAL_TIMEOUT_MS 2000

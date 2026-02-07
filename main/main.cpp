@@ -68,8 +68,6 @@ int64_t g_timer_end_ms = 0;
 bool g_timer_announce_pending = false;
 bool g_timer_intro_playing = false;
 int g_timer_announce_minutes = 0;
-bool g_timer_alarm_active = false;
-int64_t g_timer_alarm_end_ms = 0;
 std::string g_current_alarm_file = "";
 bool g_startup_silence_playing = false;
 bool g_voice_menu_active = false;
@@ -86,11 +84,24 @@ uint8_t g_night_prev_g = 20;
 uint8_t g_night_prev_b = 0;
 bool g_led_booting = true;
 bool g_snooze_active = false;
-bool g_daily_alarm_active = false;
 bool g_sd_error = false;
 bool g_force_base_output = false;
 // Alarm State
 int g_saved_volume = -1;
+
+enum AlarmSource {
+    ALARM_NONE = 0,
+    ALARM_TIMER,
+    ALARM_DAILY,
+};
+
+static bool g_alarm_active = false;
+static AlarmSource g_alarm_source = ALARM_NONE;
+static int64_t g_alarm_end_ms = 0;
+// Alarm Fade Logic
+static bool g_alarm_fade_active = false;
+static float g_alarm_fade_factor = 1.0f;
+static int64_t g_alarm_fade_start_time = 0;
 
 // Helper Forward Declarations
 static void start_voice_queue(const std::vector<std::string> &files);
@@ -185,7 +196,7 @@ static void apply_led_color(uint8_t r, uint8_t g, uint8_t b) {
 static LedState get_led_state() {
     if (g_led_booting) return LED_BOOTING;
     if (g_sd_error) return LED_ERROR;
-    if (g_timer_alarm_active) return g_daily_alarm_active ? LED_ALARM : LED_TIMER;
+    if (g_alarm_active) return (g_alarm_source == ALARM_DAILY) ? LED_ALARM : LED_TIMER;
     if (g_snooze_active) return LED_SNOOZE;
     return LED_IDLE;
 }
@@ -473,6 +484,16 @@ static void restore_volume_after_alarm() {
     }
 }
 
+static void reset_alarm_state(bool restore_volume) {
+    g_alarm_active = false;
+    g_alarm_source = ALARM_NONE;
+    g_alarm_fade_active = false;
+    g_alarm_fade_factor = 1.0f;
+    if (restore_volume) {
+        restore_volume_after_alarm();
+    }
+}
+
 static void force_alarm_volume() {
     if (board_handle && board_handle->audio_hal) {
         int vol = 0;
@@ -580,11 +601,6 @@ static int g_gain_sample_rate = 44100;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
 static volatile bool g_key3_pressed = false;
-// Alarm Fade Logic
-static bool g_alarm_fade_active = false;
-static float g_alarm_fade_factor = 1.0f; 
-static int64_t g_alarm_fade_start_time = 0;
-const int64_t ALARM_FADE_DURATION_MS = 60000; // 60 Seconds ramp up
 
 static int gain_open(audio_element_handle_t self)
 {
@@ -684,7 +700,7 @@ void update_audio_output() {
     // Determine Effective Output Mode
     // Force Base Speaker (false) if Alarm or Timer Announcement active
     bool effective_handset = g_output_mode_handset;
-    if (g_timer_alarm_active || g_timer_announce_pending || g_force_base_output) {
+    if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
         effective_handset = false; 
     }
 
@@ -802,10 +818,12 @@ void play_busy_tone() {
 }
 
 void play_timer_alarm() {
-    g_timer_alarm_active = true;
-    g_daily_alarm_active = false;
+    g_alarm_active = true;
+    g_alarm_source = ALARM_TIMER;
     g_snooze_active = false;
-    g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
+    g_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
+    g_alarm_fade_active = false;
+    g_alarm_fade_factor = 1.0f;
     stop_playback();
     update_audio_output(); // Force Base Speaker
     // Play the currently selected alarm (Daily or Default)
@@ -906,14 +924,13 @@ void on_dial_complete(int number) {
 void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
     // Handle Timer/Alarm Mute
-    if (g_timer_alarm_active) {
+    if (g_alarm_active) {
         TimeManager::stopAlarm();
-        g_timer_alarm_active = false;
         stop_playback();
 
-        if (!g_daily_alarm_active) {
+        if (g_alarm_source == ALARM_TIMER) {
             ESP_LOGI(TAG, "Timer expired -> deleted via Key 5");
-            g_daily_alarm_active = false;
+            reset_alarm_state(false);
             g_snooze_active = false;
             g_force_base_output = true;
             update_audio_output();
@@ -922,7 +939,7 @@ void on_button_press() {
         }
 
         ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
-        g_daily_alarm_active = false;
+        reset_alarm_state(true);
         g_snooze_active = true;
         update_audio_output(); // Restore audio routing
         play_file(system_path("snooze_active").c_str());
@@ -958,19 +975,18 @@ void on_hook_change(bool off_hook) {
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
         g_off_hook_start_ms = esp_timer_get_time() / 1000;
-        if (g_timer_alarm_active) {
+        if (g_alarm_active) {
             TimeManager::stopAlarm();
-            g_timer_alarm_active = false;
-            if (!g_daily_alarm_active) {
+            if (g_alarm_source == ALARM_TIMER) {
                 ESP_LOGI(TAG, "Timer expired -> deleted via pickup");
-                g_daily_alarm_active = false;
+                reset_alarm_state(false);
                 g_snooze_active = false;
                 g_force_base_output = true;
                 update_audio_output();
                 play_file(system_path("timer_deleted").c_str());
                 skip_dialtone = true;
             } else {
-                g_daily_alarm_active = false;
+                reset_alarm_state(true);
                 g_snooze_active = false;
                 update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
             }
@@ -1012,16 +1028,18 @@ void input_task(void *pvParameters) {
         }
         
         // Apply Alarm Fade Factor
-        if (g_timer_alarm_active && g_alarm_fade_active) {
+        if (g_alarm_active && g_alarm_source == ALARM_DAILY && g_alarm_fade_active) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now < g_alarm_fade_start_time) g_alarm_fade_start_time = now;
             
             int64_t elapsed = now - g_alarm_fade_start_time;
             if (elapsed < 0) elapsed = 0;
-            if (elapsed > ALARM_FADE_DURATION_MS) {
+            int64_t ramp_ms = APP_ALARM_RAMP_DURATION_MS;
+            if (ramp_ms < 1) ramp_ms = 1;
+            if (elapsed > ramp_ms) {
                 g_alarm_fade_factor = 1.0f;
             } else {
-                g_alarm_fade_factor = (float)elapsed / (float)ALARM_FADE_DURATION_MS;
+                g_alarm_fade_factor = (float)elapsed / (float)ramp_ms;
             }
             // Ensure strictly minimum volume so it's audible
             if (g_alarm_fade_factor < 0.05f) g_alarm_fade_factor = 0.05f;
@@ -1078,10 +1096,20 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing WS2812 LED on GPIO %d", APP_PIN_LED);
     led_strip_config_t strip_config = {
         .strip_gpio_num = APP_PIN_LED,
-        .max_leds = 1, 
+        .max_leds = 1,
+        .led_pixel_format = LED_PIXEL_FORMAT_GRB,
+        .led_model = LED_MODEL_WS2812,
+        .flags = {
+            .invert_out = 0,
+        },
     };
     led_strip_rmt_config_t rmt_config = {
+        .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = 10 * 1000 * 1000, // 10MHz
+        .mem_block_symbols = 0,
+        .flags = {
+            .with_dma = 0,
+        },
     };
     // Note: ensure espressif/led_strip component is added
     if (led_strip_new_rmt_device(&strip_config, &rmt_config, &g_led_strip) == ESP_OK) {
@@ -1268,18 +1296,20 @@ extern "C" void app_main(void)
         // Check Daily Alarm
         if (TimeManager::checkAlarm()) {
              ESP_LOGI(TAG, "Daily Alarm Triggered! Starting Ring...");
-             if (!g_timer_alarm_active) {
-                 // Reuse the timer alarm logic for simplicity
-                 g_timer_alarm_active = true;
-                     g_daily_alarm_active = true;
-                     g_snooze_active = false;
-                 g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
+             if (!g_alarm_active) {
+                 g_alarm_active = true;
+                 g_alarm_source = ALARM_DAILY;
+                 g_snooze_active = false;
+                 g_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  
                  // Stop anything currently playing
                  audio_lock();
                  audio_pipeline_stop(pipeline);
                  audio_pipeline_wait_for_stop(pipeline);
-                 audio_pipeline_terminate(pipeline);
+                is_playing = false;
+                g_last_playback_finished_ms = esp_timer_get_time() / 1000;
+                 audio_pipeline_reset_ringbuffer(pipeline);
+                 audio_pipeline_reset_items_state(pipeline);
                  audio_unlock();
                  
                  // Enable Base Speaker for Alarm
@@ -1410,12 +1440,11 @@ extern "C" void app_main(void)
         }
 
         // Timer alarm check
-        if (g_timer_active && !g_timer_alarm_active) {
+        if (g_timer_active && !g_alarm_active) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_timer_end_ms) {
                 ESP_LOGI(TAG, "Timer expired -> alarm");
                 g_timer_active = false;
-                g_daily_alarm_active = false;
                 g_snooze_active = false;
                 play_timer_alarm();
             }
@@ -1471,13 +1500,13 @@ extern "C" void app_main(void)
                         g_force_base_output = false;
                         update_audio_output();
                     }
-                    if (g_timer_alarm_active) {
+                    if (g_alarm_active) {
                         int64_t now = esp_timer_get_time() / 1000;
-                        if (now < g_timer_alarm_end_ms) {
+                        if (now < g_alarm_end_ms) {
                             play_file(g_current_alarm_file.c_str());
                         } else {
                             TimeManager::stopAlarm();
-                            g_timer_alarm_active = false;
+                            reset_alarm_state(true);
                             update_audio_output(); // Restore routing
                         }
                         continue;
@@ -1489,7 +1518,7 @@ extern "C" void app_main(void)
                         play_busy_tone();
                         continue;
                     }
-                    if (g_line_busy && g_off_hook && !g_timer_alarm_active) {
+                    if (g_line_busy && g_off_hook && !g_alarm_active) {
                         play_busy_tone();
                     }
                 }
