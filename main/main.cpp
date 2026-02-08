@@ -321,7 +321,9 @@ static void start_voice_queue(const std::vector<std::string> &files) {
 static void play_voice_menu_prompt() {
     start_voice_queue({
         system_path("menu"),
+        "/sdcard/system/silence_300ms.wav",
         system_path("menu_options"),
+        "/sdcard/system/silence_300ms.wav",
         system_path("menu_exit"),
     });
 }
@@ -1529,7 +1531,9 @@ extern "C" void app_main(void)
                 
                 // Voice menu (single digit)
                 if (g_voice_menu_active && g_off_hook) {
-                    if (dial_buffer.size() == 1) {
+                    if (dial_buffer == APP_PB_NUM_REBOOT && phonebook.hasEntry(APP_PB_NUM_REBOOT)) {
+                        process_phonebook_function(phonebook.getEntry(APP_PB_NUM_REBOOT));
+                    } else if (dial_buffer.size() == 1) {
                         int digit = dial_buffer[0] - '0';
                         handle_voice_menu_digit(digit);
                     } else {
