@@ -89,6 +89,8 @@ bool g_led_booting = true;
 bool g_snooze_active = false;
 bool g_sd_error = false;
 bool g_force_base_output = false;
+bool g_pending_handset_restore = false;
+bool g_pending_handset_state = false;
 // Alarm State
 int g_saved_volume = -1;
 
@@ -566,12 +568,12 @@ static bool cancel_timer_with_feedback(const char *reason) {
     g_snooze_active = false;
 
     stop_playback();
-    bool prev_handset = g_output_mode_handset;
+    g_pending_handset_restore = true;
+    g_pending_handset_state = g_output_mode_handset;
     g_output_mode_handset = false;
     g_force_base_output = true;
     update_audio_output();
     play_file(system_path("timer_deleted").c_str());
-    g_output_mode_handset = prev_handset;
     return true;
 }
 
@@ -865,9 +867,7 @@ void play_file(const char* path) {
         audio_hal_set_mute(board_handle->audio_hal, false);
     }
 
-    if (is_playing) {
-        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
-    }
+    stop_playback();
     audio_lock();
 
     // Soft fade-in to reduce clicks
@@ -1138,6 +1138,13 @@ void on_hook_change(bool off_hook) {
         // Receiver Hung Up
         if (!timer_canceled) {
             stop_playback();
+        }
+        if (g_voice_menu_active) {
+            g_voice_menu_active = false;
+            g_voice_menu_reannounce = false;
+            g_voice_queue_active = false;
+            g_voice_queue.clear();
+            g_voice_menu_started_ms = 0;
         }
         g_output_mode_handset = false;
         update_audio_output();
@@ -1709,6 +1716,10 @@ extern "C" void app_main(void)
                     }
                     if (g_force_base_output) {
                         g_force_base_output = false;
+                        if (g_pending_handset_restore) {
+                            g_output_mode_handset = g_pending_handset_state;
+                            g_pending_handset_restore = false;
+                        }
                         update_audio_output();
                     }
                     if (g_alarm_active) {
