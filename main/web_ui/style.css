@@ -66,6 +66,7 @@ input, select {
 /* Range Input Fixes for Full Width */
 input[type=range] {
     -webkit-appearance: none; /* Override default look */
+  appearance: none; /* Standard property for compatibility */
     width: 100%; /* Force full width */
     margin: 10px 0; /* Add some vertical spacing */
     background: transparent; /* Needed for webkit */
@@ -241,6 +242,13 @@ a:hover { color: #fff; border-bottom: 1px solid #fff; }
   gap: 0.4rem;
 }
 
+.alarm-label {
+  margin-left: 10px;
+  font-size: 0.8rem;
+  color: #d4af37;
+  letter-spacing: 0.5px;
+}
+
 .alarm-time {
   background: #f0e6d2;
   border: 1px solid #d4af37;
@@ -393,10 +401,10 @@ select.alarm-sound-select {
 }
 
 .pb-sub .pb-num-cell {
-  padding: 0 6px 0 2px;
+  padding: 0 6px 0 46px;
   width: 52px;
   text-align: right;
-  font-size: 0.56rem;
+  font-size: 0.72rem;
   color: #000;
 }
 
@@ -407,10 +415,10 @@ select.alarm-sound-select {
 }
 
 .pb-sub-text {
-  font-size: 0.58rem;
+  font-size: 0.78rem;
   color: #444;
-  padding-left: 4px;
-  line-height: 12px;
+  padding-left: 16px;
+  line-height: 16px;
   letter-spacing: 1px;
   text-transform: uppercase;
 }
@@ -419,11 +427,11 @@ select.alarm-sound-select {
 .pb-sub {
   background: rgba(0, 0, 0, 0.02);
   border-left: 3px solid rgba(0, 0, 0, 0.12);
-  height: 16px;
+  height: 20px;
 }
 
 .pb-sub .pb-name-cell {
-  padding: 0 4px;
+  padding: 0 4px 0 16px;
 }
 
 .pb-sub td {

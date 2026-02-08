@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "esp_vfs_fat.h"
 #include "nvs_flash.h"
+#include "esp_task_wdt.h"
 #include "audio_element.h"
 #include "audio_pipeline.h"
 #include "audio_event_iface.h"
@@ -55,6 +56,7 @@ const int PERSONA_PAUSE_MS = APP_PERSONA_PAUSE_MS;
 const int DIALTONE_SILENCE_MS = APP_DIALTONE_SILENCE_MS;
 bool is_playing = false;
 bool g_output_mode_handset = false; 
+int g_last_effective_handset = -1;
 bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
@@ -68,14 +70,13 @@ int64_t g_timer_end_ms = 0;
 bool g_timer_announce_pending = false;
 bool g_timer_intro_playing = false;
 int g_timer_announce_minutes = 0;
-bool g_timer_alarm_active = false;
-int64_t g_timer_alarm_end_ms = 0;
 std::string g_current_alarm_file = "";
 bool g_startup_silence_playing = false;
 bool g_voice_menu_active = false;
 int64_t g_voice_menu_started_ms = 0;
 std::vector<std::string> g_voice_queue;
 bool g_voice_queue_active = false;
+bool g_voice_menu_reannounce = false;
 bool g_night_mode_active = false;
 int64_t g_night_mode_end_ms = 0;
 uint8_t g_led_r = 50;
@@ -86,11 +87,34 @@ uint8_t g_night_prev_g = 20;
 uint8_t g_night_prev_b = 0;
 bool g_led_booting = true;
 bool g_snooze_active = false;
-bool g_daily_alarm_active = false;
 bool g_sd_error = false;
 bool g_force_base_output = false;
+bool g_pending_handset_restore = false;
+bool g_pending_handset_state = false;
+bool g_reboot_pending = false;
+int64_t g_reboot_request_time = 0;
 // Alarm State
 int g_saved_volume = -1;
+
+enum AlarmSource {
+    ALARM_NONE = 0,
+    ALARM_TIMER,
+    ALARM_DAILY,
+};
+
+static bool g_alarm_active = false;
+static AlarmSource g_alarm_source = ALARM_NONE;
+static int64_t g_alarm_end_ms = 0;
+static int64_t g_alarm_retry_last_ms = 0;
+// Alarm Fade Logic
+static bool g_alarm_fade_active = false;
+static float g_alarm_fade_factor = 1.0f;
+static int64_t g_alarm_fade_start_time = 0;
+
+#if APP_ENABLE_TASK_WDT
+static bool g_wdt_main_registered = false;
+static bool g_wdt_input_registered = false;
+#endif
 
 // Helper Forward Declarations
 static void start_voice_queue(const std::vector<std::string> &files);
@@ -138,12 +162,20 @@ static void announce_time_now() {
     snprintf(buf, sizeof(buf), "h_%d.wav", now.tm_hour);
     files.push_back(time_path(buf));
 
+    files.push_back(time_path("and.wav"));
+
     snprintf(buf, sizeof(buf), "m_%02d.wav", now.tm_min);
     files.push_back(time_path(buf));
+    files.push_back(time_path("minutes.wav"));
 
-    if (!is_lang_en()) {
-        files.push_back(time_path("uhr.wav"));
-    }
+    files.push_back(time_path("date_intro.wav"));
+    snprintf(buf, sizeof(buf), "day_%d.wav", now.tm_mday);
+    files.push_back(time_path(buf));
+    snprintf(buf, sizeof(buf), "month_%d.wav", now.tm_mon);
+    files.push_back(time_path(buf));
+    files.push_back("/sdcard/system/silence_300ms.wav");
+    snprintf(buf, sizeof(buf), "year_%d.wav", now.tm_year + 1900);
+    files.push_back(time_path(buf));
 
     start_voice_queue(files);
 }
@@ -173,6 +205,24 @@ enum LedState {
     LED_ERROR,
 };
 
+static void set_pa_enable(bool enable) {
+#if APP_PIN_PA_ENABLE >= 0
+    static bool s_pa_enabled = false;
+    if (enable != s_pa_enabled) {
+        if (enable) {
+            gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
+            vTaskDelay(pdMS_TO_TICKS(50)); // Anti-pop startup delay
+            ESP_LOGI(TAG, "PA Enabled");
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(50)); // Wait for mute to settle
+            gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 0);
+            ESP_LOGI(TAG, "PA Disabled");
+        }
+        s_pa_enabled = enable;
+    }
+#endif
+}
+
 static void apply_led_color(uint8_t r, uint8_t g, uint8_t b) {
     if (g_night_mode_active) {
         r = (uint8_t)((r * APP_NIGHTMODE_LED_PERCENT) / 100);
@@ -185,7 +235,7 @@ static void apply_led_color(uint8_t r, uint8_t g, uint8_t b) {
 static LedState get_led_state() {
     if (g_led_booting) return LED_BOOTING;
     if (g_sd_error) return LED_ERROR;
-    if (g_timer_alarm_active) return g_daily_alarm_active ? LED_ALARM : LED_TIMER;
+    if (g_alarm_active) return (g_alarm_source == ALARM_DAILY) ? LED_ALARM : LED_TIMER;
     if (g_snooze_active) return LED_SNOOZE;
     return LED_IDLE;
 }
@@ -298,6 +348,16 @@ static void start_voice_queue(const std::vector<std::string> &files) {
     g_voice_queue.erase(g_voice_queue.begin());
 }
 
+static void play_voice_menu_prompt() {
+    start_voice_queue({
+        system_path("menu"),
+        "/sdcard/system/silence_300ms.wav",
+        system_path("menu_options"),
+        "/sdcard/system/silence_300ms.wav",
+        system_path("menu_exit"),
+    });
+}
+
 static bool play_next_in_queue() {
     if (g_voice_queue_active && !g_voice_queue.empty()) {
         play_file(g_voice_queue.front().c_str());
@@ -341,7 +401,7 @@ static bool get_next_alarm(struct tm *out_tm, DayAlarm *out_alarm) {
 
 static void add_number_audio(std::vector<std::string> &files, int value) {
     if (value < 0) value = -value;
-    if (value > 300) value = 300;
+    if (value > APP_TIMER_MAX_MINUTES) value = APP_TIMER_MAX_MINUTES;
     char buf[32];
     snprintf(buf, sizeof(buf), "m_%02d.wav", value);
     files.push_back(time_path(buf));
@@ -384,16 +444,16 @@ static void handle_voice_menu_digit(int digit) {
         }
     } else if (digit == 3) {
         std::vector<std::string> files;
-        // files.push_back(system_path("phonebook_export")); // Removed as we are now just announcing
-        files.push_back(system_path("pb_persona1"));
-        files.push_back(system_path("pb_persona2"));
-        files.push_back(system_path("pb_persona3"));
-        files.push_back(system_path("pb_persona4"));
-        files.push_back(system_path("pb_persona5"));
-        files.push_back(system_path("pb_random_mix"));
-        files.push_back(system_path("pb_time"));
-        files.push_back(system_path("pb_menu"));
-        files.push_back(system_path("pb_reboot"));
+        files.push_back(system_path("pb_menu_title"));
+        files.push_back(system_path("pb_persona1_opt"));
+        files.push_back(system_path("pb_persona2_opt"));
+        files.push_back(system_path("pb_persona3_opt"));
+        files.push_back(system_path("pb_persona4_opt"));
+        files.push_back(system_path("pb_persona5_opt"));
+        files.push_back(system_path("pb_random_mix_opt"));
+        files.push_back(system_path("pb_time_opt"));
+        files.push_back(system_path("pb_menu_opt"));
+        files.push_back(system_path("pb_reboot_opt"));
         start_voice_queue(files);
     } else if (digit == 4) {
         std::vector<std::string> files;
@@ -448,6 +508,10 @@ static void handle_voice_menu_digit(int digit) {
     } else {
         start_voice_queue({system_path("error_msg")});
     }
+
+    if (g_voice_menu_active) {
+        g_voice_menu_reannounce = true;
+    }
 }
 
 // Helpers
@@ -470,6 +534,16 @@ static void restore_volume_after_alarm() {
          ESP_LOGI(TAG, "Restoring volume to %d", g_saved_volume);
          audio_hal_set_volume(board_handle->audio_hal, g_saved_volume);
          g_saved_volume = -1;
+    }
+}
+
+static void reset_alarm_state(bool restore_volume) {
+    g_alarm_active = false;
+    g_alarm_source = ALARM_NONE;
+    g_alarm_fade_active = false;
+    g_alarm_fade_factor = 1.0f;
+    if (restore_volume) {
+        restore_volume_after_alarm();
     }
 }
 
@@ -506,6 +580,29 @@ static void start_timer_minutes(int minutes) {
     g_timer_end_ms = (esp_timer_get_time() / 1000) + (int64_t)minutes * 60 * 1000;
     g_timer_announce_pending = false;
     g_timer_intro_playing = false;
+}
+
+
+static bool cancel_timer_with_feedback(const char *reason) {
+    if (!g_timer_active) return false;
+
+    ESP_LOGI(TAG, "Timer active -> deleted via %s", reason ? reason : "unknown");
+    g_timer_active = false;
+    g_timer_minutes = 0;
+    g_timer_end_ms = 0;
+    g_timer_announce_pending = false;
+    g_timer_intro_playing = false;
+    g_timer_announce_minutes = 0;
+    g_snooze_active = false;
+
+    stop_playback();
+    g_pending_handset_restore = true;
+    g_pending_handset_state = g_output_mode_handset;
+    g_output_mode_handset = false;
+    g_force_base_output = true;
+    update_audio_output();
+    play_file(system_path("timer_deleted").c_str());
+    return true;
 }
 
 static std::string get_first_ringtone_path() {
@@ -580,11 +677,21 @@ static int g_gain_sample_rate = 44100;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
 static volatile bool g_key3_pressed = false;
-// Alarm Fade Logic
-static bool g_alarm_fade_active = false;
-static float g_alarm_fade_factor = 1.0f; 
-static int64_t g_alarm_fade_start_time = 0;
-const int64_t ALARM_FADE_DURATION_MS = 60000; // 60 Seconds ramp up
+static float g_noise_gate_factor = 1.0f;
+
+static void fade_out_audio_soft(int delay_ms) {
+    if (delay_ms < 1) return;
+    g_gain_left_target = 0.0f;
+    g_gain_right_target = 0.0f;
+    vTaskDelay(pdMS_TO_TICKS(delay_ms));
+}
+
+static bool handset_noise_gate_enabled() {
+    if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
+        return false;
+    }
+    return g_output_mode_handset;
+}
 
 static int gain_open(audio_element_handle_t self)
 {
@@ -613,6 +720,20 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
     int16_t *samples = (int16_t *)in_buffer;
     int sample_count = r / sizeof(int16_t);
 
+    int peak = 0;
+    for (int i = 0; i < sample_count; ++i) {
+        int v = samples[i];
+        if (v < 0) v = -v;
+        if (v > peak) peak = v;
+    }
+    float gate_target = 1.0f;
+    if (handset_noise_gate_enabled() && peak < APP_HANDSET_NOISE_GATE_THRESHOLD) {
+        gate_target = APP_HANDSET_NOISE_GATE_FLOOR;
+    }
+    g_noise_gate_factor += (gate_target - g_noise_gate_factor) * APP_HANDSET_NOISE_GATE_SMOOTH;
+    if (g_noise_gate_factor < APP_HANDSET_NOISE_GATE_FLOOR) g_noise_gate_factor = APP_HANDSET_NOISE_GATE_FLOOR;
+    if (g_noise_gate_factor > 1.0f) g_noise_gate_factor = 1.0f;
+
     int ramp_samples = (g_gain_sample_rate * g_gain_ramp_ms) / 1000;
     if (ramp_samples < 1) {
         ramp_samples = 1;
@@ -630,8 +751,8 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
             if ((step_r > 0.0f && g_gain_right_cur > g_gain_right_target) || (step_r < 0.0f && g_gain_right_cur < g_gain_right_target)) {
                 g_gain_right_cur = g_gain_right_target;
             }
-            float l = (float)samples[i] * g_gain_left_cur;
-            float rch = (float)samples[i + 1] * g_gain_right_cur;
+            float l = (float)samples[i] * g_gain_left_cur * g_noise_gate_factor;
+            float rch = (float)samples[i + 1] * g_gain_right_cur * g_noise_gate_factor;
             if (l > 32767.0f) l = 32767.0f;
             if (l < -32768.0f) l = -32768.0f;
             if (rch > 32767.0f) rch = 32767.0f;
@@ -662,8 +783,8 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
                 g_gain_right_cur = g_gain_right_target;
             }
             float v = (float)samples[i];
-            float l = v * g_gain_left_cur;
-            float rch = v * g_gain_right_cur;
+            float l = v * g_gain_left_cur * g_noise_gate_factor;
+            float rch = v * g_gain_right_cur * g_noise_gate_factor;
             if (l > 32767.0f) l = 32767.0f;
             if (l < -32768.0f) l = -32768.0f;
             if (rch > 32767.0f) rch = 32767.0f;
@@ -684,8 +805,17 @@ void update_audio_output() {
     // Determine Effective Output Mode
     // Force Base Speaker (false) if Alarm or Timer Announcement active
     bool effective_handset = g_output_mode_handset;
-    if (g_timer_alarm_active || g_timer_announce_pending || g_force_base_output) {
+    if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
         effective_handset = false; 
+    }
+
+    bool output_changed = (g_last_effective_handset < 0) || (effective_handset != (g_last_effective_handset != 0));
+    if (output_changed) {
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
+        if (board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, true);
+        }
+        vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
     }
 
     // Re-apply the current output selection
@@ -709,6 +839,14 @@ void update_audio_output() {
     }
 
     audio_hal_set_volume(board_handle->audio_hal, vol);
+
+    if (output_changed) {
+        vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
+        if (board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, false);
+        }
+        g_last_effective_handset = effective_handset ? 1 : 0;
+    }
 }
 std::string get_random_file(std::string folderPath) {
     std::vector<std::string> files;
@@ -753,8 +891,20 @@ void play_file(const char* path) {
         return;
     }
 
+    if (board_handle && board_handle->audio_hal) {
+        audio_hal_set_mute(board_handle->audio_hal, false);
+    }
     
+    set_pa_enable(true);
+
+    // Optimized Stop Logic for Fast Switching
     audio_lock();
+    
+    // Always force stop first, skipping fade-out/mute for responsiveness
+    audio_pipeline_stop(pipeline);
+    audio_pipeline_wait_for_stop(pipeline);
+    is_playing = false;
+    g_last_playback_finished_ms = esp_timer_get_time() / 1000;
 
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
@@ -766,13 +916,24 @@ void play_file(const char* path) {
     // Force Output Selection immediately after run logic
     update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
-    audio_pipeline_stop(pipeline);
-    audio_pipeline_wait_for_stop(pipeline);
+
+    // Small delay to ensure hardware buffers clear (reduced from default if needed)
+    vTaskDelay(pdMS_TO_TICKS(10)); 
+    
     audio_pipeline_reset_ringbuffer(pipeline);
     audio_pipeline_reset_items_state(pipeline);
     audio_element_set_uri(fatfs_stream, path);
-    audio_pipeline_run(pipeline);
-    is_playing = true;
+    
+    if (audio_pipeline_run(pipeline) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start pipeline for: %s", path);
+        // Clean up state if run failed
+        audio_pipeline_stop(pipeline);
+        audio_pipeline_wait_for_stop(pipeline);
+        is_playing = false;
+    } else {
+        is_playing = true;
+    }
+    
     audio_unlock();
 }
 
@@ -802,10 +963,13 @@ void play_busy_tone() {
 }
 
 void play_timer_alarm() {
-    g_timer_alarm_active = true;
-    g_daily_alarm_active = false;
+    g_alarm_active = true;
+    g_alarm_source = ALARM_TIMER;
     g_snooze_active = false;
-    g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
+    g_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
+    g_alarm_fade_active = false;
+    g_alarm_fade_factor = 1.0f;
+    g_alarm_retry_last_ms = 0;
     stop_playback();
     update_audio_output(); // Force Base Speaker
     // Play the currently selected alarm (Daily or Default)
@@ -827,6 +991,16 @@ static int get_snooze_minutes() {
     return (int)val;
 }
 
+static void play_persona_with_hook_sfx(const std::string &file) {
+    if (file.empty()) return;
+    g_persona_playback_active = true;
+    start_voice_queue({
+        "/sdcard/system/hook_pickup.wav",
+        file,
+        "/sdcard/system/hook_hangup.wav",
+    });
+}
+
 
 void process_phonebook_function(PhonebookEntry entry) {
     if (entry.type == "FUNCTION") {
@@ -836,8 +1010,7 @@ void process_phonebook_function(PhonebookEntry entry) {
             std::string file = get_random_file(folder);
             if (!file.empty()) {
                 wait_for_dialtone_silence_if_needed();
-                g_persona_playback_active = true;
-                play_file(file.c_str());
+                play_persona_with_hook_sfx(file);
             }
             else play_file(system_path("error_msg").c_str());
         }
@@ -848,23 +1021,23 @@ void process_phonebook_function(PhonebookEntry entry) {
             std::string file = get_random_file(folder);
             if (!file.empty()) {
                 wait_for_dialtone_silence_if_needed();
-                g_persona_playback_active = true;
-                play_file(file.c_str());
+                play_persona_with_hook_sfx(file);
             }
         }
         else if (entry.value == "ANNOUNCE_TIME") {
             announce_time_now();
         }
         else if (entry.value == "REBOOT") {
-             ESP_LOGW(TAG, "Rebooting system...");
-               play_file(system_path("system_ready").c_str()); // Ack before reboot
-             vTaskDelay(pdMS_TO_TICKS(2000));
-             esp_restart();
+             ESP_LOGW(TAG, "Reboot requested. Playing ack...");
+             play_file(system_path("system_ready").c_str());
+             g_reboot_pending = true;
+             g_reboot_request_time = esp_timer_get_time() / 1000;
         }
         else if (entry.value == "VOICE_MENU") {
             g_voice_menu_active = true;
             g_voice_menu_started_ms = esp_timer_get_time() / 1000;
-            play_file(system_path("menu").c_str());
+            g_voice_menu_reannounce = false;
+            play_voice_menu_prompt();
         }
         else {
             ESP_LOGW(TAG, "Unknown Function: %s", entry.value.c_str());
@@ -883,6 +1056,11 @@ void process_phonebook_function(PhonebookEntry entry) {
 
 void stop_playback() {
     if (is_playing) {
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
+        if (board_handle && board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, true);
+            vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
+        }
         audio_lock();
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
@@ -899,21 +1077,42 @@ void on_dial_complete(int number) {
     }
     g_any_digit_dialed = true;
     ESP_LOGI(TAG, "--- DIALED DIGIT: %d ---", number);
+    if (dial_buffer.empty() && g_last_playback_was_dialtone) {
+        stop_playback();
+        g_last_playback_was_dialtone = false;
+    }
+    if (g_voice_menu_active && g_off_hook) {
+        if (g_voice_queue_active) {
+            g_voice_queue_active = false;
+            g_voice_queue.clear();
+        }
+        if (is_playing) {
+            stop_playback();
+        }
+        if (dial_buffer.empty() && number >= 1 && number <= 4) {
+            handle_voice_menu_digit(number);
+            dial_buffer.clear();
+            return;
+        }
+    }
     dial_buffer += std::to_string(number);
     last_digit_time = esp_timer_get_time() / 1000; // Update timestamp (ms)
 }
 
 void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
+    if (!g_alarm_active && g_timer_active) {
+        cancel_timer_with_feedback("Key 5");
+        return;
+    }
     // Handle Timer/Alarm Mute
-    if (g_timer_alarm_active) {
+    if (g_alarm_active) {
         TimeManager::stopAlarm();
-        g_timer_alarm_active = false;
         stop_playback();
 
-        if (!g_daily_alarm_active) {
+        if (g_alarm_source == ALARM_TIMER) {
             ESP_LOGI(TAG, "Timer expired -> deleted via Key 5");
-            g_daily_alarm_active = false;
+            reset_alarm_state(false);
             g_snooze_active = false;
             g_force_base_output = true;
             update_audio_output();
@@ -922,7 +1121,7 @@ void on_button_press() {
         }
 
         ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
-        g_daily_alarm_active = false;
+        reset_alarm_state(true);
         g_snooze_active = true;
         update_audio_output(); // Restore audio routing
         play_file(system_path("snooze_active").c_str());
@@ -943,14 +1142,20 @@ void on_button_press() {
 
 void on_hook_change(bool off_hook) {
     ESP_LOGI(TAG, "--- HOOK STATE: %s ---", off_hook ? "OFF HOOK (Active/Pickup)" : "ON HOOK (Idle/Hangup)");
-    
-    // Switch Audio Output
-    g_output_mode_handset = off_hook;
-    update_audio_output();
 
     g_off_hook = off_hook;
 
+    bool timer_canceled = false;
+    if (!g_alarm_active && g_timer_active) {
+        timer_canceled = cancel_timer_with_feedback(off_hook ? "pickup" : "hangup");
+    }
+
     if (off_hook) {
+        // Switch Audio Output to handset before any playback
+        if (!timer_canceled) {
+            g_output_mode_handset = true;
+            update_audio_output();
+        }
         // Receiver Picked Up
         bool skip_dialtone = false;
         dial_buffer = "";
@@ -958,19 +1163,21 @@ void on_hook_change(bool off_hook) {
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
         g_off_hook_start_ms = esp_timer_get_time() / 1000;
-        if (g_timer_alarm_active) {
+        if (timer_canceled) {
+            skip_dialtone = true;
+        }
+        if (g_alarm_active) {
             TimeManager::stopAlarm();
-            g_timer_alarm_active = false;
-            if (!g_daily_alarm_active) {
+            if (g_alarm_source == ALARM_TIMER) {
                 ESP_LOGI(TAG, "Timer expired -> deleted via pickup");
-                g_daily_alarm_active = false;
+                reset_alarm_state(false);
                 g_snooze_active = false;
                 g_force_base_output = true;
                 update_audio_output();
                 play_file(system_path("timer_deleted").c_str());
                 skip_dialtone = true;
             } else {
-                g_daily_alarm_active = false;
+                reset_alarm_state(true);
                 g_snooze_active = false;
                 update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
             }
@@ -981,7 +1188,19 @@ void on_hook_change(bool off_hook) {
         }
     } else {
         // Receiver Hung Up
-        stop_playback();
+        if (!timer_canceled) {
+            stop_playback();
+            set_pa_enable(false);
+        }
+        if (g_voice_menu_active) {
+            g_voice_menu_active = false;
+            g_voice_menu_reannounce = false;
+            g_voice_queue_active = false;
+            g_voice_queue.clear();
+            g_voice_menu_started_ms = 0;
+        }
+        g_output_mode_handset = false;
+        update_audio_output();
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -991,6 +1210,13 @@ void on_hook_change(bool off_hook) {
 
 void input_task(void *pvParameters) {
     ESP_LOGI(TAG, "Input Task Started. Priority: %d", uxTaskPriorityGet(NULL));
+#if APP_ENABLE_TASK_WDT
+    if (esp_task_wdt_add(NULL) == ESP_OK) {
+        g_wdt_input_registered = true;
+    } else {
+        ESP_LOGW(TAG, "Task WDT add failed for input_task");
+    }
+#endif
     while(1) {
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
@@ -1012,19 +1238,21 @@ void input_task(void *pvParameters) {
         }
         
         // Apply Alarm Fade Factor
-        if (g_timer_alarm_active && g_alarm_fade_active) {
+        if (g_alarm_active && g_alarm_source == ALARM_DAILY && g_alarm_fade_active) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now < g_alarm_fade_start_time) g_alarm_fade_start_time = now;
             
             int64_t elapsed = now - g_alarm_fade_start_time;
             if (elapsed < 0) elapsed = 0;
-            if (elapsed > ALARM_FADE_DURATION_MS) {
+            int64_t ramp_ms = APP_ALARM_RAMP_DURATION_MS;
+            if (ramp_ms < 1) ramp_ms = 1;
+            if (elapsed > ramp_ms) {
                 g_alarm_fade_factor = 1.0f;
             } else {
-                g_alarm_fade_factor = (float)elapsed / (float)ALARM_FADE_DURATION_MS;
+                g_alarm_fade_factor = (float)elapsed / (float)ramp_ms;
             }
             // Ensure strictly minimum volume so it's audible
-            if (g_alarm_fade_factor < 0.05f) g_alarm_fade_factor = 0.05f;
+            if (g_alarm_fade_factor < APP_ALARM_FADE_MIN_FACTOR) g_alarm_fade_factor = APP_ALARM_FADE_MIN_FACTOR;
             
             target_left *= g_alarm_fade_factor;
             target_right *= g_alarm_fade_factor;
@@ -1033,6 +1261,11 @@ void input_task(void *pvParameters) {
         g_gain_left_target = target_left;
         g_gain_right_target = target_right;
         
+    #if APP_ENABLE_TASK_WDT
+        if (g_wdt_input_registered) {
+            esp_task_wdt_reset();
+        }
+    #endif
         // Yield to IDLE task to reset WDT using vTaskDelay
         // Ensure strictly positive delay to allow IDLE task to run
         vTaskDelay(pdMS_TO_TICKS(50)); 
@@ -1069,6 +1302,23 @@ extern "C" void app_main(void)
         ESP_LOGE(TAG, "LED mutex init failed");
     }
 
+#if APP_ENABLE_TASK_WDT
+    esp_task_wdt_config_t wdt_cfg = {
+        .timeout_ms = APP_TASK_WDT_TIMEOUT_SEC * 1000,
+        .idle_core_mask = 0,
+        .trigger_panic = APP_TASK_WDT_PANIC,
+    };
+    esp_err_t wdt_err = esp_task_wdt_init(&wdt_cfg);
+    if (wdt_err != ESP_OK && wdt_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Task WDT init failed: %s", esp_err_to_name(wdt_err));
+    }
+    if (esp_task_wdt_add(NULL) == ESP_OK) {
+        g_wdt_main_registered = true;
+    } else {
+        ESP_LOGW(TAG, "Task WDT add failed for app_main");
+    }
+#endif
+
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
     xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
     #endif
@@ -1078,10 +1328,20 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Initializing WS2812 LED on GPIO %d", APP_PIN_LED);
     led_strip_config_t strip_config = {
         .strip_gpio_num = APP_PIN_LED,
-        .max_leds = 1, 
+        .max_leds = 1,
+        .led_pixel_format = LED_PIXEL_FORMAT_GRB,
+        .led_model = LED_MODEL_WS2812,
+        .flags = {
+            .invert_out = 0,
+        },
     };
     led_strip_rmt_config_t rmt_config = {
+        .clk_src = RMT_CLK_SRC_DEFAULT,
         .resolution_hz = 10 * 1000 * 1000, // 10MHz
+        .mem_block_symbols = 0,
+        .flags = {
+            .with_dma = 0,
+        },
     };
     // Note: ensure espressif/led_strip component is added
     if (led_strip_new_rmt_device(&strip_config, &rmt_config, &g_led_strip) == ESP_OK) {
@@ -1109,8 +1369,9 @@ extern "C" void app_main(void)
 #if APP_PIN_PA_ENABLE >= 0
     // Ensure it is output
     gpio_set_direction((gpio_num_t)APP_PIN_PA_ENABLE, GPIO_MODE_OUTPUT);
-    gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
-    ESP_LOGI(TAG, "Power Amplifier enabled on GPIO %d (Anti-Pop Delay: %d ms)", APP_PIN_PA_ENABLE, APP_PA_ENABLE_DELAY_MS);
+    set_pa_enable(false); // Start Disabled (Anti-Hiss)
+    // gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
+    // ESP_LOGI(TAG, "Power Amplifier enabled on GPIO %d (Anti-Pop Delay: %d ms)", APP_PIN_PA_ENABLE, APP_PA_ENABLE_DELAY_MS);
 #else
     ESP_LOGW(TAG, "Power Amplifier control DISABLED via config");
 #endif
@@ -1264,22 +1525,30 @@ extern "C" void app_main(void)
     // --- 5. Main Event Loop ---
     g_led_booting = false;
     while (1) {
+#if APP_ENABLE_TASK_WDT
+    if (g_wdt_main_registered) {
+        esp_task_wdt_reset();
+    }
+#endif
         // --- Regular Tasks ---
         // Check Daily Alarm
         if (TimeManager::checkAlarm()) {
              ESP_LOGI(TAG, "Daily Alarm Triggered! Starting Ring...");
-             if (!g_timer_alarm_active) {
-                 // Reuse the timer alarm logic for simplicity
-                 g_timer_alarm_active = true;
-                     g_daily_alarm_active = true;
-                     g_snooze_active = false;
-                 g_timer_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
+             if (!g_alarm_active) {
+                 g_alarm_active = true;
+                 g_alarm_source = ALARM_DAILY;
+                 g_snooze_active = false;
+                 g_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
+                 g_alarm_retry_last_ms = 0;
                  
                  // Stop anything currently playing
                  audio_lock();
                  audio_pipeline_stop(pipeline);
                  audio_pipeline_wait_for_stop(pipeline);
-                 audio_pipeline_terminate(pipeline);
+                is_playing = false;
+                g_last_playback_finished_ms = esp_timer_get_time() / 1000;
+                 audio_pipeline_reset_ringbuffer(pipeline);
+                 audio_pipeline_reset_items_state(pipeline);
                  audio_unlock();
                  
                  // Enable Base Speaker for Alarm
@@ -1341,17 +1610,20 @@ extern "C" void app_main(void)
                 
                 // Voice menu (single digit)
                 if (g_voice_menu_active && g_off_hook) {
-                    if (dial_buffer.size() == 1) {
+                    if (dial_buffer == APP_PB_NUM_REBOOT && phonebook.hasEntry(APP_PB_NUM_REBOOT)) {
+                        process_phonebook_function(phonebook.getEntry(APP_PB_NUM_REBOOT));
+                    } else if (dial_buffer.size() == 1) {
                         int digit = dial_buffer[0] - '0';
                         handle_voice_menu_digit(digit);
                     } else {
                         start_voice_queue({system_path("error_msg")});
                     }
-                    g_voice_menu_active = false;
                 }
                 // On-hook -> Timer mode (1-3 digits, up to 500 minutes)
                 else if (!g_off_hook) {
-                    if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
+                    if (dial_buffer == APP_PB_NUM_REBOOT && phonebook.hasEntry(APP_PB_NUM_REBOOT)) {
+                        process_phonebook_function(phonebook.getEntry(APP_PB_NUM_REBOOT));
+                    } else if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
                         int minutes = atoi(dial_buffer.c_str());
                         if (minutes >= APP_TIMER_MIN_MINUTES && minutes <= APP_TIMER_MAX_MINUTES) {
                             ESP_LOGI(TAG, "Timer set: %d minutes", minutes);
@@ -1363,14 +1635,33 @@ extern "C" void app_main(void)
                             g_timer_announce_minutes = minutes;
                             g_timer_announce_pending = true;
                             g_timer_intro_playing = true;
+
+                            // Force Base Speaker for announcement
+                            g_pending_handset_restore = true;
+                            // Since we are dialing, we were likely effectively handset or speakerphone. 
+                            // Just capture the current intention (off hook) is handset
+                            g_pending_handset_state = true; 
+                            g_force_base_output = true;
+                            update_audio_output();
+
                             play_file(system_path("timer_set").c_str());
                         } else {
                             ESP_LOGW(TAG, "Invalid timer value: %d", minutes);
-                            play_file("/sdcard/system/error_tone.wav");
+                            std::vector<std::string> files;
+                            files.push_back(system_path("timer_invalid"));
+                            files.push_back(system_path("timer_max"));
+                            add_number_audio(files, APP_TIMER_MAX_MINUTES);
+                            files.push_back(system_path("minutes"));
+                            start_voice_queue(files);
                         }
                     } else {
                         ESP_LOGW(TAG, "Timer requires 1-3 digits. Got: %s", dial_buffer.c_str());
-                        play_file("/sdcard/system/error_tone.wav");
+                        std::vector<std::string> files;
+                        files.push_back(system_path("timer_invalid"));
+                        files.push_back(system_path("timer_max"));
+                        add_number_audio(files, APP_TIMER_MAX_MINUTES);
+                        files.push_back(system_path("minutes"));
+                        start_voice_queue(files);
                     }
                 } else {
                     // Lookup
@@ -1400,8 +1691,24 @@ extern "C" void app_main(void)
             }
         }
 
+        // Alarm failover: stop if end time passed, retry if playback stalls
+        if (g_alarm_active) {
+            int64_t now = esp_timer_get_time() / 1000;
+            if (now >= g_alarm_end_ms) {
+                TimeManager::stopAlarm();
+                stop_playback();
+                reset_alarm_state(true);
+                update_audio_output();
+            } else if (!is_playing && !g_current_alarm_file.empty()) {
+                if (now - g_alarm_retry_last_ms >= APP_ALARM_RETRY_INTERVAL_MS) {
+                    g_alarm_retry_last_ms = now;
+                    play_file(g_current_alarm_file.c_str());
+                }
+            }
+        }
+
         // Busy tone after 5s off-hook without dialing
-        if (g_off_hook && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
+        if (g_off_hook && !g_voice_menu_active && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
             int64_t now = esp_timer_get_time() / 1000;
             if ((now - g_off_hook_start_ms) > APP_BUSY_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Idle timeout -> busy tone");
@@ -1410,12 +1717,11 @@ extern "C" void app_main(void)
         }
 
         // Timer alarm check
-        if (g_timer_active && !g_timer_alarm_active) {
+        if (g_timer_active && !g_alarm_active) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_timer_end_ms) {
                 ESP_LOGI(TAG, "Timer expired -> alarm");
                 g_timer_active = false;
-                g_daily_alarm_active = false;
                 g_snooze_active = false;
                 play_timer_alarm();
             }
@@ -1423,6 +1729,18 @@ extern "C" void app_main(void)
 
         if (ret != ESP_OK) {
             continue;
+        }
+        
+        // Handle Reboot Sequence (Allow pipeline to drain)
+        if (g_reboot_pending) {
+            int64_t now_ms = esp_timer_get_time() / 1000;
+            // Reboot if not playing OR timeout (5s)
+            if (!is_playing || (now_ms - g_reboot_request_time) > 5000) {
+                 ESP_LOGW(TAG, "PERFORMING SYSTEM REBOOT NOW");
+                 set_pa_enable(false); // Ensure PA off
+                 vTaskDelay(pdMS_TO_TICKS(200));
+                 esp_restart();
+            }
         }
 
         if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT) {
@@ -1467,17 +1785,27 @@ extern "C" void app_main(void)
                         announce_timer_minutes(g_timer_announce_minutes);
                         continue;
                     }
+                    if (g_voice_menu_reannounce && g_voice_menu_active && g_off_hook) {
+                        g_voice_menu_reannounce = false;
+                        vTaskDelay(pdMS_TO_TICKS(APP_VOICE_MENU_REANNOUNCE_DELAY_MS));
+                        play_voice_menu_prompt();
+                        continue;
+                    }
                     if (g_force_base_output) {
                         g_force_base_output = false;
+                        if (g_pending_handset_restore) {
+                            g_output_mode_handset = g_pending_handset_state;
+                            g_pending_handset_restore = false;
+                        }
                         update_audio_output();
                     }
-                    if (g_timer_alarm_active) {
+                    if (g_alarm_active) {
                         int64_t now = esp_timer_get_time() / 1000;
-                        if (now < g_timer_alarm_end_ms) {
+                        if (now < g_alarm_end_ms) {
                             play_file(g_current_alarm_file.c_str());
                         } else {
                             TimeManager::stopAlarm();
-                            g_timer_alarm_active = false;
+                            reset_alarm_state(true);
                             update_audio_output(); // Restore routing
                         }
                         continue;
@@ -1489,9 +1817,13 @@ extern "C" void app_main(void)
                         play_busy_tone();
                         continue;
                     }
-                    if (g_line_busy && g_off_hook && !g_timer_alarm_active) {
+                    if (g_line_busy && g_off_hook && !g_alarm_active) {
                         play_busy_tone();
+                        continue;
                     }
+                    
+                    // Idle State reached - disable PA to prevent hiss
+                    set_pa_enable(false);
                 }
             }
         }

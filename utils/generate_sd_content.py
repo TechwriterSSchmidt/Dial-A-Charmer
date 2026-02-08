@@ -21,6 +21,10 @@ CACHE_DIR = SOURCE_DIR / "audio_cache"
 SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
 
+# Telephony tone gains (dB)
+TELEPHONY_DIALTONE_GAIN_DB = -20.0
+TELEPHONY_BUSY_GAIN_DB = -20.0
+
 # Piper Configuration
 _sys_piper = shutil.which("piper")
 PIPER_BIN = Path(_sys_piper) if _sys_piper else Path("piper_not_found_on_system_path")
@@ -156,7 +160,21 @@ SYSTEM_PROMPTS = {
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", None),
     "system/error_msg_en.wav": ("An error occurred.", "en", None),
     "system/number_invalid_en.wav": ("The number you have dialed is not in service.", "en", None),
-    "system/menu_en.wav": ("Main Menu.", "en", None),
+    "system/menu_en.wav": ("You are in the voice menu.", "en", None),
+    "system/menu_options_en.wav": ("Choose one for next alarm. Choose two for night mode. Choose three for phonebook. Choose four for system status.", "en", None),
+    "system/menu_exit_en.wav": ("Hang up to exit the voice menu.", "en", None),
+    "system/timer_invalid_en.wav": ("Selected timer is invalid.", "en", None),
+    "system/timer_max_en.wav": ("Maximum timer duration", "en", None),
+    "system/pb_menu_title_en.wav": ("You are in the phonebook menu.", "en", None),
+    "system/pb_persona1_opt_en.wav": ("Choose 1 for Persona one.", "en", None),
+    "system/pb_persona2_opt_en.wav": ("Choose 2 for Persona two.", "en", None),
+    "system/pb_persona3_opt_en.wav": ("Choose 3 for Persona three.", "en", None),
+    "system/pb_persona4_opt_en.wav": ("Choose 4 for Persona four.", "en", None),
+    "system/pb_persona5_opt_en.wav": ("Choose 5 for Persona five.", "en", None),
+    "system/pb_random_mix_opt_en.wav": ("Choose 11 for Random mix.", "en", None),
+    "system/pb_time_opt_en.wav": ("Choose 110 for Time announcement.", "en", None),
+    "system/pb_menu_opt_en.wav": ("Choose 0 for Voice menu.", "en", None),
+    "system/pb_reboot_opt_en.wav": ("Choose 999 for System reboot.", "en", None),
     "system/timer_set_en.wav": ("Timer set for", "en", None),
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", None),
     "system/next_alarm_en.wav": ("Next alarm.", "en", None),
@@ -190,7 +208,21 @@ SYSTEM_PROMPTS = {
     "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
     "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
     "system/number_invalid_de.wav": ("Kein Anschluss unter dieser Nummer.", "de", None),
-    "system/menu_de.wav": ("Hauptmenü.", "de", None),
+    "system/menu_de.wav": ("Sie befinden sich im Sprachmenü.", "de", None),
+    "system/menu_options_de.wav": ("Wähle 1 für nächsten Wecker. Wähle 2 für Nachtmodus. Wähle 3 für Telefonbuch. Wähle 4 für Systemstatus.", "de", None),
+    "system/menu_exit_de.wav": ("Auflegen, um das Sprachmenü zu verlassen.", "de", None),
+    "system/timer_invalid_de.wav": ("Gewählter Timer ungültig.", "de", None),
+    "system/timer_max_de.wav": ("Maximale Timer-Dauer", "de", None),
+    "system/pb_menu_title_de.wav": ("Sie befinden sich im Telefonbuch.", "de", None),
+    "system/pb_persona1_opt_de.wav": ("Wähle 1 für Persona eins.", "de", None),
+    "system/pb_persona2_opt_de.wav": ("Wähle 2 für Persona zwei.", "de", None),
+    "system/pb_persona3_opt_de.wav": ("Wähle 3 für Persona drei.", "de", None),
+    "system/pb_persona4_opt_de.wav": ("Wähle 4 für Persona vier.", "de", None),
+    "system/pb_persona5_opt_de.wav": ("Wähle 5 für Persona fünf.", "de", None),
+    "system/pb_random_mix_opt_de.wav": ("Wähle 11 für Zufallsmix.", "de", None),
+    "system/pb_time_opt_de.wav": ("Wähle 110 für Zeitauskunft.", "de", None),
+    "system/pb_menu_opt_de.wav": ("Wähle 0 für Sprachmenü.", "de", None),
+    "system/pb_reboot_opt_de.wav": ("Wähle 999 für System Neustart.", "de", None),
     "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
     "system/timer_set_de.wav": ("Timer gesetzt für", "de", None),
     "system/next_alarm_de.wav": ("Nächster Wecker.", "de", None),
@@ -227,7 +259,7 @@ STATIC_COPY_MAP = {
 # Time Announcements (Range Definitions)
 TIME_CONFIG = {
     "hours": range(0, 24), # 0-23
-    "minutes": range(0, 301), # 0-300 (Extended for Timer)
+    "minutes": range(0, 501), # 0-500 (Extended for Timer)
     "days": range(1, 32), # 1-31
     "months": range(0, 12), # 0-11
     "weekdays": range(0, 7), # 0-6
@@ -250,23 +282,21 @@ def generate_tones(base_dir):
     tone_len = 10000 
     dt_350 = Sine(350).to_audio_segment(duration=tone_len)
     dt_440 = Sine(440).to_audio_segment(duration=tone_len)
-    dial_tone = dt_350.overlay(dt_440).apply_gain(-3.0) 
+    dial_tone = dt_350.overlay(dt_440).apply_gain(TELEPHONY_DIALTONE_GAIN_DB)
     save(dial_tone, "dial_tone.wav")
 
     # 2. Busy Tone (US): 480Hz + 620Hz, 0.5s on, 0.5s off
     busy_on = (Sine(480).to_audio_segment(duration=500)
                .overlay(Sine(620).to_audio_segment(duration=500))
-               .apply_gain(-3.0))
+               .apply_gain(TELEPHONY_BUSY_GAIN_DB))
     busy_off = AudioSegment.silent(duration=500)
     busy_tone = (busy_on + busy_off) * 6
     save(busy_tone, "busy_tone.wav")
 
-    # 3. Error Tone (Fast Busy): 480Hz + 620Hz, 0.25s on, 0.25s off
-    err_on = (Sine(480).to_audio_segment(duration=250)
-              .overlay(Sine(620).to_audio_segment(duration=250))
-              .apply_gain(-3.0))
-    err_off = AudioSegment.silent(duration=250)
-    error_tone = (err_on + err_off) * 6
+    # 3. Error Tone (gentle two-tone chime)
+    chime_1 = Sine(600).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(40)
+    chime_2 = Sine(800).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(60)
+    error_tone = chime_1 + AudioSegment.silent(duration=40) + chime_2
     save(error_tone, "error_tone.wav")
 
     # 4. Beep (Simple 1000Hz)
@@ -391,14 +421,18 @@ def generate_time_announcements():
     # Specials
     if "de" in ENABLED_LANGS:
         add_task(f"{inst_de}Uhr", "de", base_dir / "de/uhr.wav", model_de)
-        add_task(f"{inst_de}Es ist", "de", base_dir / "de/intro.wav", model_de)
-        add_task(f"{inst_de}Heute ist", "de", base_dir / "de/date_intro.wav", model_de)
+        add_task(f"{inst_de}Zeitansage. Es ist jetzt", "de", base_dir / "de/intro.wav", model_de)
+        add_task(f"{inst_de}Uhr und", "de", base_dir / "de/and.wav", model_de)
+        add_task(f"{inst_de}Minuten", "de", base_dir / "de/minutes.wav", model_de)
+        add_task(f"{inst_de}Heute ist der", "de", base_dir / "de/date_intro.wav", model_de)
         add_task(f"{inst_de}Sommerzeit", "de", base_dir / "de/dst_summer.wav", model_de)
         add_task(f"{inst_de}Winterzeit", "de", base_dir / "de/dst_winter.wav", model_de)
     
     if "en" in ENABLED_LANGS:
-        add_task(f"{inst_en}It is", "en", base_dir / "en/intro.wav", model_en)
-        add_task(f"{inst_en}Today is", "en", base_dir / "en/date_intro.wav", model_en)
+        add_task(f"{inst_en}Time announcement. It is now", "en", base_dir / "en/intro.wav", model_en)
+        add_task(f"{inst_en}o'clock and", "en", base_dir / "en/and.wav", model_en)
+        add_task(f"{inst_en}minutes", "en", base_dir / "en/minutes.wav", model_en)
+        add_task(f"{inst_en}Today is the", "en", base_dir / "en/date_intro.wav", model_en)
         add_task(f"{inst_en}Summer time", "en", base_dir / "en/dst_summer.wav", model_en)
         add_task(f"{inst_en}Winter time", "en", base_dir / "en/dst_winter.wav", model_en)
 
@@ -431,6 +465,10 @@ def check_piper_status():
 def generate_speech(text, lang, output_path, model_name=None, force_piper=False):
     """Generates audio using Piper (EN) or Google TTS (DE)."""
 
+    # Sanitize text to prevent "dot dot dot" pronunciation
+    # We replace "..." with a period to force a pause.
+    sanitized_text = text.replace(" ... ", ". ").replace("...", ".")
+
     def write_pcm_wav(segment, out_path):
         """Write a minimal PCM WAV (16-bit, 44.1kHz, mono) without extra chunks."""
         segment = segment.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
@@ -445,8 +483,8 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
         try:
             # Use 'com' for English (US) and 'de' for German
             tld = 'de' if lang == 'de' else 'com'
-            safe_print(f"  [gTTS] de -> {output_path.name}: {text[:60]}{'...' if len(text) > 60 else ''}")
-            tts = gTTS(text=text, lang=lang, tld=tld, slow=False)
+            safe_print(f"  [gTTS] de -> {output_path.name}: {sanitized_text[:60]}{'...' if len(sanitized_text) > 60 else ''}")
+            tts = gTTS(text=sanitized_text, lang=lang, tld=tld, slow=False)
             
             # gTTS saves MP3. We must convert to WAV if output is WAV.
             temp_mp3 = str(output_path) + ".mp3"
@@ -493,7 +531,7 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
     
     # Piper expects text via stdin
     process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    stdout, stderr = process.communicate(input=text.encode('utf-8'))
+    stdout, stderr = process.communicate(input=sanitized_text.encode('utf-8'))
     
     if process.returncode != 0:
         raise Exception(f"Piper failed: {stderr.decode()}")
@@ -731,7 +769,7 @@ def generate_sd_card_structure(categories):
         langs = ", ".join(categories[cat])
         print(f"  {i+1}. {cat} ({langs})")
 
-    # Clean up old playlists before regenerating
+    # Clean up old playlists and persona folders before regenerating
     playlist_dir = SD_ROOT / "playlists"
     if playlist_dir.exists():
         for old_pl in playlist_dir.glob("cat_*_v3.m3u"):
@@ -740,6 +778,14 @@ def generate_sd_card_structure(categories):
                 print(f"  [DEL] Old playlist: {old_pl.name}")
             except Exception as e:
                 print(f"  [WARN] Could not delete {old_pl.name}: {e}")
+
+    for old_persona in SD_ROOT.glob("persona_*"):
+        if old_persona.is_dir():
+            try:
+                shutil.rmtree(old_persona)
+                print(f"  [DEL] Old persona folder: {old_persona.name}")
+            except Exception as e:
+                print(f"  [WARN] Could not delete {old_persona.name}: {e}")
         
     def select_persona_category(persona_idx):
         preferred = PERSONA_DEFAULTS.get(persona_idx, "")
@@ -769,7 +815,6 @@ def generate_sd_card_structure(categories):
             selected_cat = select_persona_category(persona_idx)
             if not selected_cat:
                 print(f"  [WARN] No categories available for Persona {persona_idx}")
-                continue
             print(f"  -> Assigned '{selected_cat}' to Persona {persona_idx} (auto)")
         else:
             prompt_text = f"\nSelect Category for Persona {persona_idx}"
@@ -794,14 +839,12 @@ def generate_sd_card_structure(categories):
                 else:
                     print("Invalid selection. Try again.")
 
+        # Create persona directories (always recreate)
+        p_dir = SD_ROOT / f"persona_{persona_idx:02d}"
+        p_dir.mkdir(parents=True, exist_ok=True)
+
         if selected_cat:
             persona_assignments[persona_idx] = selected_cat
-            
-            # Create persona directories
-            p_dir = SD_ROOT / f"persona_{persona_idx:02d}"
-            if p_dir.exists():
-                shutil.rmtree(p_dir)
-            p_dir.mkdir(parents=True) 
             
             # Prepare Playlist Data
             playlist_tracks = {'de': [], 'en': []}
@@ -884,30 +927,40 @@ def generate_tones(base_dir):
         seg.export(str(out_path), format="wav")
         print(f"  [GEN] {name}")
 
-    # 1. Dial Tone 1 (German standard: 425Hz continuous)
+    # 1. Dial Tone 1 (US standard: 350Hz + 440Hz continuous)
     # 10 seconds long
-    dial_tone = Sine(425).to_audio_segment(duration=10000).apply_gain(-3.0)
+    dt_350 = Sine(350).to_audio_segment(duration=10000)
+    dt_440 = Sine(440).to_audio_segment(duration=10000)
+    dial_tone = dt_350.overlay(dt_440).apply_gain(TELEPHONY_DIALTONE_GAIN_DB)
     save(dial_tone, "dialtone_1.wav")
 
-    # 2. Busy Tone (425Hz, 480ms ON, 480ms OFF)
-    # Repeat for ~5 seconds -> (480+480) * 5 approx 5s
-    # 5000 / 960 = 5.2 cycles. Let's do 6 cycles.
-    tone_on = Sine(425).to_audio_segment(duration=480).apply_gain(-3.0)
-    tone_off = AudioSegment.silent(duration=480)
-    busy_cycle = tone_on + tone_off
-    busy_tone = busy_cycle * 6 
+    # 2. Busy Tone (US): 480Hz + 620Hz, 0.5s on, 0.5s off
+    # Repeat for ~6 seconds
+    busy_on = (Sine(480).to_audio_segment(duration=500)
+               .overlay(Sine(620).to_audio_segment(duration=500))
+               .apply_gain(TELEPHONY_BUSY_GAIN_DB))
+    busy_off = AudioSegment.silent(duration=500)
+    busy_tone = (busy_on + busy_off) * 6
     save(busy_tone, "busy_tone.wav")
 
     # 3. Beep (1000Hz, 200ms)
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-3.0)
     save(beep, "beep.wav")
 
+    # 3a. Hook pickup/hangup clicks (soft, characteristic)
+    hook_pickup = WhiteNoise().to_audio_segment(duration=40).apply_gain(-12.0).fade_out(28)
+    save(hook_pickup, "hook_pickup.wav")
+    hook_hangup = WhiteNoise().to_audio_segment(duration=30).apply_gain(-14.0).fade_out(22)
+    save(hook_hangup, "hook_hangup.wav")
+
     # 3b. Silence (300ms)
     silence = AudioSegment.silent(duration=300)
     save(silence, "silence_300ms.wav")
 
-    # 4. Error Tone (150Hz Sawtooth, 500ms)
-    error = Sawtooth(150).to_audio_segment(duration=500).apply_gain(-3.0)
+    # 4. Error Tone (gentle two-tone chime)
+    chime_1 = Sine(600).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(40)
+    chime_2 = Sine(800).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(60)
+    error = chime_1 + AudioSegment.silent(duration=40) + chime_2
     save(error, "error_tone.wav")
 
 def generate_procedural_tones():

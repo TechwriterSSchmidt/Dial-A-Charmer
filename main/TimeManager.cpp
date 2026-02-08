@@ -30,6 +30,8 @@ static uint8_t bcd2dec(uint8_t val) { return ((val / 16 * 10) + (val % 16)); }
 static uint8_t dec2bcd(uint8_t val) { return ((val / 10 * 16) + (val % 10)); }
 
 static bool rtc_read_time_raw(struct tm *out_tm);
+static bool rtc_read_status(uint8_t *status);
+static bool rtc_clear_osf();
 
 static time_t timegm_utc(struct tm *timeinfo) {
     if (!timeinfo) return (time_t)-1;
@@ -154,6 +156,12 @@ static void rtc_read_time() {
         return;
     }
 
+    uint8_t status = 0;
+    if (rtc_read_status(&status) && (status & 0x80)) {
+        ESP_LOGW(TAG, "DS3231 OSF flag set, ignoring RTC time until sync");
+        return;
+    }
+
     // Set System Time
     time_t timestamp = timegm_utc(&t);
     struct timeval tv = { .tv_sec = timestamp, .tv_usec = 0 };
@@ -184,6 +192,27 @@ static bool rtc_read_time_raw(struct tm *out_tm) {
     return true;
 }
 
+static bool rtc_read_status(uint8_t *status) {
+    if (!rtc_dev_handle || !status) return false;
+
+    uint8_t reg = 0x0F; // Status register
+    uint8_t data = 0;
+    esp_err_t ret = i2c_master_transmit_receive(rtc_dev_handle, &reg, 1, &data, 1, -1);
+    if (ret != ESP_OK) return false;
+    *status = data;
+    return true;
+}
+
+static bool rtc_clear_osf() {
+    uint8_t status = 0;
+    if (!rtc_read_status(&status)) return false;
+    status &= (uint8_t)~0x80;
+
+    uint8_t data[2] = {0x0F, status};
+    esp_err_t ret = i2c_master_transmit(rtc_dev_handle, data, sizeof(data), -1);
+    return ret == ESP_OK;
+}
+
 // Callback for SNTP
 void time_sync_notification_cb(struct timeval *tv) {
     ESP_LOGI(TAG, "SNTP Synchronized. Updating RTC...");
@@ -192,6 +221,7 @@ void time_sync_notification_cb(struct timeval *tv) {
     time(&now);
     gmtime_r(&now, &timeinfo);
     rtc_write_time(&timeinfo);
+    rtc_clear_osf();
     s_sntp_synced = true;
     s_last_ntp_sync = now;
 }
@@ -283,7 +313,8 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
         
         nvs_commit(my_handle);
         nvs_close(my_handle);
-        ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d) Tone: %s", dayIndex, hour, minute, active, volumeRamp, ringtone);
+        int logDay = (dayIndex == 0) ? 7 : dayIndex;
+        ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d) Tone: %s", logDay, hour, minute, active, volumeRamp, ringtone);
     }
 }
 
@@ -363,8 +394,9 @@ bool TimeManager::checkAlarm() {
         // But if we use snoozing later, this needs logic. 
         // For now: Trigger if seconds < 5 (poll interval usually shorter) AND last_triggered_day != today
         // Actually, better: 
-        if (_last_triggered_day != now.tm_yday) {
-             ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", today, now.tm_hour, now.tm_min);
+           if (_last_triggered_day != now.tm_yday) {
+               int logDay = (today == 0) ? 7 : today;
+               ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", logDay, now.tm_hour, now.tm_min);
              _alarm_ringing = true;
              _last_triggered_day = now.tm_yday;
              return true;

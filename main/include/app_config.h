@@ -39,13 +39,24 @@
 #define APP_TIMER_ALARM_LOOP_MINUTES 3
 
 // Daily alarm loop duration (minutes)
-#define APP_DAILY_ALARM_LOOP_MINUTES 7
+#define APP_DAILY_ALARM_LOOP_MINUTES 5
+
+// Daily alarm volume ramp duration (ms)
+#define APP_ALARM_RAMP_DURATION_MS 120000
+#define APP_ALARM_FADE_MIN_FACTOR 0.05f
+
+// Alarm playback retry interval (ms)
+#define APP_ALARM_RETRY_INTERVAL_MS 2000
 
 // Timing settings (ms)
 #define APP_DIAL_TIMEOUT_MS 2000
 #define APP_PERSONA_PAUSE_MS 1500
 #define APP_DIALTONE_SILENCE_MS 1000
 #define APP_BUSY_TIMEOUT_MS 5000
+#define APP_WAV_SWITCH_DELAY_MS 10
+#define APP_OUTPUT_MUTE_DELAY_MS 20
+#define APP_WAV_FADE_OUT_EXTRA_MS 20
+#define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
 
 // Timer settings
 #define APP_TIMER_MIN_MINUTES 1
@@ -61,6 +72,11 @@
 #define APP_GAIN_DEFAULT_LEFT 0.5f
 #define APP_GAIN_DEFAULT_RIGHT 0.5f
 #define APP_GAIN_RAMP_MS 40
+
+// Handset noise gate (reduce hiss during quiet passages)
+#define APP_HANDSET_NOISE_GATE_THRESHOLD 700
+#define APP_HANDSET_NOISE_GATE_FLOOR 0.2f
+#define APP_HANDSET_NOISE_GATE_SMOOTH 0.08f
 
 // Volume defaults (0-100)
 #define APP_DEFAULT_BASE_VOLUME 60
@@ -92,3 +108,15 @@
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0
 #define SYSTEM_MONITOR_INTERVAL_MS 30000
+
+// Task watchdog
+#define APP_ENABLE_TASK_WDT 1
+#define APP_TASK_WDT_TIMEOUT_SEC 10
+#define APP_TASK_WDT_PANIC 1
+
+// SD log capture (debug)
+#define APP_ENABLE_SD_LOG 1
+#define APP_SD_LOG_PATH "/sdcard/logs/app.log"
+#define APP_SD_LOG_MAX_BYTES (512 * 1024)
+#define APP_SD_LOG_FLUSH_INTERVAL_MS 5000
+#define APP_SD_LOG_BUFFER_LINES 120

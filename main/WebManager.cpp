@@ -8,11 +8,15 @@
 #include <sys/types.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "app_config.h"
+#include <sys/stat.h>
 #include "esp_netif.h"
 #include "nvs_flash.h"
 #include "nvs.h"
@@ -29,72 +33,124 @@ extern void play_file(const char* path);
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
 
-static std::string get_first_ringtone_name() {
-    const char *dir_path = "/sdcard/ringtones";
-    DIR *dir = opendir(dir_path);
-    if (!dir) return "";
-
-    struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL) {
-        const char *name = ent->d_name;
-        size_t len = strlen(name);
-        if (len > 4 && strcasecmp(name + len - 4, ".wav") == 0) {
-            closedir(dir);
-            return name;
-        }
-    }
-    closedir(dir);
-    return "";
-}
-
-// Log capture (last 20 lines)
-static const size_t LOG_LINE_MAX = 256;
 static const size_t LOG_LINE_COUNT = 20;
+static const size_t LOG_LINE_MAX = 192;
+
 static char s_log_lines[LOG_LINE_COUNT][LOG_LINE_MAX];
 static size_t s_log_head = 0;
 static size_t s_log_count = 0;
 static portMUX_TYPE s_log_mux = portMUX_INITIALIZER_UNLOCKED;
-static vprintf_like_t s_prev_vprintf = NULL;
+static vprintf_like_t s_prev_vprintf = nullptr;
 
-static void log_buffer_add(const char *line) {
+#if APP_ENABLE_SD_LOG
+static FILE *s_sd_log_file = nullptr;
+static TaskHandle_t s_sd_log_task = nullptr;
+static portMUX_TYPE s_sd_log_mux = portMUX_INITIALIZER_UNLOCKED;
+static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static size_t s_sd_log_buf_count = 0;
+
+static void sd_log_write_line(const char *line) {
     if (!line || !line[0]) {
         return;
     }
-    portENTER_CRITICAL(&s_log_mux);
-    size_t idx = s_log_head % LOG_LINE_COUNT;
-    strncpy(s_log_lines[idx], line, LOG_LINE_MAX - 1);
-    s_log_lines[idx][LOG_LINE_MAX - 1] = '\0';
-    s_log_head = (s_log_head + 1) % LOG_LINE_COUNT;
-    if (s_log_count < LOG_LINE_COUNT) {
-        s_log_count++;
+    portENTER_CRITICAL(&s_sd_log_mux);
+    if (s_sd_log_buf_count < APP_SD_LOG_BUFFER_LINES) {
+        strncpy(s_sd_log_buf[s_sd_log_buf_count], line, LOG_LINE_MAX - 1);
+        s_sd_log_buf[s_sd_log_buf_count][LOG_LINE_MAX - 1] = '\0';
+        s_sd_log_buf_count++;
     }
-    portEXIT_CRITICAL(&s_log_mux);
+    portEXIT_CRITICAL(&s_sd_log_mux);
 }
 
-static int log_vprintf(const char *fmt, va_list args) {
-    char buf[LOG_LINE_MAX];
-    va_list args_copy;
-    va_copy(args_copy, args);
-    vsnprintf(buf, sizeof(buf), fmt, args_copy);
-    va_end(args_copy);
+static void sd_log_flush_task(void *pvParameters) {
+    (void)pvParameters;
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(APP_SD_LOG_FLUSH_INTERVAL_MS));
 
-    size_t len = strlen(buf);
-    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
-        buf[len - 1] = '\0';
-        len--;
-    }
-    log_buffer_add(buf);
+        size_t count = 0;
+        portENTER_CRITICAL(&s_sd_log_mux);
+        count = s_sd_log_buf_count;
+        for (size_t i = 0; i < count; ++i) {
+            strncpy(s_sd_log_flush_buf[i], s_sd_log_buf[i], LOG_LINE_MAX);
+            s_sd_log_flush_buf[i][LOG_LINE_MAX - 1] = '\0';
+        }
+        portEXIT_CRITICAL(&s_sd_log_mux);
 
-    if (s_prev_vprintf) {
-        return s_prev_vprintf(fmt, args);
+        if (count == 0) {
+            continue;
+        }
+
+        if (!s_sd_log_file) {
+            const char *log_path = APP_SD_LOG_PATH;
+            char dir_path[128] = {0};
+            const char *last = strrchr(log_path, '/');
+            if (last && last != log_path) {
+                size_t len = (size_t)(last - log_path);
+                if (len < sizeof(dir_path)) {
+                    memcpy(dir_path, log_path, len);
+                    dir_path[len] = '\0';
+                    mkdir(dir_path, 0775);
+                }
+            }
+            s_sd_log_file = fopen(log_path, "a");
+        }
+
+        if (!s_sd_log_file) {
+            continue;
+        }
+
+        fseek(s_sd_log_file, 0, SEEK_END);
+        long size = ftell(s_sd_log_file);
+        if (size >= (long)APP_SD_LOG_MAX_BYTES) {
+            freopen(APP_SD_LOG_PATH, "w", s_sd_log_file);
+        }
+        for (size_t i = 0; i < count; ++i) {
+            fputs(s_sd_log_flush_buf[i], s_sd_log_file);
+            fputc('\n', s_sd_log_file);
+        }
+        fflush(s_sd_log_file);
+        fsync(fileno(s_sd_log_file));
+
+        portENTER_CRITICAL(&s_sd_log_mux);
+        if (s_sd_log_buf_count >= count) {
+            size_t remaining = s_sd_log_buf_count - count;
+            for (size_t i = 0; i < remaining; ++i) {
+                strncpy(s_sd_log_buf[i], s_sd_log_buf[count + i], LOG_LINE_MAX);
+                s_sd_log_buf[i][LOG_LINE_MAX - 1] = '\0';
+            }
+            s_sd_log_buf_count = remaining;
+        } else {
+            s_sd_log_buf_count = 0;
+        }
+        portEXIT_CRITICAL(&s_sd_log_mux);
     }
-    return vprintf(fmt, args);
 }
+#endif
 
-static void init_log_capture() {
-    if (!s_prev_vprintf) {
-        s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
+static std::string get_first_ringtone_name() {
+    const char *dir_path = "/sdcard/ringtones";
+    DIR *dir = opendir(dir_path);
+    if (!dir) {
+        return "";
     }
+
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        const char *name = ent->d_name;
+        if (!name || name[0] == '.') {
+            continue;
+        }
+        const char *dot = strrchr(name, '.');
+        if (dot && strcasecmp(dot, ".wav") == 0) {
+            std::string result = name;
+            closedir(dir);
+            return result;
+        }
+    }
+
+    closedir(dir);
+    return "";
 }
 
 static void compact_log_line(const char *src, char *dst, size_t dst_size) {
@@ -158,6 +214,76 @@ static void compact_log_line(const char *src, char *dst, size_t dst_size) {
         // Move message to start (after '>')
         memmove(dst + 1, msg, strlen(msg) + 1);
     }
+}
+
+static void strip_ansi(const char *src, char *dst, size_t dst_size) {
+    if (!src || !dst || dst_size == 0) {
+        return;
+    }
+    size_t di = 0;
+    for (size_t i = 0; src[i] != '\0' && di + 1 < dst_size; ++i) {
+        if (src[i] == '\x1b' && src[i + 1] == '[') {
+            i += 2;
+            while (src[i] != '\0' && src[i] != 'm') {
+                ++i;
+            }
+            continue;
+        }
+        dst[di++] = src[i];
+    }
+    dst[di] = '\0';
+}
+
+static void log_buffer_add(const char *line) {
+    if (!line || !line[0]) {
+        return;
+    }
+    portENTER_CRITICAL(&s_log_mux);
+    size_t idx = s_log_head % LOG_LINE_COUNT;
+    strncpy(s_log_lines[idx], line, LOG_LINE_MAX - 1);
+    s_log_lines[idx][LOG_LINE_MAX - 1] = '\0';
+    s_log_head = (s_log_head + 1) % LOG_LINE_COUNT;
+    if (s_log_count < LOG_LINE_COUNT) {
+        s_log_count++;
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+}
+
+static int log_vprintf(const char *fmt, va_list args) {
+    char buf[LOG_LINE_MAX];
+    va_list args_copy;
+    va_copy(args_copy, args);
+    vsnprintf(buf, sizeof(buf), fmt, args_copy);
+    va_end(args_copy);
+
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
+        buf[len - 1] = '\0';
+        len--;
+    }
+    log_buffer_add(buf);
+
+#if APP_ENABLE_SD_LOG
+    char clean[LOG_LINE_MAX];
+    strip_ansi(buf, clean, sizeof(clean));
+    sd_log_write_line(clean);
+#endif
+
+    if (s_prev_vprintf) {
+        return s_prev_vprintf(fmt, args);
+    }
+    return vprintf(fmt, args);
+}
+
+static void init_log_capture() {
+    if (!s_prev_vprintf) {
+        s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
+    }
+#if APP_ENABLE_SD_LOG
+    if (!s_sd_log_task) {
+        xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
+    }
+#endif
 }
 
 // DNS Server Task
@@ -275,12 +401,24 @@ static esp_err_t api_ringtones_handler(httpd_req_t *req) {
     if (dir) {
         struct dirent *ent;
         while ((ent = readdir(dir)) != NULL) {
-            // Filter for WAV-only to match available decoder
-            if (strstr(ent->d_name, ".wav")) {
-                cJSON_AddItemToArray(root, cJSON_CreateString(ent->d_name));
+            if (ent->d_type != DT_REG) {
+                continue;
+            }
+
+            const char *name = ent->d_name;
+            size_t len = strlen(name);
+            if (len < 4) {
+                continue;
+            }
+
+            const char *ext = name + len - 4;
+            if (strcasecmp(ext, ".wav") == 0) {
+                cJSON_AddItemToArray(root, cJSON_CreateString(name));
             }
         }
         closedir(dir);
+    } else {
+        ESP_LOGW(TAG, "Ringtones folder not accessible: /sdcard/ringtones");
     }
     
     const char *json_str = cJSON_PrintUnformatted(root);
@@ -296,11 +434,19 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
         char param[64];
         if (httpd_query_key_value(buf, "file", param, sizeof(param)) == ESP_OK) {
             // Basic security check: no parent directory traversal
-            if (strstr(param, "..") == NULL && strstr(param, ".wav")) {
+            const char *dot = strrchr(param, '.');
+            bool is_wav = dot && strcasecmp(dot, ".wav") == 0;
+            if (strstr(param, "..") == NULL && is_wav) {
+                // If the user requests a new preview, we allow it immediately.
+                // The previous cooldown logic blocked rapid-fire preview switching.
+                // We trust the frontend (or debounce there) but allow backend to restart playback.
+                
                 char filepath[128];
                 snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
                 
                 ESP_LOGI(TAG, "Preview request: %s", filepath);
+                
+                // play_file handles "stop current -> start new" logic safely
                 play_file(filepath); 
                 
                 httpd_resp_send(req, "OK", 2);
@@ -501,12 +647,14 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
     }
     
     bool wifi_updated = false;
+    bool lang_updated = false;
     nvs_handle_t my_handle;
     if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
         
         cJSON *item = cJSON_GetObjectItem(root, "lang");
         if (cJSON_IsString(item)) {
             nvs_set_str(my_handle, "src_lang", item->valuestring);
+            lang_updated = true;
         }
         
         item = cJSON_GetObjectItem(root, "wifi_ssid");
@@ -556,6 +704,13 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         // --- Alarms ---
         cJSON *alarms_arr = cJSON_GetObjectItem(root, "alarms");
         if (cJSON_IsArray(alarms_arr)) {
+            int alarm_updates = 0;
+            bool has_day0 = false;
+            int day0_h = 0;
+            int day0_m = 0;
+            bool day0_active = false;
+            bool day0_ramp = false;
+            std::string day0_ringtone;
             cJSON *elem;
             cJSON_ArrayForEach(elem, alarms_arr) {
                 cJSON *d = cJSON_GetObjectItem(elem, "d");
@@ -575,15 +730,34 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
                     if (cJSON_IsNumber(rmp)) ramp = (rmp->valueint == 1);
 
                     const char* ringtone = (snd && cJSON_IsString(snd)) ? snd->valuestring : "";
+                    if (d->valueint == 0) {
+                        has_day0 = true;
+                        day0_h = h->valueint;
+                        day0_m = m->valueint;
+                        day0_active = active;
+                        day0_ramp = ramp;
+                        day0_ringtone = ringtone ? ringtone : "";
+                        continue;
+                    }
                     TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, ringtone);
+                    alarm_updates++;
                 }
             }
+            if (has_day0) {
+                TimeManager::setAlarm(0, day0_h, day0_m, day0_active, day0_ramp, day0_ringtone.c_str());
+                alarm_updates++;
+            }
+            ESP_LOGI(TAG, "Alarm settings saved: %d entries", alarm_updates);
         }
         // --------------
 
 
         nvs_commit(my_handle);
         nvs_close(my_handle);
+    }
+
+    if (lang_updated) {
+        phonebook.reloadDefaults();
     }
     
     // Apply Timezone (read from JSON again to be safe/easy, or variable)
