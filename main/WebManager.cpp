@@ -429,8 +429,6 @@ static esp_err_t api_ringtones_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_preview_handler(httpd_req_t *req) {
-    static int64_t s_last_preview_ms = 0;
-    static const int64_t PREVIEW_COOLDOWN_MS = 400;
     char buf[128];
     if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK) {
         char param[64];
@@ -439,17 +437,16 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
             const char *dot = strrchr(param, '.');
             bool is_wav = dot && strcasecmp(dot, ".wav") == 0;
             if (strstr(param, "..") == NULL && is_wav) {
-                int64_t now_ms = esp_timer_get_time() / 1000;
-                if (now_ms - s_last_preview_ms < PREVIEW_COOLDOWN_MS) {
-                    httpd_resp_set_status(req, "429 Too Many Requests");
-                    httpd_resp_send(req, "", 0);
-                    return ESP_OK;
-                }
-                s_last_preview_ms = now_ms;
+                // If the user requests a new preview, we allow it immediately.
+                // The previous cooldown logic blocked rapid-fire preview switching.
+                // We trust the frontend (or debounce there) but allow backend to restart playback.
+                
                 char filepath[128];
                 snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
                 
                 ESP_LOGI(TAG, "Preview request: %s", filepath);
+                
+                // play_file handles "stop current -> start new" logic safely
                 play_file(filepath); 
                 
                 httpd_resp_send(req, "OK", 2);

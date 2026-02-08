@@ -91,6 +91,8 @@ bool g_sd_error = false;
 bool g_force_base_output = false;
 bool g_pending_handset_restore = false;
 bool g_pending_handset_state = false;
+bool g_reboot_pending = false;
+int64_t g_reboot_request_time = 0;
 // Alarm State
 int g_saved_volume = -1;
 
@@ -202,6 +204,24 @@ enum LedState {
     LED_SNOOZE,
     LED_ERROR,
 };
+
+static void set_pa_enable(bool enable) {
+#if APP_PIN_PA_ENABLE >= 0
+    static bool s_pa_enabled = false;
+    if (enable != s_pa_enabled) {
+        if (enable) {
+            gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
+            vTaskDelay(pdMS_TO_TICKS(50)); // Anti-pop startup delay
+            ESP_LOGI(TAG, "PA Enabled");
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(50)); // Wait for mute to settle
+            gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 0);
+            ESP_LOGI(TAG, "PA Disabled");
+        }
+        s_pa_enabled = enable;
+    }
+#endif
+}
 
 static void apply_led_color(uint8_t r, uint8_t g, uint8_t b) {
     if (g_night_mode_active) {
@@ -874,9 +894,17 @@ void play_file(const char* path) {
     if (board_handle && board_handle->audio_hal) {
         audio_hal_set_mute(board_handle->audio_hal, false);
     }
+    
+    set_pa_enable(true);
 
-    stop_playback();
+    // Optimized Stop Logic for Fast Switching
     audio_lock();
+    
+    // Always force stop first, skipping fade-out/mute for responsiveness
+    audio_pipeline_stop(pipeline);
+    audio_pipeline_wait_for_stop(pipeline);
+    is_playing = false;
+    g_last_playback_finished_ms = esp_timer_get_time() / 1000;
 
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
@@ -888,14 +916,24 @@ void play_file(const char* path) {
     // Force Output Selection immediately after run logic
     update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
-    audio_pipeline_stop(pipeline);
-    audio_pipeline_wait_for_stop(pipeline);
-    vTaskDelay(pdMS_TO_TICKS(APP_WAV_SWITCH_DELAY_MS));
+
+    // Small delay to ensure hardware buffers clear (reduced from default if needed)
+    vTaskDelay(pdMS_TO_TICKS(10)); 
+    
     audio_pipeline_reset_ringbuffer(pipeline);
     audio_pipeline_reset_items_state(pipeline);
     audio_element_set_uri(fatfs_stream, path);
-    audio_pipeline_run(pipeline);
-    is_playing = true;
+    
+    if (audio_pipeline_run(pipeline) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start pipeline for: %s", path);
+        // Clean up state if run failed
+        audio_pipeline_stop(pipeline);
+        audio_pipeline_wait_for_stop(pipeline);
+        is_playing = false;
+    } else {
+        is_playing = true;
+    }
+    
     audio_unlock();
 }
 
@@ -990,10 +1028,10 @@ void process_phonebook_function(PhonebookEntry entry) {
             announce_time_now();
         }
         else if (entry.value == "REBOOT") {
-             ESP_LOGW(TAG, "Rebooting system...");
-               play_file(system_path("system_ready").c_str()); // Ack before reboot
-             vTaskDelay(pdMS_TO_TICKS(2000));
-             esp_restart();
+             ESP_LOGW(TAG, "Reboot requested. Playing ack...");
+             play_file(system_path("system_ready").c_str());
+             g_reboot_pending = true;
+             g_reboot_request_time = esp_timer_get_time() / 1000;
         }
         else if (entry.value == "VOICE_MENU") {
             g_voice_menu_active = true;
@@ -1152,6 +1190,7 @@ void on_hook_change(bool off_hook) {
         // Receiver Hung Up
         if (!timer_canceled) {
             stop_playback();
+            set_pa_enable(false);
         }
         if (g_voice_menu_active) {
             g_voice_menu_active = false;
@@ -1330,8 +1369,9 @@ extern "C" void app_main(void)
 #if APP_PIN_PA_ENABLE >= 0
     // Ensure it is output
     gpio_set_direction((gpio_num_t)APP_PIN_PA_ENABLE, GPIO_MODE_OUTPUT);
-    gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
-    ESP_LOGI(TAG, "Power Amplifier enabled on GPIO %d (Anti-Pop Delay: %d ms)", APP_PIN_PA_ENABLE, APP_PA_ENABLE_DELAY_MS);
+    set_pa_enable(false); // Start Disabled (Anti-Hiss)
+    // gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
+    // ESP_LOGI(TAG, "Power Amplifier enabled on GPIO %d (Anti-Pop Delay: %d ms)", APP_PIN_PA_ENABLE, APP_PA_ENABLE_DELAY_MS);
 #else
     ESP_LOGW(TAG, "Power Amplifier control DISABLED via config");
 #endif
@@ -1595,6 +1635,15 @@ extern "C" void app_main(void)
                             g_timer_announce_minutes = minutes;
                             g_timer_announce_pending = true;
                             g_timer_intro_playing = true;
+
+                            // Force Base Speaker for announcement
+                            g_pending_handset_restore = true;
+                            // Since we are dialing, we were likely effectively handset or speakerphone. 
+                            // Just capture the current intention (off hook) is handset
+                            g_pending_handset_state = true; 
+                            g_force_base_output = true;
+                            update_audio_output();
+
                             play_file(system_path("timer_set").c_str());
                         } else {
                             ESP_LOGW(TAG, "Invalid timer value: %d", minutes);
@@ -1681,6 +1730,18 @@ extern "C" void app_main(void)
         if (ret != ESP_OK) {
             continue;
         }
+        
+        // Handle Reboot Sequence (Allow pipeline to drain)
+        if (g_reboot_pending) {
+            int64_t now_ms = esp_timer_get_time() / 1000;
+            // Reboot if not playing OR timeout (5s)
+            if (!is_playing || (now_ms - g_reboot_request_time) > 5000) {
+                 ESP_LOGW(TAG, "PERFORMING SYSTEM REBOOT NOW");
+                 set_pa_enable(false); // Ensure PA off
+                 vTaskDelay(pdMS_TO_TICKS(200));
+                 esp_restart();
+            }
+        }
 
         if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT) {
             // Handle Music Info (Sample Rate)
@@ -1758,7 +1819,11 @@ extern "C" void app_main(void)
                     }
                     if (g_line_busy && g_off_hook && !g_alarm_active) {
                         play_busy_tone();
+                        continue;
                     }
+                    
+                    // Idle State reached - disable PA to prevent hiss
+                    set_pa_enable(false);
                 }
             }
         }
