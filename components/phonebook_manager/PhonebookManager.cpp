@@ -2,6 +2,7 @@
 #include "app_config.h"
 #include "esp_log.h"
 #include "cJSON.h"
+#include "nvs.h"
 #include <dirent.h>
 #include <string.h>
 #include <strings.h>
@@ -73,7 +74,23 @@ static std::string get_persona_title(int idx) {
     return extract_category_title(wav);
 }
 
+static bool is_lang_en() {
+    nvs_handle_t my_handle;
+    char val[8] = {0};
+    size_t len = sizeof(val);
+    bool is_en = false;
+
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        if (nvs_get_str(my_handle, "src_lang", val, &len) == ESP_OK) {
+            is_en = (strncmp(val, "en", 2) == 0);
+        }
+        nvs_close(my_handle);
+    }
+    return is_en;
+}
+
 void PhonebookManager::begin() {
+    bool lang_en = is_lang_en();
     // Default Entries Logic (in-memory only)
     auto ensure = [&](std::string num, std::string name, std::string type, std::string val, std::string param="") {
         if (!hasEntry(num)) {
@@ -93,12 +110,12 @@ void PhonebookManager::begin() {
     ensure(APP_PB_NUM_PERSONA_3, p3.empty() ? "Persona 3" : p3, "FUNCTION", "COMPLIMENT_CAT", "3");
     ensure(APP_PB_NUM_PERSONA_4, p4.empty() ? "Persona 4" : p4, "FUNCTION", "COMPLIMENT_CAT", "4");
     ensure(APP_PB_NUM_PERSONA_5, p5.empty() ? "Persona 5" : p5, "FUNCTION", "COMPLIMENT_CAT", "5");
-    ensure(APP_PB_NUM_RANDOM_MIX, "Random Mix (Surprise)", "FUNCTION", "COMPLIMENT_MIX", "0");
-    ensure(APP_PB_NUM_TIME, "Zeitauskunft", "FUNCTION", "ANNOUNCE_TIME");
+    ensure(APP_PB_NUM_RANDOM_MIX, lang_en ? "Random Mix (Surprise)" : "Zufallsmix (Ueberraschung)", "FUNCTION", "COMPLIMENT_MIX", "0");
+    ensure(APP_PB_NUM_TIME, lang_en ? "Time Announcement" : "Zeitauskunft", "FUNCTION", "ANNOUNCE_TIME");
     
     // Admin
-    ensure(APP_PB_NUM_VOICE_MENU, "Voice Admin Menu", "FUNCTION", "VOICE_MENU");
-    ensure(APP_PB_NUM_REBOOT, "System Reboot", "FUNCTION", "REBOOT");
+    ensure(APP_PB_NUM_VOICE_MENU, lang_en ? "Voice Admin Menu" : "Sprachmenue", "FUNCTION", "VOICE_MENU");
+    ensure(APP_PB_NUM_REBOOT, lang_en ? "System Reboot" : "System Neustart", "FUNCTION", "REBOOT");
 }
 
 void PhonebookManager::load() {
@@ -184,6 +201,11 @@ void PhonebookManager::saveFromJson(std::string jsonString) {
 
 void PhonebookManager::saveChanges() {
     save();
+}
+
+void PhonebookManager::reloadDefaults() {
+    load();
+    begin();
 }
 
 std::string PhonebookManager::findKeyByValueAndParam(std::string value, std::string parameter) {

@@ -501,12 +501,14 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
     }
     
     bool wifi_updated = false;
+    bool lang_updated = false;
     nvs_handle_t my_handle;
     if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
         
         cJSON *item = cJSON_GetObjectItem(root, "lang");
         if (cJSON_IsString(item)) {
             nvs_set_str(my_handle, "src_lang", item->valuestring);
+            lang_updated = true;
         }
         
         item = cJSON_GetObjectItem(root, "wifi_ssid");
@@ -584,6 +586,10 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
 
         nvs_commit(my_handle);
         nvs_close(my_handle);
+    }
+
+    if (lang_updated) {
+        phonebook.reloadDefaults();
     }
     
     // Apply Timezone (read from JSON again to be safe/easy, or variable)

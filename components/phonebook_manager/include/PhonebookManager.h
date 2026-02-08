@@ -26,6 +26,7 @@ public:
     std::string getJson(); 
     void saveFromJson(std::string jsonString);
     void saveChanges(); 
+    void reloadDefaults();
 
     // Search
     std::string findKeyByValueAndParam(std::string value, std::string parameter);

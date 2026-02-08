@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "esp_vfs_fat.h"
 #include "nvs_flash.h"
+#include "esp_task_wdt.h"
 #include "audio_element.h"
 #include "audio_pipeline.h"
 #include "audio_event_iface.h"
@@ -98,10 +99,16 @@ enum AlarmSource {
 static bool g_alarm_active = false;
 static AlarmSource g_alarm_source = ALARM_NONE;
 static int64_t g_alarm_end_ms = 0;
+static int64_t g_alarm_retry_last_ms = 0;
 // Alarm Fade Logic
 static bool g_alarm_fade_active = false;
 static float g_alarm_fade_factor = 1.0f;
 static int64_t g_alarm_fade_start_time = 0;
+
+#if APP_ENABLE_TASK_WDT
+static bool g_wdt_main_registered = false;
+static bool g_wdt_input_registered = false;
+#endif
 
 // Helper Forward Declarations
 static void start_voice_queue(const std::vector<std::string> &files);
@@ -824,6 +831,7 @@ void play_timer_alarm() {
     g_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
     g_alarm_fade_active = false;
     g_alarm_fade_factor = 1.0f;
+    g_alarm_retry_last_ms = 0;
     stop_playback();
     update_audio_output(); // Force Base Speaker
     // Play the currently selected alarm (Daily or Default)
@@ -1007,6 +1015,13 @@ void on_hook_change(bool off_hook) {
 
 void input_task(void *pvParameters) {
     ESP_LOGI(TAG, "Input Task Started. Priority: %d", uxTaskPriorityGet(NULL));
+#if APP_ENABLE_TASK_WDT
+    if (esp_task_wdt_add(NULL) == ESP_OK) {
+        g_wdt_input_registered = true;
+    } else {
+        ESP_LOGW(TAG, "Task WDT add failed for input_task");
+    }
+#endif
     while(1) {
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
@@ -1051,6 +1066,11 @@ void input_task(void *pvParameters) {
         g_gain_left_target = target_left;
         g_gain_right_target = target_right;
         
+    #if APP_ENABLE_TASK_WDT
+        if (g_wdt_input_registered) {
+            esp_task_wdt_reset();
+        }
+    #endif
         // Yield to IDLE task to reset WDT using vTaskDelay
         // Ensure strictly positive delay to allow IDLE task to run
         vTaskDelay(pdMS_TO_TICKS(50)); 
@@ -1086,6 +1106,23 @@ extern "C" void app_main(void)
     if (!g_led_mutex) {
         ESP_LOGE(TAG, "LED mutex init failed");
     }
+
+#if APP_ENABLE_TASK_WDT
+    esp_task_wdt_config_t wdt_cfg = {
+        .timeout_ms = APP_TASK_WDT_TIMEOUT_SEC * 1000,
+        .idle_core_mask = 0,
+        .trigger_panic = APP_TASK_WDT_PANIC,
+    };
+    esp_err_t wdt_err = esp_task_wdt_init(&wdt_cfg);
+    if (wdt_err != ESP_OK && wdt_err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Task WDT init failed: %s", esp_err_to_name(wdt_err));
+    }
+    if (esp_task_wdt_add(NULL) == ESP_OK) {
+        g_wdt_main_registered = true;
+    } else {
+        ESP_LOGW(TAG, "Task WDT add failed for app_main");
+    }
+#endif
 
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
     xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
@@ -1292,6 +1329,11 @@ extern "C" void app_main(void)
     // --- 5. Main Event Loop ---
     g_led_booting = false;
     while (1) {
+#if APP_ENABLE_TASK_WDT
+    if (g_wdt_main_registered) {
+        esp_task_wdt_reset();
+    }
+#endif
         // --- Regular Tasks ---
         // Check Daily Alarm
         if (TimeManager::checkAlarm()) {
@@ -1301,6 +1343,7 @@ extern "C" void app_main(void)
                  g_alarm_source = ALARM_DAILY;
                  g_snooze_active = false;
                  g_alarm_end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
+                 g_alarm_retry_last_ms = 0;
                  
                  // Stop anything currently playing
                  audio_lock();
@@ -1427,6 +1470,22 @@ extern "C" void app_main(void)
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_night_mode_end_ms) {
                 set_night_mode(false);
+            }
+        }
+
+        // Alarm failover: stop if end time passed, retry if playback stalls
+        if (g_alarm_active) {
+            int64_t now = esp_timer_get_time() / 1000;
+            if (now >= g_alarm_end_ms) {
+                TimeManager::stopAlarm();
+                stop_playback();
+                reset_alarm_state(true);
+                update_audio_output();
+            } else if (!is_playing && !g_current_alarm_file.empty()) {
+                if (now - g_alarm_retry_last_ms >= APP_ALARM_RETRY_INTERVAL_MS) {
+                    g_alarm_retry_last_ms = now;
+                    play_file(g_current_alarm_file.c_str());
+                }
             }
         }
 

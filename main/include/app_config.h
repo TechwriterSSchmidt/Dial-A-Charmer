@@ -44,6 +44,9 @@
 // Daily alarm volume ramp duration (ms)
 #define APP_ALARM_RAMP_DURATION_MS 120000
 
+// Alarm playback retry interval (ms)
+#define APP_ALARM_RETRY_INTERVAL_MS 2000
+
 // Timing settings (ms)
 #define APP_DIAL_TIMEOUT_MS 2000
 #define APP_PERSONA_PAUSE_MS 1500
@@ -95,3 +98,8 @@
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0
 #define SYSTEM_MONITOR_INTERVAL_MS 30000
+
+// Task watchdog
+#define APP_ENABLE_TASK_WDT 1
+#define APP_TASK_WDT_TIMEOUT_SEC 10
+#define APP_TASK_WDT_PANIC 1

@@ -276,7 +276,7 @@ function renderFooter(activePage) {
     let html = "<div style='text-align:center; padding-bottom: 20px; margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;'>";
     links.forEach(l => {
         if (l.h !== activePage) {
-            html += `<a href="#" onclick="nav('${l.h}')" style="${style}">${t(l.k)}</a>`;
+            html += `<a href="javascript:void(0)" onclick="return nav('${l.h}')" style="${style}">${t(l.k)}</a>`;
         }
     });
     html += "</div>";
@@ -287,12 +287,18 @@ function renderFooter(activePage) {
 window.setLang = (l) => {
     state.lang = l;
     state.settings.lang = l;
-    API.saveSettings({lang: l}).then(() => render());
+    API.saveSettings({lang: l}).then(() => {
+        return API.getPhonebook().then(pb => {
+            state.phonebook = pb || {};
+            render();
+        });
+    });
 };
 
 window.nav = (h) => {
     window.history.pushState({}, "", h);
     render();
+    return false;
 };
 
 window.onpopstate = render;
