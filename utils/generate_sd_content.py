@@ -22,8 +22,8 @@ SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
 
 # Telephony tone gains (dB)
-TELEPHONY_DIALTONE_GAIN_DB = -9.0
-TELEPHONY_BUSY_GAIN_DB = -9.0
+TELEPHONY_DIALTONE_GAIN_DB = -15.0
+TELEPHONY_BUSY_GAIN_DB = -15.0
 
 # Piper Configuration
 _sys_piper = shutil.which("piper")
@@ -280,13 +280,13 @@ def generate_tones(base_dir):
     tone_len = 10000 
     dt_350 = Sine(350).to_audio_segment(duration=tone_len)
     dt_440 = Sine(440).to_audio_segment(duration=tone_len)
-    dial_tone = dt_350.overlay(dt_440).apply_gain(-3.0) 
+    dial_tone = dt_350.overlay(dt_440).apply_gain(TELEPHONY_DIALTONE_GAIN_DB)
     save(dial_tone, "dial_tone.wav")
 
     # 2. Busy Tone (US): 480Hz + 620Hz, 0.5s on, 0.5s off
     busy_on = (Sine(480).to_audio_segment(duration=500)
                .overlay(Sine(620).to_audio_segment(duration=500))
-               .apply_gain(-3.0))
+               .apply_gain(TELEPHONY_BUSY_GAIN_DB))
     busy_off = AudioSegment.silent(duration=500)
     busy_tone = (busy_on + busy_off) * 6
     save(busy_tone, "busy_tone.wav")
@@ -924,13 +924,13 @@ def generate_tones(base_dir):
     dial_tone = dt_350.overlay(dt_440).apply_gain(TELEPHONY_DIALTONE_GAIN_DB)
     save(dial_tone, "dialtone_1.wav")
 
-    # 2. Busy Tone (425Hz, 480ms ON, 480ms OFF)
-    # Repeat for ~5 seconds -> (480+480) * 5 approx 5s
-    # 5000 / 960 = 5.2 cycles. Let's do 6 cycles.
-    tone_on = Sine(425).to_audio_segment(duration=480).apply_gain(TELEPHONY_BUSY_GAIN_DB)
-    tone_off = AudioSegment.silent(duration=480)
-    busy_cycle = tone_on + tone_off
-    busy_tone = busy_cycle * 6 
+    # 2. Busy Tone (US): 480Hz + 620Hz, 0.5s on, 0.5s off
+    # Repeat for ~6 seconds
+    busy_on = (Sine(480).to_audio_segment(duration=500)
+               .overlay(Sine(620).to_audio_segment(duration=500))
+               .apply_gain(TELEPHONY_BUSY_GAIN_DB))
+    busy_off = AudioSegment.silent(duration=500)
+    busy_tone = (busy_on + busy_off) * 6
     save(busy_tone, "busy_tone.wav")
 
     # 3. Beep (1000Hz, 200ms)

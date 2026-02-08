@@ -855,6 +855,10 @@ void play_file(const char* path) {
         return;
     }
 
+    if (board_handle && board_handle->audio_hal) {
+        audio_hal_set_mute(board_handle->audio_hal, false);
+    }
+
     if (is_playing) {
         fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
     }
@@ -1001,6 +1005,10 @@ void process_phonebook_function(PhonebookEntry entry) {
 void stop_playback() {
     if (is_playing) {
         fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
+        if (board_handle && board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, true);
+            vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
+        }
         audio_lock();
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
