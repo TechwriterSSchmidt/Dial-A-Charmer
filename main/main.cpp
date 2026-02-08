@@ -566,9 +566,12 @@ static bool cancel_timer_with_feedback(const char *reason) {
     g_snooze_active = false;
 
     stop_playback();
+    bool prev_handset = g_output_mode_handset;
+    g_output_mode_handset = false;
     g_force_base_output = true;
     update_audio_output();
     play_file(system_path("timer_deleted").c_str());
+    g_output_mode_handset = prev_handset;
     return true;
 }
 

@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_wifi.h"
@@ -73,7 +74,6 @@ static void sd_log_flush_task(void *pvParameters) {
             strncpy(s_sd_log_flush_buf[i], s_sd_log_buf[i], LOG_LINE_MAX);
             s_sd_log_flush_buf[i][LOG_LINE_MAX - 1] = '\0';
         }
-        s_sd_log_buf_count = 0;
         portEXIT_CRITICAL(&s_sd_log_mux);
 
         if (count == 0) {
@@ -95,18 +95,34 @@ static void sd_log_flush_task(void *pvParameters) {
             s_sd_log_file = fopen(log_path, "a");
         }
 
-        if (s_sd_log_file) {
-            fseek(s_sd_log_file, 0, SEEK_END);
-            long size = ftell(s_sd_log_file);
-            if (size >= (long)APP_SD_LOG_MAX_BYTES) {
-                freopen(APP_SD_LOG_PATH, "w", s_sd_log_file);
-            }
-            for (size_t i = 0; i < count; ++i) {
-                fputs(s_sd_log_flush_buf[i], s_sd_log_file);
-                fputc('\n', s_sd_log_file);
-            }
-            fflush(s_sd_log_file);
+        if (!s_sd_log_file) {
+            continue;
         }
+
+        fseek(s_sd_log_file, 0, SEEK_END);
+        long size = ftell(s_sd_log_file);
+        if (size >= (long)APP_SD_LOG_MAX_BYTES) {
+            freopen(APP_SD_LOG_PATH, "w", s_sd_log_file);
+        }
+        for (size_t i = 0; i < count; ++i) {
+            fputs(s_sd_log_flush_buf[i], s_sd_log_file);
+            fputc('\n', s_sd_log_file);
+        }
+        fflush(s_sd_log_file);
+        fsync(fileno(s_sd_log_file));
+
+        portENTER_CRITICAL(&s_sd_log_mux);
+        if (s_sd_log_buf_count >= count) {
+            size_t remaining = s_sd_log_buf_count - count;
+            for (size_t i = 0; i < remaining; ++i) {
+                strncpy(s_sd_log_buf[i], s_sd_log_buf[count + i], LOG_LINE_MAX);
+                s_sd_log_buf[i][LOG_LINE_MAX - 1] = '\0';
+            }
+            s_sd_log_buf_count = remaining;
+        } else {
+            s_sd_log_buf_count = 0;
+        }
+        portEXIT_CRITICAL(&s_sd_log_mux);
     }
 }
 #endif
@@ -199,6 +215,24 @@ static void compact_log_line(const char *src, char *dst, size_t dst_size) {
     }
 }
 
+static void strip_ansi(const char *src, char *dst, size_t dst_size) {
+    if (!src || !dst || dst_size == 0) {
+        return;
+    }
+    size_t di = 0;
+    for (size_t i = 0; src[i] != '\0' && di + 1 < dst_size; ++i) {
+        if (src[i] == '\x1b' && src[i + 1] == '[') {
+            i += 2;
+            while (src[i] != '\0' && src[i] != 'm') {
+                ++i;
+            }
+            continue;
+        }
+        dst[di++] = src[i];
+    }
+    dst[di] = '\0';
+}
+
 static void log_buffer_add(const char *line) {
     if (!line || !line[0]) {
         return;
@@ -229,7 +263,9 @@ static int log_vprintf(const char *fmt, va_list args) {
     log_buffer_add(buf);
 
 #if APP_ENABLE_SD_LOG
-    sd_log_write_line(buf);
+    char clean[LOG_LINE_MAX];
+    strip_ansi(buf, clean, sizeof(clean));
+    sd_log_write_line(clean);
 #endif
 
     if (s_prev_vprintf) {
