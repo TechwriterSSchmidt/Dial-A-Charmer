@@ -414,6 +414,7 @@ static void handle_voice_menu_digit(int digit) {
         }
     } else if (digit == 3) {
         std::vector<std::string> files;
+        files.push_back(system_path("pb_menu_title"));
         files.push_back(system_path("pb_persona1_opt"));
         files.push_back(system_path("pb_persona2_opt"));
         files.push_back(system_path("pb_persona3_opt"));
@@ -1027,6 +1028,20 @@ void on_dial_complete(int number) {
     }
     g_any_digit_dialed = true;
     ESP_LOGI(TAG, "--- DIALED DIGIT: %d ---", number);
+    if (g_voice_menu_active && g_off_hook) {
+        if (g_voice_queue_active) {
+            g_voice_queue_active = false;
+            g_voice_queue.clear();
+        }
+        if (is_playing) {
+            stop_playback();
+        }
+        if (dial_buffer.empty() && number >= 1 && number <= 4) {
+            handle_voice_menu_digit(number);
+            dial_buffer.clear();
+            return;
+        }
+    }
     dial_buffer += std::to_string(number);
     last_digit_time = esp_timer_get_time() / 1000; // Update timestamp (ms)
 }

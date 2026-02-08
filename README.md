@@ -34,6 +34,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Play Personas** | **Receiver Lifted** → Dial `1`-`5` | Plays audio content from specific categories (Personas). |
 | **Random Mix** | **Receiver Lifted** → Dial `11` | Plays a randomized mix from all Persona tracks. |
 | **Voice Menu** | **Receiver Lifted** → Dial `0` | Plays spoken instructions for system codes. |
+| **Voice Menu Options** | **While menu speaks** → Dial `1`-`4`, or `999` | Executes menu action immediately (Next Alarm, Night Mode, Phonebook, System Status, Reboot). |
 | **Stop Ringing** | **Ringing** → Lift Receiver | Stops the alarm or timer alert. |
 | **Snooze** | **Ringing** → Press Extra Button | Snoozes the alarm for the configured duration (set in Web UI). |
 | **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
@@ -42,7 +43,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 
 | Capability | Description |
 | :--- | :--- |
-| **Timekeeping** | Syncs exclusively via **NTP (Internet Time)** for atomic precision. |
+| **Timekeeping** | Syncs via **NTP** with optional **DS3231 RTC** fallback (invalid RTC data is ignored until SNTP sync). |
 | **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
 
 ## Phonebook Defaults
@@ -60,6 +61,13 @@ The phonebook ships with default numbers. You can edit these entries in the Web 
 | `110` | Zeitauskunft | Announce time (local) |
 | `0` | Voice Admin Menu | Play spoken admin menu |
 | `999` | System Reboot | Reboot device |
+
+Voice Menu actions (dial while the menu speaks):
+- `1` Next alarm
+- `2` Night mode toggle
+- `3` Phonebook options (reads numbers)
+- `4` System status (WiFi, IP, NTP, SD)
+- `999` System reboot
 
 ## Hardware Support & Pinout
 
@@ -128,6 +136,8 @@ This all-in-one script prepares a complete `sd_card_content` folder for you. It 
     *   **Structure:** Creates all required folders (`persona_XX`, `system`, `time` etc.).
     *   **TTS Integration:** Automatically downloads high-quality Google TTS speech files for Numbers, Dates, and System Messages in both **German & English**.
     *   **Tone Synthesis:** Generates clean `wav` files for Dial Tone, Busy Signal, and Beeps using Python's audio libraries (no recording needed).
+    *   **Voice Prompts:** Builds voice menu prompts, phonebook options (with numbers), and hook pickup/hangup SFX.
+    *   **Telephony Tones:** Uses classic US dial tone and busy signal, and outputs them at a lower level for better balance.
     *   **Offline Fonts:** Copies `AATriple.otf` and `3620-plaisir-app.otf` into `/fonts/` so the Web UI looks correct offline. License texts are included alongside the fonts in `/fonts/` and on the SD card. Thanks to the font creators. Sources: https://fontesk.com/triple-font/ and https://fontesk.com/plaisir-font/
 *   **Output:** Populates `sd_card_content/` which you just copy to your SD card.
 
@@ -158,8 +168,9 @@ The system uses specific WAV files in `/system/` for feedback:
 | :--- | :--- |
 | `dialtone_1.wav` | Played when handset is lifted. |
 | `beep.wav` | Keypress confirmation or mode change. |
-| `error_tone.wav` | Invalid input or system error. |
 | `busy_tone.wav` | Call ended or invalid state. |
+| `hook_pickup.wav` | Short pickup click before persona playback. |
+| `hook_hangup.wav` | Short hangup click after persona playback. |
 
 ## Getting Started
 
@@ -180,6 +191,14 @@ The system uses specific WAV files in `/system/` for feedback:
 ## Maintenance
 
 *   **Time:** Time is maintained via NTP. Ensure the device connects to Wi-Fi at least once on boot to sync the clock.
+
+## Debug Logging (SD Card)
+
+You can enable buffered SD logging during testing (see `app_config.h`). Logs are written to:
+
+*   `/sdcard/logs/app.log`
+
+Logging is buffered and flushed periodically to reduce interference with audio playback.
 
 ## License
 
