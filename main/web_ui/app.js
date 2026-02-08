@@ -32,9 +32,38 @@ const TEXT = {
         active: "Aktiv", // New
         fade: "Ansteigend", // New
         snooze: "Schlummerzeit", // New
+        alarm: "Wecker",
         datetime: "Datum & Zeit",
         timezone: "Zeitzone",
-        tz_save: "Zone speichern"
+        tz_save: "Zone speichern",
+        setup: "Einrichtung",
+        name_header: "Name",
+        loading_alarms: "Wecker werden geladen...",
+        minutes_short: "min",
+        wifi_network: "WLAN Netzwerk",
+        scan: "Scannen",
+        volume: "Lautstärke",
+        base_speaker_timer: "Lautsprecher und Timer",
+        handset: "Telefonhörer",
+        timer_sound: "Timer-Ton",
+        no_net: "Kein Netz",
+        scanning_wifi: "WLAN wird gesucht...",
+        please_wait: "Bitte warten",
+        scan_error: "Scan Fehler",
+        retry: "Erneut versuchen",
+        connect_to: "Verbinde mit",
+        password: "Passwort",
+        connect: "Verbinden",
+        cancel: "Abbrechen",
+        saved: "Gespeichert!",
+        connecting_to: "Das Gerät verbindet sich mit",
+        ap_disappear: "Der Access Point verschwindet.",
+        switch_back: "Bitte wechsle zurück zu",
+        find_device_at: "Gerät erreichbar unter:",
+        network_error: "Netzwerkfehler",
+        check_console: "Konsole prüfen",
+        select_network: "Bitte lokales Netzwerk auswählen:",
+        saving_connecting: "Speichern und verbinden..."
     },
     en: {
         title: "Dial-A-Charmer",
@@ -49,9 +78,38 @@ const TEXT = {
         active: "Active", // New
         fade: "Rising Volume", // New
         snooze: "Snooze Time", // New
+        alarm: "Alarm",
         datetime: "Date & Time",
         timezone: "Timezone",
-        tz_save: "Save Zone"
+        tz_save: "Save Zone",
+        setup: "Setup",
+        name_header: "Name",
+        loading_alarms: "Loading alarms...",
+        minutes_short: "min",
+        wifi_network: "WiFi Network",
+        scan: "Scan",
+        volume: "Volume",
+        base_speaker_timer: "Base Speaker and Timer",
+        handset: "Handset",
+        timer_sound: "Timer Sound",
+        no_net: "No Net",
+        scanning_wifi: "Scanning WiFi Networks...",
+        please_wait: "Please wait",
+        scan_error: "Scan Error",
+        retry: "Retry",
+        connect_to: "Connect to",
+        password: "Password",
+        connect: "Connect",
+        cancel: "Cancel",
+        saved: "Saved!",
+        connecting_to: "The device is now connecting to",
+        ap_disappear: "The Access Point will disappear.",
+        switch_back: "Please switch your phone/PC back to",
+        find_device_at: "Please find the device at:",
+        network_error: "Network Error",
+        check_console: "Check Console",
+        select_network: "Select your local network:",
+        saving_connecting: "Saving and Connecting..."
     }
 };
 
@@ -127,7 +185,7 @@ async function init() {
         render();
     } catch (e) {
         console.error(e);
-        document.getElementById('app').innerHTML = `<h1 style='color:red;'>Network Error</h1><p>${e.message}</p><p>Check Console</p>`;
+        document.getElementById('app').innerHTML = `<h1 style='color:red;'>${t('network_error')}</h1><p>${e.message}</p><p>${t('check_console')}</p>`;
     }
 }
 
@@ -142,15 +200,15 @@ function render() {
     
     // Header Logic
     let pageTitle = "Dial-A-Charmer"; // Default Title
-    if (path === '/alarm') pageTitle = "Wecker";
-    else if (path === '/configuration') pageTitle = "Konfiguration";
+    if (path === '/alarm') pageTitle = t('alarm_title');
+    else if (path === '/configuration') pageTitle = t('config');
     else if (path === '/phonebook') pageTitle = t('pb');
-    else if (path === '/setup') pageTitle = "Setup";
+    else if (path === '/setup') pageTitle = t('setup');
 
     // Header / Title (Dynamic + Version)
     let html = `
         <div style="text-align:center;">
-        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v2.0 ESP-IDF</span></h2>
+        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v1.9 ESP-IDF</span></h2>
         </div>
     `;
 
@@ -381,7 +439,7 @@ function renderPhonebook() {
                     <thead>
                         <tr class="pb-head">
                             <th class="pb-head-num"><span class="pb-phone-icon">&#128222;</span></th>
-                            <th class="pb-head-name">Name</th>
+                            <th class="pb-head-name">${t('name_header')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -398,7 +456,9 @@ function renderSettings() {
     const DAYS_DE = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
     const DAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
     
-    const days = state.lang === 'de' ? DAYS_DE : DAYS_EN;
+    const isDe = state.lang === 'de';
+    const days = isDe ? DAYS_DE : DAYS_EN;
+    const dayFallbackPrefix = isDe ? 'Tag' : 'Day';
     // Ensure alarms exist (backend should send them, but safe fallback)
     const alarms = state.settings.alarms || []; 
     
@@ -408,13 +468,14 @@ function renderSettings() {
 
     let rows = "";
     if (alarms.length === 0) {
-        rows = "<p style='text-align:center;'>Loading alarms...</p>";
+        rows = `<p style='text-align:center;'>${t('loading_alarms')}</p>`;
     } else {
         displayOrder.forEach(dayIndex => {
             const a = alarms.find(x => x.d === dayIndex);
             if (!a) return;
 
-            const dayName = days[a.d] || "Day " + a.d;
+            const dayFallbackNum = (a.d === 0) ? 7 : a.d;
+            const dayName = days[a.d] || (dayFallbackPrefix + " " + dayFallbackNum);
             const hh = String(a.h).padStart(2,'0');
             const mm = String(a.m).padStart(2,'0');
             const timeVal = `${hh}:${mm}`;
@@ -472,7 +533,7 @@ function renderSettings() {
         let snoozeOpts = "";
         for (let i=1; i<=20; i++) {
             const sel = (i === currentSnooze) ? "selected" : "";
-            snoozeOpts += `<option value="${i}" ${sel}>${i} min</option>`;
+            snoozeOpts += `<option value="${i}" ${sel}>${i} ${t('minutes_short')}</option>`;
         }
 
         rows += `
@@ -566,11 +627,11 @@ function renderAdvanced() {
 
             <!-- WIFI PANEL -->
               <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">WiFi Network</h4>
+                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
 
                   <div style="display:flex; flex-direction:column; gap:6px;">
-                     <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || 'No Net'}</div>
-                     <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">SCAN</button>
+                     <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')}</div>
+                     <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
                   </div>
             </div>
 
@@ -583,12 +644,12 @@ function renderAdvanced() {
 
             <!-- VOLUME PANEL -->
             <div style="background:#222; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Volume</h4>
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('volume')}</h4>
                 
                 <!-- Base Speaker -->
                 <div style="margin-top:6px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Base Speaker</label>
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('base_speaker_timer')}</label>
                         <span id="vol-disp-base" style="color:#d4af37; font-weight:bold;">${state.settings.volume || 60}%</span>
                     </div>
                     <input type="range" min="0" max="100" value="${state.settings.volume || 60}" 
@@ -599,7 +660,7 @@ function renderAdvanced() {
                 <!-- Handset Speaker -->
                 <div style="margin-top:8px;">
                      <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Handset</label>
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('handset')}</label>
                         <span id="vol-disp-handset" style="color:#d4af37; font-weight:bold;">${state.settings.volume_handset}%</span>
                     </div>
                     <input type="range" min="0" max="100" value="${state.settings.volume_handset}" 
@@ -609,7 +670,7 @@ function renderAdvanced() {
                 <!-- Alarm Volume -->
                 <div style="margin-top:8px;">
                      <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">Alarm (Min ${state.settings.vol_alarm_min}%)</label>
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('alarm')} (Min ${state.settings.vol_alarm_min}%)</label>
                         <span id="vol-disp-alarm" style="color:#d4af37; font-weight:bold;">${state.settings.vol_alarm || 90}%</span>
                     </div>
                     <input type="range" min="${state.settings.vol_alarm_min || 60}" max="100" value="${state.settings.vol_alarm || 90}" 
@@ -620,7 +681,7 @@ function renderAdvanced() {
 
             <!-- TIMER RINGTONE PANEL -->
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">Timer Alarm</h4>
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('timer_sound')}</h4>
                 
                 <div style="margin-top:12px;">
                     <select id="timer-ringtone-select" onchange="saveTimerRingtone(this.value); previewTone(this.value);" style="width:100%; padding:8px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.9rem;">
@@ -676,9 +737,9 @@ window.saveTimerRingtone = (filename) => {
 function renderSetup() {
     let content = "";
     if (state.scanning) {
-        content = "<p style='text-align:center;'>Scanning WiFi Networks... <br> (Please wait)</p>";
+        content = `<p style='text-align:center;'>${t('scanning_wifi')} <br> (${t('please_wait')})</p>`;
     } else if (state.wifiError) {
-        content = `<p style='color:red'>Scan Error: ${state.wifiError}. <a href='#' onclick='window.location.reload()'>Retry</a></p>`;
+        content = `<p style='color:red'>${t('scan_error')}: ${state.wifiError}. <a href='#' onclick='window.location.reload()'>${t('retry')}</a></p>`;
     } else if (state.wifiList) {
         content = "<ul class='wifi-list'>";
         state.wifiList.forEach(w => {
@@ -693,18 +754,18 @@ function renderSetup() {
     // Modal or Input Area
     if (state.selectedWifi) {
         content = `
-            <h3>Connect to ${state.selectedWifi}</h3>
-            <input type="password" id="wifi-pass" placeholder="Password" style="width:100%; padding:10px; margin:10px 0; color:black;">
+            <h3>${t('connect_to')} ${state.selectedWifi}</h3>
+            <input type="password" id="wifi-pass" placeholder="${t('password')}" style="width:100%; padding:10px; margin:10px 0; color:black;">
             <br>
-            <button onclick="connectWifi()" style="padding:10px 20px;">Connect</button>
-            <button onclick="state.selectedWifi=null; render()" style="padding:10px 20px; background:#444;">Cancel</button>
+            <button onclick="connectWifi()" style="padding:10px 20px;">${t('connect')}</button>
+            <button onclick="state.selectedWifi=null; render()" style="padding:10px 20px; background:#444;">${t('cancel')}</button>
         `;
     }
 
     return `
         <div class="card">
-            <h3>WiFi Setup</h3>
-            <p>Select your local network:</p>
+            <h3>${t('setup')}</h3>
+            <p>${t('select_network')}</p>
             <div style="max-height:300px; overflow-y:auto; border:1px solid #555;">
                 ${content}
             </div>
@@ -720,7 +781,7 @@ window.selectWifi = (ssid) => {
 window.connectWifi = () => {
     const pass = document.getElementById('wifi-pass').value;
     const ssid = state.selectedWifi;
-    document.getElementById('app').innerHTML = "Saving and Connecting...";
+    document.getElementById('app').innerHTML = t('saving_connecting');
     
     API.saveSettings({
         wifi_ssid: ssid,
@@ -728,10 +789,10 @@ window.connectWifi = () => {
     }).then(() => {
         document.getElementById('app').innerHTML = `
             <div style="text-align:center; padding:50px;">
-                <h2>Saved!</h2>
-                <p>The device is now connecting to <b>${ssid}</b>.</p>
-                <p>The Access Point will disappear.</p>
-                <p>Please switch your phone/PC back to <b>${ssid}</b> and find the device at:</p>
+                <h2>${t('saved')}</h2>
+                <p>${t('connecting_to')} <b>${ssid}</b>.</p>
+                <p>${t('ap_disappear')}</p>
+                <p>${t('switch_back')} <b>${ssid}</b> ${t('find_device_at')}</p>
                 <p><a href="http://dial-a-charmer.local">http://dial-a-charmer.local</a></p>
             </div>
         `;

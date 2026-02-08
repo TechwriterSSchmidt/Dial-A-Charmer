@@ -313,7 +313,8 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
         
         nvs_commit(my_handle);
         nvs_close(my_handle);
-        ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d) Tone: %s", dayIndex, hour, minute, active, volumeRamp, ringtone);
+        int logDay = (dayIndex == 0) ? 7 : dayIndex;
+        ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d) Tone: %s", logDay, hour, minute, active, volumeRamp, ringtone);
     }
 }
 
@@ -393,8 +394,9 @@ bool TimeManager::checkAlarm() {
         // But if we use snoozing later, this needs logic. 
         // For now: Trigger if seconds < 5 (poll interval usually shorter) AND last_triggered_day != today
         // Actually, better: 
-        if (_last_triggered_day != now.tm_yday) {
-             ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", today, now.tm_hour, now.tm_min);
+           if (_last_triggered_day != now.tm_yday) {
+               int logDay = (today == 0) ? 7 : today;
+               ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", logDay, now.tm_hour, now.tm_min);
              _alarm_ringing = true;
              _last_triggered_day = now.tm_yday;
              return true;

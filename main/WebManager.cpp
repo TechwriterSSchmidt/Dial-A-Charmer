@@ -572,6 +572,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         // --- Alarms ---
         cJSON *alarms_arr = cJSON_GetObjectItem(root, "alarms");
         if (cJSON_IsArray(alarms_arr)) {
+            int alarm_updates = 0;
             cJSON *elem;
             cJSON_ArrayForEach(elem, alarms_arr) {
                 cJSON *d = cJSON_GetObjectItem(elem, "d");
@@ -592,8 +593,10 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
 
                     const char* ringtone = (snd && cJSON_IsString(snd)) ? snd->valuestring : "";
                     TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, ringtone);
+                    alarm_updates++;
                 }
             }
+            ESP_LOGI(TAG, "Alarm settings saved: %d entries", alarm_updates);
         }
         // --------------
 
