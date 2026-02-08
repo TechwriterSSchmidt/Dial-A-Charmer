@@ -68,6 +68,11 @@
 #define APP_GAIN_DEFAULT_RIGHT 0.5f
 #define APP_GAIN_RAMP_MS 40
 
+// Handset noise gate (reduce hiss during quiet passages)
+#define APP_HANDSET_NOISE_GATE_THRESHOLD 700
+#define APP_HANDSET_NOISE_GATE_FLOOR 0.2f
+#define APP_HANDSET_NOISE_GATE_SMOOTH 0.08f
+
 // Volume defaults (0-100)
 #define APP_DEFAULT_BASE_VOLUME 60
 #define APP_DEFAULT_HANDSET_VOLUME 50

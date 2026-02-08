@@ -56,6 +56,7 @@ const int PERSONA_PAUSE_MS = APP_PERSONA_PAUSE_MS;
 const int DIALTONE_SILENCE_MS = APP_DIALTONE_SILENCE_MS;
 bool is_playing = false;
 bool g_output_mode_handset = false; 
+int g_last_effective_handset = -1;
 bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
@@ -75,6 +76,7 @@ bool g_voice_menu_active = false;
 int64_t g_voice_menu_started_ms = 0;
 std::vector<std::string> g_voice_queue;
 bool g_voice_queue_active = false;
+bool g_voice_menu_reannounce = false;
 bool g_night_mode_active = false;
 int64_t g_night_mode_end_ms = 0;
 uint8_t g_led_r = 50;
@@ -316,6 +318,14 @@ static void start_voice_queue(const std::vector<std::string> &files) {
     g_voice_queue.erase(g_voice_queue.begin());
 }
 
+static void play_voice_menu_prompt() {
+    start_voice_queue({
+        system_path("menu"),
+        system_path("menu_options"),
+        system_path("menu_exit"),
+    });
+}
+
 static bool play_next_in_queue() {
     if (g_voice_queue_active && !g_voice_queue.empty()) {
         play_file(g_voice_queue.front().c_str());
@@ -466,6 +476,10 @@ static void handle_voice_menu_digit(int digit) {
     } else {
         start_voice_queue({system_path("error_msg")});
     }
+
+    if (g_voice_menu_active) {
+        g_voice_menu_reannounce = true;
+    }
 }
 
 // Helpers
@@ -535,6 +549,7 @@ static void start_timer_minutes(int minutes) {
     g_timer_announce_pending = false;
     g_timer_intro_playing = false;
 }
+
 
 static bool cancel_timer_with_feedback(const char *reason) {
     if (!g_timer_active) return false;
@@ -627,6 +642,21 @@ static int g_gain_sample_rate = 44100;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
 static volatile bool g_key3_pressed = false;
+static float g_noise_gate_factor = 1.0f;
+
+static void fade_out_audio_soft(int delay_ms) {
+    if (delay_ms < 1) return;
+    g_gain_left_target = 0.0f;
+    g_gain_right_target = 0.0f;
+    vTaskDelay(pdMS_TO_TICKS(delay_ms));
+}
+
+static bool handset_noise_gate_enabled() {
+    if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
+        return false;
+    }
+    return g_output_mode_handset;
+}
 
 static int gain_open(audio_element_handle_t self)
 {
@@ -655,6 +685,20 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
     int16_t *samples = (int16_t *)in_buffer;
     int sample_count = r / sizeof(int16_t);
 
+    int peak = 0;
+    for (int i = 0; i < sample_count; ++i) {
+        int v = samples[i];
+        if (v < 0) v = -v;
+        if (v > peak) peak = v;
+    }
+    float gate_target = 1.0f;
+    if (handset_noise_gate_enabled() && peak < APP_HANDSET_NOISE_GATE_THRESHOLD) {
+        gate_target = APP_HANDSET_NOISE_GATE_FLOOR;
+    }
+    g_noise_gate_factor += (gate_target - g_noise_gate_factor) * APP_HANDSET_NOISE_GATE_SMOOTH;
+    if (g_noise_gate_factor < APP_HANDSET_NOISE_GATE_FLOOR) g_noise_gate_factor = APP_HANDSET_NOISE_GATE_FLOOR;
+    if (g_noise_gate_factor > 1.0f) g_noise_gate_factor = 1.0f;
+
     int ramp_samples = (g_gain_sample_rate * g_gain_ramp_ms) / 1000;
     if (ramp_samples < 1) {
         ramp_samples = 1;
@@ -672,8 +716,8 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
             if ((step_r > 0.0f && g_gain_right_cur > g_gain_right_target) || (step_r < 0.0f && g_gain_right_cur < g_gain_right_target)) {
                 g_gain_right_cur = g_gain_right_target;
             }
-            float l = (float)samples[i] * g_gain_left_cur;
-            float rch = (float)samples[i + 1] * g_gain_right_cur;
+            float l = (float)samples[i] * g_gain_left_cur * g_noise_gate_factor;
+            float rch = (float)samples[i + 1] * g_gain_right_cur * g_noise_gate_factor;
             if (l > 32767.0f) l = 32767.0f;
             if (l < -32768.0f) l = -32768.0f;
             if (rch > 32767.0f) rch = 32767.0f;
@@ -704,8 +748,8 @@ static audio_element_err_t gain_process(audio_element_handle_t self, char *in_bu
                 g_gain_right_cur = g_gain_right_target;
             }
             float v = (float)samples[i];
-            float l = v * g_gain_left_cur;
-            float rch = v * g_gain_right_cur;
+            float l = v * g_gain_left_cur * g_noise_gate_factor;
+            float rch = v * g_gain_right_cur * g_noise_gate_factor;
             if (l > 32767.0f) l = 32767.0f;
             if (l < -32768.0f) l = -32768.0f;
             if (rch > 32767.0f) rch = 32767.0f;
@@ -730,6 +774,15 @@ void update_audio_output() {
         effective_handset = false; 
     }
 
+    bool output_changed = (g_last_effective_handset < 0) || (effective_handset != (g_last_effective_handset != 0));
+    if (output_changed) {
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + 20);
+        if (board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, true);
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+
     // Re-apply the current output selection
     audio_board_select_output(effective_handset);
 
@@ -751,6 +804,14 @@ void update_audio_output() {
     }
 
     audio_hal_set_volume(board_handle->audio_hal, vol);
+
+    if (output_changed) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+        if (board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, false);
+        }
+        g_last_effective_handset = effective_handset ? 1 : 0;
+    }
 }
 std::string get_random_file(std::string folderPath) {
     std::vector<std::string> files;
@@ -909,7 +970,8 @@ void process_phonebook_function(PhonebookEntry entry) {
         else if (entry.value == "VOICE_MENU") {
             g_voice_menu_active = true;
             g_voice_menu_started_ms = esp_timer_get_time() / 1000;
-            play_file(system_path("menu").c_str());
+            g_voice_menu_reannounce = false;
+            play_voice_menu_prompt();
         }
         else {
             ESP_LOGW(TAG, "Unknown Function: %s", entry.value.c_str());
@@ -928,6 +990,7 @@ void process_phonebook_function(PhonebookEntry entry) {
 
 void stop_playback() {
     if (is_playing) {
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + 20);
         audio_lock();
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
@@ -991,10 +1054,6 @@ void on_button_press() {
 
 void on_hook_change(bool off_hook) {
     ESP_LOGI(TAG, "--- HOOK STATE: %s ---", off_hook ? "OFF HOOK (Active/Pickup)" : "ON HOOK (Idle/Hangup)");
-    
-    // Switch Audio Output
-    g_output_mode_handset = off_hook;
-    update_audio_output();
 
     g_off_hook = off_hook;
 
@@ -1004,6 +1063,9 @@ void on_hook_change(bool off_hook) {
     }
 
     if (off_hook) {
+        // Switch Audio Output to handset before any playback
+        g_output_mode_handset = true;
+        update_audio_output();
         // Receiver Picked Up
         bool skip_dialtone = false;
         dial_buffer = "";
@@ -1039,6 +1101,8 @@ void on_hook_change(bool off_hook) {
         if (!timer_canceled) {
             stop_playback();
         }
+        g_output_mode_handset = false;
+        update_audio_output();
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
@@ -1453,7 +1517,6 @@ extern "C" void app_main(void)
                     } else {
                         start_voice_queue({system_path("error_msg")});
                     }
-                    g_voice_menu_active = false;
                 }
                 // On-hook -> Timer mode (1-3 digits, up to 500 minutes)
                 else if (!g_off_hook) {
@@ -1523,7 +1586,7 @@ extern "C" void app_main(void)
         }
 
         // Busy tone after 5s off-hook without dialing
-        if (g_off_hook && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
+        if (g_off_hook && !g_voice_menu_active && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
             int64_t now = esp_timer_get_time() / 1000;
             if ((now - g_off_hook_start_ms) > APP_BUSY_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Idle timeout -> busy tone");
@@ -1586,6 +1649,11 @@ extern "C" void app_main(void)
                         g_timer_intro_playing = false;
                         g_timer_announce_pending = false;
                         announce_timer_minutes(g_timer_announce_minutes);
+                        continue;
+                    }
+                    if (g_voice_menu_reannounce && g_voice_menu_active && g_off_hook) {
+                        g_voice_menu_reannounce = false;
+                        play_voice_menu_prompt();
                         continue;
                     }
                     if (g_force_base_output) {

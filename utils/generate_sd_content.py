@@ -21,6 +21,10 @@ CACHE_DIR = SOURCE_DIR / "audio_cache"
 SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
 
+# Telephony tone gains (dB)
+TELEPHONY_DIALTONE_GAIN_DB = -9.0
+TELEPHONY_BUSY_GAIN_DB = -9.0
+
 # Piper Configuration
 _sys_piper = shutil.which("piper")
 PIPER_BIN = Path(_sys_piper) if _sys_piper else Path("piper_not_found_on_system_path")
@@ -156,7 +160,9 @@ SYSTEM_PROMPTS = {
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", None),
     "system/error_msg_en.wav": ("An error occurred.", "en", None),
     "system/number_invalid_en.wav": ("The number you have dialed is not in service.", "en", None),
-    "system/menu_en.wav": ("Main Menu.", "en", None),
+    "system/menu_en.wav": ("Voice menu.", "en", None),
+    "system/menu_options_en.wav": ("Option one, next alarm. Option two, night mode. Option three, phonebook. Option four, system status.", "en", None),
+    "system/menu_exit_en.wav": ("Hang up to exit the voice menu.", "en", None),
     "system/timer_set_en.wav": ("Timer set for", "en", None),
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", None),
     "system/next_alarm_en.wav": ("Next alarm.", "en", None),
@@ -190,7 +196,9 @@ SYSTEM_PROMPTS = {
     "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
     "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
     "system/number_invalid_de.wav": ("Kein Anschluss unter dieser Nummer.", "de", None),
-    "system/menu_de.wav": ("Hauptmenü.", "de", None),
+    "system/menu_de.wav": ("Sprachmenü.", "de", None),
+    "system/menu_options_de.wav": ("Option eins: nächster Wecker. Option zwei: Nachtmodus. Option drei: Telefonbuch. Option vier: Systemstatus.", "de", None),
+    "system/menu_exit_de.wav": ("Auflegen, um das Sprachmenü zu verlassen.", "de", None),
     "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
     "system/timer_set_de.wav": ("Timer gesetzt für", "de", None),
     "system/next_alarm_de.wav": ("Nächster Wecker.", "de", None),
@@ -731,7 +739,7 @@ def generate_sd_card_structure(categories):
         langs = ", ".join(categories[cat])
         print(f"  {i+1}. {cat} ({langs})")
 
-    # Clean up old playlists before regenerating
+    # Clean up old playlists and persona folders before regenerating
     playlist_dir = SD_ROOT / "playlists"
     if playlist_dir.exists():
         for old_pl in playlist_dir.glob("cat_*_v3.m3u"):
@@ -740,6 +748,14 @@ def generate_sd_card_structure(categories):
                 print(f"  [DEL] Old playlist: {old_pl.name}")
             except Exception as e:
                 print(f"  [WARN] Could not delete {old_pl.name}: {e}")
+
+    for old_persona in SD_ROOT.glob("persona_*"):
+        if old_persona.is_dir():
+            try:
+                shutil.rmtree(old_persona)
+                print(f"  [DEL] Old persona folder: {old_persona.name}")
+            except Exception as e:
+                print(f"  [WARN] Could not delete {old_persona.name}: {e}")
         
     def select_persona_category(persona_idx):
         preferred = PERSONA_DEFAULTS.get(persona_idx, "")
@@ -769,7 +785,6 @@ def generate_sd_card_structure(categories):
             selected_cat = select_persona_category(persona_idx)
             if not selected_cat:
                 print(f"  [WARN] No categories available for Persona {persona_idx}")
-                continue
             print(f"  -> Assigned '{selected_cat}' to Persona {persona_idx} (auto)")
         else:
             prompt_text = f"\nSelect Category for Persona {persona_idx}"
@@ -794,14 +809,12 @@ def generate_sd_card_structure(categories):
                 else:
                     print("Invalid selection. Try again.")
 
+        # Create persona directories (always recreate)
+        p_dir = SD_ROOT / f"persona_{persona_idx:02d}"
+        p_dir.mkdir(parents=True, exist_ok=True)
+
         if selected_cat:
             persona_assignments[persona_idx] = selected_cat
-            
-            # Create persona directories
-            p_dir = SD_ROOT / f"persona_{persona_idx:02d}"
-            if p_dir.exists():
-                shutil.rmtree(p_dir)
-            p_dir.mkdir(parents=True) 
             
             # Prepare Playlist Data
             playlist_tracks = {'de': [], 'en': []}
@@ -884,15 +897,17 @@ def generate_tones(base_dir):
         seg.export(str(out_path), format="wav")
         print(f"  [GEN] {name}")
 
-    # 1. Dial Tone 1 (German standard: 425Hz continuous)
+    # 1. Dial Tone 1 (US standard: 350Hz + 440Hz continuous)
     # 10 seconds long
-    dial_tone = Sine(425).to_audio_segment(duration=10000).apply_gain(-3.0)
+    dt_350 = Sine(350).to_audio_segment(duration=10000)
+    dt_440 = Sine(440).to_audio_segment(duration=10000)
+    dial_tone = dt_350.overlay(dt_440).apply_gain(TELEPHONY_DIALTONE_GAIN_DB)
     save(dial_tone, "dialtone_1.wav")
 
     # 2. Busy Tone (425Hz, 480ms ON, 480ms OFF)
     # Repeat for ~5 seconds -> (480+480) * 5 approx 5s
     # 5000 / 960 = 5.2 cycles. Let's do 6 cycles.
-    tone_on = Sine(425).to_audio_segment(duration=480).apply_gain(-3.0)
+    tone_on = Sine(425).to_audio_segment(duration=480).apply_gain(TELEPHONY_BUSY_GAIN_DB)
     tone_off = AudioSegment.silent(duration=480)
     busy_cycle = tone_on + tone_off
     busy_tone = busy_cycle * 6 
