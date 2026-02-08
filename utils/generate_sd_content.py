@@ -160,9 +160,20 @@ SYSTEM_PROMPTS = {
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", None),
     "system/error_msg_en.wav": ("An error occurred.", "en", None),
     "system/number_invalid_en.wav": ("The number you have dialed is not in service.", "en", None),
-    "system/menu_en.wav": ("Voice menu.", "en", None),
-    "system/menu_options_en.wav": ("Option one, next alarm. Option two, night mode. Option three, phonebook. Option four, system status.", "en", None),
+    "system/menu_en.wav": ("You are in the voice menu.", "en", None),
+    "system/menu_options_en.wav": ("Choose one for next alarm. Choose two for night mode. Choose three for phonebook. Choose four for system status.", "en", None),
     "system/menu_exit_en.wav": ("Hang up to exit the voice menu.", "en", None),
+    "system/timer_invalid_en.wav": ("Selected timer is invalid.", "en", None),
+    "system/timer_max_en.wav": ("Maximum timer duration", "en", None),
+    "system/pb_persona1_opt_en.wav": ("Choose 1 for Persona one.", "en", None),
+    "system/pb_persona2_opt_en.wav": ("Choose 2 for Persona two.", "en", None),
+    "system/pb_persona3_opt_en.wav": ("Choose 3 for Persona three.", "en", None),
+    "system/pb_persona4_opt_en.wav": ("Choose 4 for Persona four.", "en", None),
+    "system/pb_persona5_opt_en.wav": ("Choose 5 for Persona five.", "en", None),
+    "system/pb_random_mix_opt_en.wav": ("Choose 11 for Random mix.", "en", None),
+    "system/pb_time_opt_en.wav": ("Choose 110 for Time announcement.", "en", None),
+    "system/pb_menu_opt_en.wav": ("Choose 0 for Voice menu.", "en", None),
+    "system/pb_reboot_opt_en.wav": ("Choose 999 for System reboot.", "en", None),
     "system/timer_set_en.wav": ("Timer set for", "en", None),
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", None),
     "system/next_alarm_en.wav": ("Next alarm.", "en", None),
@@ -196,9 +207,20 @@ SYSTEM_PROMPTS = {
     "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
     "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
     "system/number_invalid_de.wav": ("Kein Anschluss unter dieser Nummer.", "de", None),
-    "system/menu_de.wav": ("Sprachmenü.", "de", None),
-    "system/menu_options_de.wav": ("Option eins: nächster Wecker. Option zwei: Nachtmodus. Option drei: Telefonbuch. Option vier: Systemstatus.", "de", None),
+    "system/menu_de.wav": ("Sie befinden sich im Sprachmenü.", "de", None),
+    "system/menu_options_de.wav": ("Wähle 1 für nächsten Wecker. Wähle 2 für Nachtmodus. Wähle 3 für Telefonbuch. Wähle 4 für Systemstatus.", "de", None),
     "system/menu_exit_de.wav": ("Auflegen, um das Sprachmenü zu verlassen.", "de", None),
+    "system/timer_invalid_de.wav": ("Gewählter Timer ungültig.", "de", None),
+    "system/timer_max_de.wav": ("Maximale Timer-Dauer", "de", None),
+    "system/pb_persona1_opt_de.wav": ("Wähle 1 für Persona eins.", "de", None),
+    "system/pb_persona2_opt_de.wav": ("Wähle 2 für Persona zwei.", "de", None),
+    "system/pb_persona3_opt_de.wav": ("Wähle 3 für Persona drei.", "de", None),
+    "system/pb_persona4_opt_de.wav": ("Wähle 4 für Persona vier.", "de", None),
+    "system/pb_persona5_opt_de.wav": ("Wähle 5 für Persona fünf.", "de", None),
+    "system/pb_random_mix_opt_de.wav": ("Wähle 11 für Zufallsmix.", "de", None),
+    "system/pb_time_opt_de.wav": ("Wähle 110 für Zeitauskunft.", "de", None),
+    "system/pb_menu_opt_de.wav": ("Wähle 0 für Sprachmenü.", "de", None),
+    "system/pb_reboot_opt_de.wav": ("Wähle 999 für System Neustart.", "de", None),
     "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
     "system/timer_set_de.wav": ("Timer gesetzt für", "de", None),
     "system/next_alarm_de.wav": ("Nächster Wecker.", "de", None),
@@ -235,7 +257,7 @@ STATIC_COPY_MAP = {
 # Time Announcements (Range Definitions)
 TIME_CONFIG = {
     "hours": range(0, 24), # 0-23
-    "minutes": range(0, 301), # 0-300 (Extended for Timer)
+    "minutes": range(0, 501), # 0-500 (Extended for Timer)
     "days": range(1, 32), # 1-31
     "months": range(0, 12), # 0-11
     "weekdays": range(0, 7), # 0-6
@@ -269,12 +291,10 @@ def generate_tones(base_dir):
     busy_tone = (busy_on + busy_off) * 6
     save(busy_tone, "busy_tone.wav")
 
-    # 3. Error Tone (Fast Busy): 480Hz + 620Hz, 0.25s on, 0.25s off
-    err_on = (Sine(480).to_audio_segment(duration=250)
-              .overlay(Sine(620).to_audio_segment(duration=250))
-              .apply_gain(-3.0))
-    err_off = AudioSegment.silent(duration=250)
-    error_tone = (err_on + err_off) * 6
+    # 3. Error Tone (gentle two-tone chime)
+    chime_1 = Sine(600).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(40)
+    chime_2 = Sine(800).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(60)
+    error_tone = chime_1 + AudioSegment.silent(duration=40) + chime_2
     save(error_tone, "error_tone.wav")
 
     # 4. Beep (Simple 1000Hz)
@@ -917,12 +937,20 @@ def generate_tones(base_dir):
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-3.0)
     save(beep, "beep.wav")
 
+    # 3a. Hook pickup/hangup clicks (soft, characteristic)
+    hook_pickup = WhiteNoise().to_audio_segment(duration=35).apply_gain(-18.0).fade_out(25)
+    save(hook_pickup, "hook_pickup.wav")
+    hook_hangup = WhiteNoise().to_audio_segment(duration=25).apply_gain(-20.0).fade_out(20)
+    save(hook_hangup, "hook_hangup.wav")
+
     # 3b. Silence (300ms)
     silence = AudioSegment.silent(duration=300)
     save(silence, "silence_300ms.wav")
 
-    # 4. Error Tone (150Hz Sawtooth, 500ms)
-    error = Sawtooth(150).to_audio_segment(duration=500).apply_gain(-3.0)
+    # 4. Error Tone (gentle two-tone chime)
+    chime_1 = Sine(600).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(40)
+    chime_2 = Sine(800).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(60)
+    error = chime_1 + AudioSegment.silent(duration=40) + chime_2
     save(error, "error_tone.wav")
 
 def generate_procedural_tones():

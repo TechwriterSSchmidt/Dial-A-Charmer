@@ -369,7 +369,7 @@ static bool get_next_alarm(struct tm *out_tm, DayAlarm *out_alarm) {
 
 static void add_number_audio(std::vector<std::string> &files, int value) {
     if (value < 0) value = -value;
-    if (value > 300) value = 300;
+    if (value > APP_TIMER_MAX_MINUTES) value = APP_TIMER_MAX_MINUTES;
     char buf[32];
     snprintf(buf, sizeof(buf), "m_%02d.wav", value);
     files.push_back(time_path(buf));
@@ -412,16 +412,15 @@ static void handle_voice_menu_digit(int digit) {
         }
     } else if (digit == 3) {
         std::vector<std::string> files;
-        // files.push_back(system_path("phonebook_export")); // Removed as we are now just announcing
-        files.push_back(system_path("pb_persona1"));
-        files.push_back(system_path("pb_persona2"));
-        files.push_back(system_path("pb_persona3"));
-        files.push_back(system_path("pb_persona4"));
-        files.push_back(system_path("pb_persona5"));
-        files.push_back(system_path("pb_random_mix"));
-        files.push_back(system_path("pb_time"));
-        files.push_back(system_path("pb_menu"));
-        files.push_back(system_path("pb_reboot"));
+        files.push_back(system_path("pb_persona1_opt"));
+        files.push_back(system_path("pb_persona2_opt"));
+        files.push_back(system_path("pb_persona3_opt"));
+        files.push_back(system_path("pb_persona4_opt"));
+        files.push_back(system_path("pb_persona5_opt"));
+        files.push_back(system_path("pb_random_mix_opt"));
+        files.push_back(system_path("pb_time_opt"));
+        files.push_back(system_path("pb_menu_opt"));
+        files.push_back(system_path("pb_reboot_opt"));
         start_voice_queue(files);
     } else if (digit == 4) {
         std::vector<std::string> files;
@@ -776,11 +775,11 @@ void update_audio_output() {
 
     bool output_changed = (g_last_effective_handset < 0) || (effective_handset != (g_last_effective_handset != 0));
     if (output_changed) {
-        fade_out_audio_soft(APP_GAIN_RAMP_MS + 20);
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
         if (board_handle->audio_hal) {
             audio_hal_set_mute(board_handle->audio_hal, true);
         }
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
     }
 
     // Re-apply the current output selection
@@ -806,7 +805,7 @@ void update_audio_output() {
     audio_hal_set_volume(board_handle->audio_hal, vol);
 
     if (output_changed) {
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
         if (board_handle->audio_hal) {
             audio_hal_set_mute(board_handle->audio_hal, false);
         }
@@ -856,7 +855,9 @@ void play_file(const char* path) {
         return;
     }
 
-    
+    if (is_playing) {
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
+    }
     audio_lock();
 
     // Soft fade-in to reduce clicks
@@ -871,6 +872,7 @@ void play_file(const char* path) {
     ESP_LOGI(TAG, "Requesting playback: %s", path);
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
+    vTaskDelay(pdMS_TO_TICKS(APP_WAV_SWITCH_DELAY_MS));
     audio_pipeline_reset_ringbuffer(pipeline);
     audio_pipeline_reset_items_state(pipeline);
     audio_element_set_uri(fatfs_stream, path);
@@ -933,6 +935,16 @@ static int get_snooze_minutes() {
     return (int)val;
 }
 
+static void play_persona_with_hook_sfx(const std::string &file) {
+    if (file.empty()) return;
+    g_persona_playback_active = true;
+    start_voice_queue({
+        "/sdcard/system/hook_pickup.wav",
+        file,
+        "/sdcard/system/hook_hangup.wav",
+    });
+}
+
 
 void process_phonebook_function(PhonebookEntry entry) {
     if (entry.type == "FUNCTION") {
@@ -942,8 +954,7 @@ void process_phonebook_function(PhonebookEntry entry) {
             std::string file = get_random_file(folder);
             if (!file.empty()) {
                 wait_for_dialtone_silence_if_needed();
-                g_persona_playback_active = true;
-                play_file(file.c_str());
+                play_persona_with_hook_sfx(file);
             }
             else play_file(system_path("error_msg").c_str());
         }
@@ -954,8 +965,7 @@ void process_phonebook_function(PhonebookEntry entry) {
             std::string file = get_random_file(folder);
             if (!file.empty()) {
                 wait_for_dialtone_silence_if_needed();
-                g_persona_playback_active = true;
-                play_file(file.c_str());
+                play_persona_with_hook_sfx(file);
             }
         }
         else if (entry.value == "ANNOUNCE_TIME") {
@@ -990,7 +1000,7 @@ void process_phonebook_function(PhonebookEntry entry) {
 
 void stop_playback() {
     if (is_playing) {
-        fade_out_audio_soft(APP_GAIN_RAMP_MS + 20);
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
         audio_lock();
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
@@ -1154,7 +1164,7 @@ void input_task(void *pvParameters) {
                 g_alarm_fade_factor = (float)elapsed / (float)ramp_ms;
             }
             // Ensure strictly minimum volume so it's audible
-            if (g_alarm_fade_factor < 0.05f) g_alarm_fade_factor = 0.05f;
+            if (g_alarm_fade_factor < APP_ALARM_FADE_MIN_FACTOR) g_alarm_fade_factor = APP_ALARM_FADE_MIN_FACTOR;
             
             target_left *= g_alarm_fade_factor;
             target_right *= g_alarm_fade_factor;
@@ -1535,11 +1545,21 @@ extern "C" void app_main(void)
                             play_file(system_path("timer_set").c_str());
                         } else {
                             ESP_LOGW(TAG, "Invalid timer value: %d", minutes);
-                            play_file("/sdcard/system/error_tone.wav");
+                            std::vector<std::string> files;
+                            files.push_back(system_path("timer_invalid"));
+                            files.push_back(system_path("timer_max"));
+                            add_number_audio(files, APP_TIMER_MAX_MINUTES);
+                            files.push_back(system_path("minutes"));
+                            start_voice_queue(files);
                         }
                     } else {
                         ESP_LOGW(TAG, "Timer requires 1-3 digits. Got: %s", dial_buffer.c_str());
-                        play_file("/sdcard/system/error_tone.wav");
+                        std::vector<std::string> files;
+                        files.push_back(system_path("timer_invalid"));
+                        files.push_back(system_path("timer_max"));
+                        add_number_audio(files, APP_TIMER_MAX_MINUTES);
+                        files.push_back(system_path("minutes"));
+                        start_voice_queue(files);
                     }
                 } else {
                     // Lookup
@@ -1653,6 +1673,7 @@ extern "C" void app_main(void)
                     }
                     if (g_voice_menu_reannounce && g_voice_menu_active && g_off_hook) {
                         g_voice_menu_reannounce = false;
+                        vTaskDelay(pdMS_TO_TICKS(APP_VOICE_MENU_REANNOUNCE_DELAY_MS));
                         play_voice_menu_prompt();
                         continue;
                     }

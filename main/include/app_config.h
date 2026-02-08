@@ -43,6 +43,7 @@
 
 // Daily alarm volume ramp duration (ms)
 #define APP_ALARM_RAMP_DURATION_MS 120000
+#define APP_ALARM_FADE_MIN_FACTOR 0.05f
 
 // Alarm playback retry interval (ms)
 #define APP_ALARM_RETRY_INTERVAL_MS 2000
@@ -52,6 +53,10 @@
 #define APP_PERSONA_PAUSE_MS 1500
 #define APP_DIALTONE_SILENCE_MS 1000
 #define APP_BUSY_TIMEOUT_MS 5000
+#define APP_WAV_SWITCH_DELAY_MS 10
+#define APP_OUTPUT_MUTE_DELAY_MS 20
+#define APP_WAV_FADE_OUT_EXTRA_MS 20
+#define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
 
 // Timer settings
 #define APP_TIMER_MIN_MINUTES 1
