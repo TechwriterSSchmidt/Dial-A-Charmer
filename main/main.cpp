@@ -536,6 +536,25 @@ static void start_timer_minutes(int minutes) {
     g_timer_intro_playing = false;
 }
 
+static bool cancel_timer_with_feedback(const char *reason) {
+    if (!g_timer_active) return false;
+
+    ESP_LOGI(TAG, "Timer active -> deleted via %s", reason ? reason : "unknown");
+    g_timer_active = false;
+    g_timer_minutes = 0;
+    g_timer_end_ms = 0;
+    g_timer_announce_pending = false;
+    g_timer_intro_playing = false;
+    g_timer_announce_minutes = 0;
+    g_snooze_active = false;
+
+    stop_playback();
+    g_force_base_output = true;
+    update_audio_output();
+    play_file(system_path("timer_deleted").c_str());
+    return true;
+}
+
 static std::string get_first_ringtone_path() {
     const char *dir_path = "/sdcard/ringtones";
     DIR *dir = opendir(dir_path);
@@ -931,6 +950,10 @@ void on_dial_complete(int number) {
 
 void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
+    if (!g_alarm_active && g_timer_active) {
+        cancel_timer_with_feedback("Key 5");
+        return;
+    }
     // Handle Timer/Alarm Mute
     if (g_alarm_active) {
         TimeManager::stopAlarm();
@@ -975,6 +998,11 @@ void on_hook_change(bool off_hook) {
 
     g_off_hook = off_hook;
 
+    bool timer_canceled = false;
+    if (!g_alarm_active && g_timer_active) {
+        timer_canceled = cancel_timer_with_feedback(off_hook ? "pickup" : "hangup");
+    }
+
     if (off_hook) {
         // Receiver Picked Up
         bool skip_dialtone = false;
@@ -983,6 +1011,9 @@ void on_hook_change(bool off_hook) {
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
         g_off_hook_start_ms = esp_timer_get_time() / 1000;
+        if (timer_canceled) {
+            skip_dialtone = true;
+        }
         if (g_alarm_active) {
             TimeManager::stopAlarm();
             if (g_alarm_source == ALARM_TIMER) {
@@ -1005,7 +1036,9 @@ void on_hook_change(bool off_hook) {
         }
     } else {
         // Receiver Hung Up
-        stop_playback();
+        if (!timer_canceled) {
+            stop_playback();
+        }
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;

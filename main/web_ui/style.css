@@ -242,6 +242,13 @@ a:hover { color: #fff; border-bottom: 1px solid #fff; }
   gap: 0.4rem;
 }
 
+.alarm-label {
+  margin-left: 10px;
+  font-size: 0.8rem;
+  color: #d4af37;
+  letter-spacing: 0.5px;
+}
+
 .alarm-time {
   background: #f0e6d2;
   border: 1px solid #d4af37;

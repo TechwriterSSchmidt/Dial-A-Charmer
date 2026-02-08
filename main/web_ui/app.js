@@ -208,7 +208,7 @@ function render() {
     // Header / Title (Dynamic + Version)
     let html = `
         <div style="text-align:center;">
-        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v1.9 ESP-IDF</span></h2>
+        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v1.9 RSA-Edition</span></h2>
         </div>
     `;
 
@@ -504,7 +504,7 @@ function renderSettings() {
                             <input type="checkbox" id="check-${a.d}" ${checked}>
                             <span class="slider"></span>
                         </label>
-                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('active')}</span>
+                        <span class="alarm-label">${t('active')}</span>
                     </div>
                     <input type="time" value="${timeVal}" id="time-${a.d}" class="alarm-time-input">
                 </div>
@@ -517,7 +517,7 @@ function renderSettings() {
                             <input type="checkbox" id="ramp-${a.d}" ${rampChecked}>
                             <span class="slider"></span>
                         </label>
-                        <span style='margin-left: 10px; font-size: 0.9rem; color: #aaa;'>${t('fade')}</span>
+                        <span class="alarm-label">${t('fade')}</span>
                     </div>
                     
                     <select id="snd-${a.d}" onchange="previewTone(this.value)" class="alarm-sound-select">
