@@ -14,6 +14,7 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "app_config.h"
 #include <sys/stat.h>
 #include "esp_netif.h"
@@ -428,6 +429,8 @@ static esp_err_t api_ringtones_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_preview_handler(httpd_req_t *req) {
+    static int64_t s_last_preview_ms = 0;
+    static const int64_t PREVIEW_COOLDOWN_MS = 400;
     char buf[128];
     if (httpd_req_get_url_query_str(req, buf, sizeof(buf)) == ESP_OK) {
         char param[64];
@@ -436,6 +439,13 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
             const char *dot = strrchr(param, '.');
             bool is_wav = dot && strcasecmp(dot, ".wav") == 0;
             if (strstr(param, "..") == NULL && is_wav) {
+                int64_t now_ms = esp_timer_get_time() / 1000;
+                if (now_ms - s_last_preview_ms < PREVIEW_COOLDOWN_MS) {
+                    httpd_resp_set_status(req, "429 Too Many Requests");
+                    httpd_resp_send(req, "", 0);
+                    return ESP_OK;
+                }
+                s_last_preview_ms = now_ms;
                 char filepath[128];
                 snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
                 
@@ -698,6 +708,12 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         cJSON *alarms_arr = cJSON_GetObjectItem(root, "alarms");
         if (cJSON_IsArray(alarms_arr)) {
             int alarm_updates = 0;
+            bool has_day0 = false;
+            int day0_h = 0;
+            int day0_m = 0;
+            bool day0_active = false;
+            bool day0_ramp = false;
+            std::string day0_ringtone;
             cJSON *elem;
             cJSON_ArrayForEach(elem, alarms_arr) {
                 cJSON *d = cJSON_GetObjectItem(elem, "d");
@@ -717,9 +733,22 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
                     if (cJSON_IsNumber(rmp)) ramp = (rmp->valueint == 1);
 
                     const char* ringtone = (snd && cJSON_IsString(snd)) ? snd->valuestring : "";
+                    if (d->valueint == 0) {
+                        has_day0 = true;
+                        day0_h = h->valueint;
+                        day0_m = m->valueint;
+                        day0_active = active;
+                        day0_ramp = ramp;
+                        day0_ringtone = ringtone ? ringtone : "";
+                        continue;
+                    }
                     TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, ringtone);
                     alarm_updates++;
                 }
+            }
+            if (has_day0) {
+                TimeManager::setAlarm(0, day0_h, day0_m, day0_active, day0_ramp, day0_ringtone.c_str());
+                alarm_updates++;
             }
             ESP_LOGI(TAG, "Alarm settings saved: %d entries", alarm_updates);
         }

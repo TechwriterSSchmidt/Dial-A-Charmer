@@ -557,12 +557,27 @@ function renderSettings() {
     `;
 }
 
+const PREVIEW_DEBOUNCE_MS = 400;
+let previewDebounceTimer = null;
+let previewPendingFile = "";
+
 window.previewTone = (filename) => {
     if (!filename) return;
-    
-    // Play on device via API
-    fetch(`/api/preview?file=${filename}`)
-        .catch(e => console.log("Preview request failed: " + e));
+
+    previewPendingFile = filename;
+    if (previewDebounceTimer) {
+        clearTimeout(previewDebounceTimer);
+    }
+
+    previewDebounceTimer = setTimeout(() => {
+        const file = previewPendingFile;
+        previewPendingFile = "";
+        previewDebounceTimer = null;
+
+        // Play on device via API
+        fetch(`/api/preview?file=${encodeURIComponent(file)}`)
+            .catch(e => console.log("Preview request failed: " + e));
+    }, PREVIEW_DEBOUNCE_MS);
 };
 
 window.saveAlarms = () => {

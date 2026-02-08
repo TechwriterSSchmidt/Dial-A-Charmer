@@ -160,12 +160,20 @@ static void announce_time_now() {
     snprintf(buf, sizeof(buf), "h_%d.wav", now.tm_hour);
     files.push_back(time_path(buf));
 
+    files.push_back(time_path("and.wav"));
+
     snprintf(buf, sizeof(buf), "m_%02d.wav", now.tm_min);
     files.push_back(time_path(buf));
+    files.push_back(time_path("minutes.wav"));
 
-    if (!is_lang_en()) {
-        files.push_back(time_path("uhr.wav"));
-    }
+    files.push_back(time_path("date_intro.wav"));
+    snprintf(buf, sizeof(buf), "day_%d.wav", now.tm_mday);
+    files.push_back(time_path(buf));
+    snprintf(buf, sizeof(buf), "month_%d.wav", now.tm_mon);
+    files.push_back(time_path(buf));
+    files.push_back("/sdcard/system/silence_300ms.wav");
+    snprintf(buf, sizeof(buf), "year_%d.wav", now.tm_year + 1900);
+    files.push_back(time_path(buf));
 
     start_voice_queue(files);
 }
@@ -1031,6 +1039,10 @@ void on_dial_complete(int number) {
     }
     g_any_digit_dialed = true;
     ESP_LOGI(TAG, "--- DIALED DIGIT: %d ---", number);
+    if (dial_buffer.empty() && g_last_playback_was_dialtone) {
+        stop_playback();
+        g_last_playback_was_dialtone = false;
+    }
     if (g_voice_menu_active && g_off_hook) {
         if (g_voice_queue_active) {
             g_voice_queue_active = false;
@@ -1102,8 +1114,10 @@ void on_hook_change(bool off_hook) {
 
     if (off_hook) {
         // Switch Audio Output to handset before any playback
-        g_output_mode_handset = true;
-        update_audio_output();
+        if (!timer_canceled) {
+            g_output_mode_handset = true;
+            update_audio_output();
+        }
         // Receiver Picked Up
         bool skip_dialtone = false;
         dial_buffer = "";
@@ -1567,7 +1581,9 @@ extern "C" void app_main(void)
                 }
                 // On-hook -> Timer mode (1-3 digits, up to 500 minutes)
                 else if (!g_off_hook) {
-                    if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
+                    if (dial_buffer == APP_PB_NUM_REBOOT && phonebook.hasEntry(APP_PB_NUM_REBOOT)) {
+                        process_phonebook_function(phonebook.getEntry(APP_PB_NUM_REBOOT));
+                    } else if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
                         int minutes = atoi(dial_buffer.c_str());
                         if (minutes >= APP_TIMER_MIN_MINUTES && minutes <= APP_TIMER_MAX_MINUTES) {
                             ESP_LOGI(TAG, "Timer set: %d minutes", minutes);

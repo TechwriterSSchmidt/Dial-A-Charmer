@@ -22,8 +22,8 @@ SD_ROOT = PROJECT_ROOT / "sd_card_content"
 AUDIO_RATE = 44100  # 44.1kHz for ESP32 compatibility
 
 # Telephony tone gains (dB)
-TELEPHONY_DIALTONE_GAIN_DB = -15.0
-TELEPHONY_BUSY_GAIN_DB = -15.0
+TELEPHONY_DIALTONE_GAIN_DB = -20.0
+TELEPHONY_BUSY_GAIN_DB = -20.0
 
 # Piper Configuration
 _sys_piper = shutil.which("piper")
@@ -421,14 +421,18 @@ def generate_time_announcements():
     # Specials
     if "de" in ENABLED_LANGS:
         add_task(f"{inst_de}Uhr", "de", base_dir / "de/uhr.wav", model_de)
-        add_task(f"{inst_de}Es ist", "de", base_dir / "de/intro.wav", model_de)
-        add_task(f"{inst_de}Heute ist", "de", base_dir / "de/date_intro.wav", model_de)
+        add_task(f"{inst_de}Zeitansage. Es ist jetzt", "de", base_dir / "de/intro.wav", model_de)
+        add_task(f"{inst_de}Uhr und", "de", base_dir / "de/and.wav", model_de)
+        add_task(f"{inst_de}Minuten", "de", base_dir / "de/minutes.wav", model_de)
+        add_task(f"{inst_de}Heute ist der", "de", base_dir / "de/date_intro.wav", model_de)
         add_task(f"{inst_de}Sommerzeit", "de", base_dir / "de/dst_summer.wav", model_de)
         add_task(f"{inst_de}Winterzeit", "de", base_dir / "de/dst_winter.wav", model_de)
     
     if "en" in ENABLED_LANGS:
-        add_task(f"{inst_en}It is", "en", base_dir / "en/intro.wav", model_en)
-        add_task(f"{inst_en}Today is", "en", base_dir / "en/date_intro.wav", model_en)
+        add_task(f"{inst_en}Time announcement. It is now", "en", base_dir / "en/intro.wav", model_en)
+        add_task(f"{inst_en}o'clock and", "en", base_dir / "en/and.wav", model_en)
+        add_task(f"{inst_en}minutes", "en", base_dir / "en/minutes.wav", model_en)
+        add_task(f"{inst_en}Today is the", "en", base_dir / "en/date_intro.wav", model_en)
         add_task(f"{inst_en}Summer time", "en", base_dir / "en/dst_summer.wav", model_en)
         add_task(f"{inst_en}Winter time", "en", base_dir / "en/dst_winter.wav", model_en)
 
@@ -461,6 +465,10 @@ def check_piper_status():
 def generate_speech(text, lang, output_path, model_name=None, force_piper=False):
     """Generates audio using Piper (EN) or Google TTS (DE)."""
 
+    # Sanitize text to prevent "dot dot dot" pronunciation
+    # We replace "..." with a period to force a pause.
+    sanitized_text = text.replace(" ... ", ". ").replace("...", ".")
+
     def write_pcm_wav(segment, out_path):
         """Write a minimal PCM WAV (16-bit, 44.1kHz, mono) without extra chunks."""
         segment = segment.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
@@ -475,8 +483,8 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
         try:
             # Use 'com' for English (US) and 'de' for German
             tld = 'de' if lang == 'de' else 'com'
-            safe_print(f"  [gTTS] de -> {output_path.name}: {text[:60]}{'...' if len(text) > 60 else ''}")
-            tts = gTTS(text=text, lang=lang, tld=tld, slow=False)
+            safe_print(f"  [gTTS] de -> {output_path.name}: {sanitized_text[:60]}{'...' if len(sanitized_text) > 60 else ''}")
+            tts = gTTS(text=sanitized_text, lang=lang, tld=tld, slow=False)
             
             # gTTS saves MP3. We must convert to WAV if output is WAV.
             temp_mp3 = str(output_path) + ".mp3"
@@ -523,7 +531,7 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
     
     # Piper expects text via stdin
     process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    stdout, stderr = process.communicate(input=text.encode('utf-8'))
+    stdout, stderr = process.communicate(input=sanitized_text.encode('utf-8'))
     
     if process.returncode != 0:
         raise Exception(f"Piper failed: {stderr.decode()}")
@@ -940,9 +948,9 @@ def generate_tones(base_dir):
     save(beep, "beep.wav")
 
     # 3a. Hook pickup/hangup clicks (soft, characteristic)
-    hook_pickup = WhiteNoise().to_audio_segment(duration=35).apply_gain(-18.0).fade_out(25)
+    hook_pickup = WhiteNoise().to_audio_segment(duration=40).apply_gain(-12.0).fade_out(28)
     save(hook_pickup, "hook_pickup.wav")
-    hook_hangup = WhiteNoise().to_audio_segment(duration=25).apply_gain(-20.0).fade_out(20)
+    hook_hangup = WhiteNoise().to_audio_segment(duration=30).apply_gain(-14.0).fade_out(22)
     save(hook_hangup, "hook_hangup.wav")
 
     # 3b. Silence (300ms)

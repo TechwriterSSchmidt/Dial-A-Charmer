@@ -31,5 +31,6 @@ compliments/audio_cache/
 ringtones/
 fonts/
 *.txt
+!compliments/*.txt
 
 
