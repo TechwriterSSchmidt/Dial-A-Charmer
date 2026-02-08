@@ -31,79 +31,49 @@ extern void play_file(const char* path);
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
 
-static std::string get_first_ringtone_name() {
-    const char *dir_path = "/sdcard/ringtones";
-    DIR *dir = opendir(dir_path);
-    if (!dir) return "";
-
-    struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL) {
-        const char *name = ent->d_name;
-        size_t len = strlen(name);
-        if (len > 4 && strcasecmp(name + len - 4, ".wav") == 0) {
-            closedir(dir);
-            return name;
-        }
-    }
-    closedir(dir);
-    return "";
-}
-
-// Log capture (last 20 lines)
-static const size_t LOG_LINE_MAX = 256;
 static const size_t LOG_LINE_COUNT = 20;
+static const size_t LOG_LINE_MAX = 192;
+
 static char s_log_lines[LOG_LINE_COUNT][LOG_LINE_MAX];
 static size_t s_log_head = 0;
 static size_t s_log_count = 0;
 static portMUX_TYPE s_log_mux = portMUX_INITIALIZER_UNLOCKED;
-static vprintf_like_t s_prev_vprintf = NULL;
+static vprintf_like_t s_prev_vprintf = nullptr;
+
 #if APP_ENABLE_SD_LOG
-static FILE *s_sd_log_file = NULL;
+static FILE *s_sd_log_file = nullptr;
+static TaskHandle_t s_sd_log_task = nullptr;
 static portMUX_TYPE s_sd_log_mux = portMUX_INITIALIZER_UNLOCKED;
-static char s_sd_log_lines[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
-static size_t s_sd_log_head = 0;
-static size_t s_sd_log_count = 0;
-static TaskHandle_t s_sd_log_task = NULL;
-extern bool is_playing;
-#endif
+static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static size_t s_sd_log_buf_count = 0;
 
-#if APP_ENABLE_SD_LOG
 static void sd_log_write_line(const char *line) {
-    if (!line || !line[0]) return;
-
+    if (!line || !line[0]) {
+        return;
+    }
     portENTER_CRITICAL(&s_sd_log_mux);
-    size_t idx = s_sd_log_head % APP_SD_LOG_BUFFER_LINES;
-    strncpy(s_sd_log_lines[idx], line, LOG_LINE_MAX - 1);
-    s_sd_log_lines[idx][LOG_LINE_MAX - 1] = '\0';
-    s_sd_log_head = (s_sd_log_head + 1) % APP_SD_LOG_BUFFER_LINES;
-    if (s_sd_log_count < APP_SD_LOG_BUFFER_LINES) {
-        s_sd_log_count++;
+    if (s_sd_log_buf_count < APP_SD_LOG_BUFFER_LINES) {
+        strncpy(s_sd_log_buf[s_sd_log_buf_count], line, LOG_LINE_MAX - 1);
+        s_sd_log_buf[s_sd_log_buf_count][LOG_LINE_MAX - 1] = '\0';
+        s_sd_log_buf_count++;
     }
     portEXIT_CRITICAL(&s_sd_log_mux);
 }
 
 static void sd_log_flush_task(void *pvParameters) {
-    char flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
-
+    (void)pvParameters;
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(APP_SD_LOG_FLUSH_INTERVAL_MS));
 
-        if (is_playing) {
-            continue;
-        }
-
         size_t count = 0;
         portENTER_CRITICAL(&s_sd_log_mux);
-        count = s_sd_log_count;
-        if (count > 0) {
-            size_t start = (s_sd_log_head + APP_SD_LOG_BUFFER_LINES - count) % APP_SD_LOG_BUFFER_LINES;
-            for (size_t i = 0; i < count; ++i) {
-                size_t idx = (start + i) % APP_SD_LOG_BUFFER_LINES;
-                strncpy(flush_buf[i], s_sd_log_lines[idx], LOG_LINE_MAX);
-                flush_buf[i][LOG_LINE_MAX - 1] = '\0';
-            }
-            s_sd_log_count = 0;
+        count = s_sd_log_buf_count;
+        for (size_t i = 0; i < count; ++i) {
+            strncpy(s_sd_log_flush_buf[i], s_sd_log_buf[i], LOG_LINE_MAX);
+            s_sd_log_flush_buf[i][LOG_LINE_MAX - 1] = '\0';
         }
+        s_sd_log_buf_count = 0;
         portEXIT_CRITICAL(&s_sd_log_mux);
 
         if (count == 0) {
@@ -111,17 +81,18 @@ static void sd_log_flush_task(void *pvParameters) {
         }
 
         if (!s_sd_log_file) {
+            const char *log_path = APP_SD_LOG_PATH;
             char dir_path[128] = {0};
-            const char *last = strrchr(APP_SD_LOG_PATH, '/');
-            if (last && last != APP_SD_LOG_PATH) {
-                size_t len = (size_t)(last - APP_SD_LOG_PATH);
+            const char *last = strrchr(log_path, '/');
+            if (last && last != log_path) {
+                size_t len = (size_t)(last - log_path);
                 if (len < sizeof(dir_path)) {
-                    memcpy(dir_path, APP_SD_LOG_PATH, len);
+                    memcpy(dir_path, log_path, len);
                     dir_path[len] = '\0';
                     mkdir(dir_path, 0775);
                 }
             }
-            s_sd_log_file = fopen(APP_SD_LOG_PATH, "a");
+            s_sd_log_file = fopen(log_path, "a");
         }
 
         if (s_sd_log_file) {
@@ -131,7 +102,7 @@ static void sd_log_flush_task(void *pvParameters) {
                 freopen(APP_SD_LOG_PATH, "w", s_sd_log_file);
             }
             for (size_t i = 0; i < count; ++i) {
-                fputs(flush_buf[i], s_sd_log_file);
+                fputs(s_sd_log_flush_buf[i], s_sd_log_file);
                 fputc('\n', s_sd_log_file);
             }
             fflush(s_sd_log_file);
@@ -140,54 +111,29 @@ static void sd_log_flush_task(void *pvParameters) {
 }
 #endif
 
-static void log_buffer_add(const char *line) {
-    if (!line || !line[0]) {
-        return;
+static std::string get_first_ringtone_name() {
+    const char *dir_path = "/sdcard/ringtones";
+    DIR *dir = opendir(dir_path);
+    if (!dir) {
+        return "";
     }
-    portENTER_CRITICAL(&s_log_mux);
-    size_t idx = s_log_head % LOG_LINE_COUNT;
-    strncpy(s_log_lines[idx], line, LOG_LINE_MAX - 1);
-    s_log_lines[idx][LOG_LINE_MAX - 1] = '\0';
-    s_log_head = (s_log_head + 1) % LOG_LINE_COUNT;
-    if (s_log_count < LOG_LINE_COUNT) {
-        s_log_count++;
-    }
-    portEXIT_CRITICAL(&s_log_mux);
-}
 
-static int log_vprintf(const char *fmt, va_list args) {
-    char buf[LOG_LINE_MAX];
-    va_list args_copy;
-    va_copy(args_copy, args);
-    vsnprintf(buf, sizeof(buf), fmt, args_copy);
-    va_end(args_copy);
-
-    size_t len = strlen(buf);
-    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
-        buf[len - 1] = '\0';
-        len--;
+    struct dirent *ent;
+    while ((ent = readdir(dir)) != NULL) {
+        const char *name = ent->d_name;
+        if (!name || name[0] == '.') {
+            continue;
+        }
+        const char *dot = strrchr(name, '.');
+        if (dot && strcasecmp(dot, ".wav") == 0) {
+            std::string result = name;
+            closedir(dir);
+            return result;
+        }
     }
-    log_buffer_add(buf);
 
-#if APP_ENABLE_SD_LOG
-    sd_log_write_line(buf);
-#endif
-
-    if (s_prev_vprintf) {
-        return s_prev_vprintf(fmt, args);
-    }
-    return vprintf(fmt, args);
-}
-
-static void init_log_capture() {
-    if (!s_prev_vprintf) {
-        s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
-    }
-#if APP_ENABLE_SD_LOG
-    if (!s_sd_log_task) {
-        xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
-    }
-#endif
+    closedir(dir);
+    return "";
 }
 
 static void compact_log_line(const char *src, char *dst, size_t dst_size) {
@@ -251,6 +197,56 @@ static void compact_log_line(const char *src, char *dst, size_t dst_size) {
         // Move message to start (after '>')
         memmove(dst + 1, msg, strlen(msg) + 1);
     }
+}
+
+static void log_buffer_add(const char *line) {
+    if (!line || !line[0]) {
+        return;
+    }
+    portENTER_CRITICAL(&s_log_mux);
+    size_t idx = s_log_head % LOG_LINE_COUNT;
+    strncpy(s_log_lines[idx], line, LOG_LINE_MAX - 1);
+    s_log_lines[idx][LOG_LINE_MAX - 1] = '\0';
+    s_log_head = (s_log_head + 1) % LOG_LINE_COUNT;
+    if (s_log_count < LOG_LINE_COUNT) {
+        s_log_count++;
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+}
+
+static int log_vprintf(const char *fmt, va_list args) {
+    char buf[LOG_LINE_MAX];
+    va_list args_copy;
+    va_copy(args_copy, args);
+    vsnprintf(buf, sizeof(buf), fmt, args_copy);
+    va_end(args_copy);
+
+    size_t len = strlen(buf);
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
+        buf[len - 1] = '\0';
+        len--;
+    }
+    log_buffer_add(buf);
+
+#if APP_ENABLE_SD_LOG
+    sd_log_write_line(buf);
+#endif
+
+    if (s_prev_vprintf) {
+        return s_prev_vprintf(fmt, args);
+    }
+    return vprintf(fmt, args);
+}
+
+static void init_log_capture() {
+    if (!s_prev_vprintf) {
+        s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
+    }
+#if APP_ENABLE_SD_LOG
+    if (!s_sd_log_task) {
+        xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
+    }
+#endif
 }
 
 // DNS Server Task
