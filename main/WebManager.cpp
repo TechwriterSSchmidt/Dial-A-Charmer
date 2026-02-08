@@ -275,12 +275,24 @@ static esp_err_t api_ringtones_handler(httpd_req_t *req) {
     if (dir) {
         struct dirent *ent;
         while ((ent = readdir(dir)) != NULL) {
-            // Filter for WAV-only to match available decoder
-            if (strstr(ent->d_name, ".wav")) {
-                cJSON_AddItemToArray(root, cJSON_CreateString(ent->d_name));
+            if (ent->d_type != DT_REG) {
+                continue;
+            }
+
+            const char *name = ent->d_name;
+            size_t len = strlen(name);
+            if (len < 4) {
+                continue;
+            }
+
+            const char *ext = name + len - 4;
+            if (strcasecmp(ext, ".wav") == 0) {
+                cJSON_AddItemToArray(root, cJSON_CreateString(name));
             }
         }
         closedir(dir);
+    } else {
+        ESP_LOGW(TAG, "Ringtones folder not accessible: /sdcard/ringtones");
     }
     
     const char *json_str = cJSON_PrintUnformatted(root);
@@ -296,7 +308,9 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
         char param[64];
         if (httpd_query_key_value(buf, "file", param, sizeof(param)) == ESP_OK) {
             // Basic security check: no parent directory traversal
-            if (strstr(param, "..") == NULL && strstr(param, ".wav")) {
+            const char *dot = strrchr(param, '.');
+            bool is_wav = dot && strcasecmp(dot, ".wav") == 0;
+            if (strstr(param, "..") == NULL && is_wav) {
                 char filepath[128];
                 snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
                 
