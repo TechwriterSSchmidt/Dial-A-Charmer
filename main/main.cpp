@@ -1192,6 +1192,9 @@ void on_hook_change(bool off_hook) {
     g_off_hook = off_hook;
 
     if (off_hook) {
+        // CRITICAL: Set timestamp IMMEDIATELY to prevent race with busy-timeout check in main loop
+        g_off_hook_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        
         // Switch Audio Output to handset before any playback
         g_output_mode_handset = true;
         update_audio_output();
@@ -1208,7 +1211,6 @@ void on_hook_change(bool off_hook) {
         g_line_busy = false;
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
-        g_off_hook_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
 
         if (g_alarm_active) {
             TimeManager::stopAlarm();
