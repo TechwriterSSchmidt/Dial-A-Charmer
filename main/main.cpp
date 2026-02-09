@@ -63,7 +63,7 @@ bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
 bool g_any_digit_dialed = false;
-int64_t g_off_hook_start_ms = 0;
+uint32_t g_off_hook_start_ms = 0;
 int64_t g_last_playback_finished_ms = 0;
 bool g_last_playback_was_dialtone = false;
 bool g_timer_active = false;
@@ -1208,7 +1208,7 @@ void on_hook_change(bool off_hook) {
         g_line_busy = false;
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
-        g_off_hook_start_ms = esp_timer_get_time() / 1000;
+        g_off_hook_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
 
         if (g_alarm_active) {
             TimeManager::stopAlarm();
@@ -1792,8 +1792,8 @@ extern "C" void app_main(void)
 
         // Busy tone after 5s off-hook without dialing
         if (g_off_hook && !g_voice_menu_active && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
-            int64_t now = esp_timer_get_time() / 1000;
-            if ((now - g_off_hook_start_ms) > APP_BUSY_TIMEOUT_MS) {
+            uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+            if ((uint32_t)(now - g_off_hook_start_ms) > (uint32_t)APP_BUSY_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Idle timeout -> busy tone");
                 play_busy_tone();
             }
