@@ -157,6 +157,7 @@ SYSTEM_PROMPTS = {
     # English System Messages (Piper)
     "system/snooze_active_en.wav": ("Snooze active.", "en", None),
     "system/system_ready_en.wav": ("System ready.", "en", None),
+    "system/system_sleep_en.wav": ("System going to sleep.", "en", None),
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", None),
     "system/error_msg_en.wav": ("An error occurred.", "en", None),
     "system/number_invalid_en.wav": ("The number you have dialed is not in service.", "en", None),

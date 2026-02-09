@@ -1046,7 +1046,7 @@ void process_phonebook_function(PhonebookEntry entry) {
         }
         else if (entry.value == "REBOOT") {
              ESP_LOGW(TAG, "Reboot requested. Playing ack...");
-             play_file(system_path("pb_reboot").c_str());
+             play_file("/sdcard/system/pb_reboot_en.wav");
              g_reboot_pending = true;
              g_reboot_request_time = esp_timer_get_time() / 1000;
         }
@@ -1173,9 +1173,24 @@ static void configure_extra_btn_wakeup() {
 
 static void enter_deep_sleep() {
     ESP_LOGI(TAG, "Entering deep sleep (Key 5 long press)");
+    play_file("/sdcard/system/system_sleep_en.wav");
+    vTaskDelay(pdMS_TO_TICKS(3000));
     stop_playback();
     set_pa_enable(false);
     set_led_color(0, 0, 0);
+    
+    // Wait for button release before entering sleep
+    ESP_LOGI(TAG, "Waiting for button release before sleep...");
+    while (dial.isButtonDown()) {
+        #if APP_ENABLE_TASK_WDT
+        if (g_wdt_input_registered) {
+            esp_task_wdt_reset();
+        }
+        #endif
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    ESP_LOGI(TAG, "Button released, entering sleep now");
+    
     configure_extra_btn_wakeup();
     esp_sleep_enable_ext0_wakeup((gpio_num_t)APP_PIN_EXTRA_BTN, 0);
     vTaskDelay(pdMS_TO_TICKS(50));
@@ -1864,7 +1879,7 @@ extern "C" void app_main(void)
                     }
                     if (g_startup_silence_playing) {
                         g_startup_silence_playing = false;
-                        play_file(system_path("system_ready").c_str());
+                        play_file("/sdcard/system/system_ready_en.wav");
                         continue;
                     }
                     if (g_timer_intro_playing && g_timer_announce_pending) {
