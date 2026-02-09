@@ -111,6 +111,10 @@ static bool g_alarm_fade_active = false;
 static float g_alarm_fade_factor = 1.0f;
 static int64_t g_alarm_fade_start_time = 0;
 
+static bool g_persona_hangup_pending = false;
+static int64_t g_last_play_start_ms = 0; // Filter stale events
+
+
 static int64_t g_fade_in_end_time = 0;
 
 #if APP_ENABLE_TASK_WDT
@@ -920,6 +924,8 @@ void play_file(const char* path) {
     // Track last playback type
     g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dial_tone.wav") == 0);
 
+    g_last_play_start_ms = esp_timer_get_time() / 1000; // Capture time for event filtering
+
     // Force Output Selection immediately after run logic
     update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
@@ -1002,9 +1008,9 @@ static void play_persona_with_hook_sfx(const std::string &file) {
     if (file.empty()) return;
     g_persona_playback_active = true;
     start_voice_queue({
-        "/sdcard/system/hook_pickup.wav",
-        file,
-        "/sdcard/system/hook_hangup.wav",
+        "/sdcard/system/hook_pickup.wav", 
+        file 
+        // Hangup is handled by event loop logic after queue finishes
     });
 }
 
@@ -1784,6 +1790,14 @@ extern "C" void app_main(void)
             // Handle Stop
             if (msg.source == (void *)i2s_writer && msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
+                    
+                    // Filter Stale Events: If FINISHED arrives too soon after starting a NEW file, ignore it.
+                    int64_t now_check = esp_timer_get_time() / 1000;
+                    if (now_check - g_last_play_start_ms < 250) {
+                        ESP_LOGW(TAG, "Ignoring stale FINISHED event (Race Condition)");
+                        continue;
+                    }
+
                     ESP_LOGI(TAG, "Audio Finished.");
                     stop_playback();
                     if (play_next_in_queue()) {
