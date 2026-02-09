@@ -112,9 +112,6 @@ static float g_alarm_fade_factor = 1.0f;
 static int64_t g_alarm_fade_start_time = 0;
 
 static bool g_persona_hangup_pending = false;
-static int64_t g_last_play_start_ms = 0; // Filter stale events
-static audio_event_iface_handle_t g_evt_handle = NULL; // Global handle for flushing events
-
 
 static int64_t g_fade_in_end_time = 0;
 
@@ -910,16 +907,6 @@ void play_file(const char* path) {
     // Always force stop first, skipping fade-out/mute for responsiveness
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
-    
-    // Explicitly flush any pending events from the previous incomplete playback
-    // This prevents the main loop from receiving a stale FINISHED event and stopping our NEW playback.
-    if (g_evt_handle) {
-        audio_event_iface_msg_t dummy;
-        while(audio_event_iface_listen(g_evt_handle, &dummy, 0) == ESP_OK) {
-             ESP_LOGI(TAG, "Flushed stale event cmd:%d src:%p", dummy.cmd, dummy.source);
-        }
-    }
-
     is_playing = false;
     g_last_playback_finished_ms = esp_timer_get_time() / 1000;
 
@@ -934,8 +921,6 @@ void play_file(const char* path) {
 
     // Track last playback type
     g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dial_tone.wav") == 0);
-
-    g_last_play_start_ms = esp_timer_get_time() / 1000; // Capture time for event filtering
 
     // Force Output Selection immediately after run logic
     update_audio_output();
@@ -1532,7 +1517,6 @@ extern "C" void app_main(void)
     // Event Config
     audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
     audio_event_iface_handle_t evt = audio_event_iface_init(&evt_cfg);
-    g_evt_handle = evt; // Expose global
     audio_pipeline_set_listener(pipeline, evt);
 
     // Start Codec
@@ -1802,14 +1786,6 @@ extern "C" void app_main(void)
             // Handle Stop
             if (msg.source == (void *)i2s_writer && msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
-                    
-                    // Filter Stale Events: If FINISHED arrives too soon after starting a NEW file, ignore it.
-                    int64_t now_check = esp_timer_get_time() / 1000;
-                    if (now_check - g_last_play_start_ms < 250) {
-                        ESP_LOGW(TAG, "Ignoring stale FINISHED event (Race Condition)");
-                        continue;
-                    }
-
                     ESP_LOGI(TAG, "Audio Finished.");
                     stop_playback();
                     if (play_next_in_queue()) {
