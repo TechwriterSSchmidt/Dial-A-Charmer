@@ -111,6 +111,8 @@ static bool g_alarm_fade_active = false;
 static float g_alarm_fade_factor = 1.0f;
 static int64_t g_alarm_fade_start_time = 0;
 
+static int64_t g_fade_in_end_time = 0;
+
 #if APP_ENABLE_TASK_WDT
 static bool g_wdt_main_registered = false;
 static bool g_wdt_input_registered = false;
@@ -909,6 +911,11 @@ void play_file(const char* path) {
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
     g_gain_right_cur = 0.0f;
+    
+    // Apply initial fade-in ramp
+    g_gain_ramp_ms = APP_WAV_FADE_IN_MS;
+    g_fade_in_end_time = (esp_timer_get_time() / 1000) + APP_WAV_FADE_IN_MS + 100;
+
 
     // Track last playback type
     g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dialtone_1.wav") == 0);
@@ -1029,7 +1036,7 @@ void process_phonebook_function(PhonebookEntry entry) {
         }
         else if (entry.value == "REBOOT") {
              ESP_LOGW(TAG, "Reboot requested. Playing ack...");
-             play_file(system_path("system_ready").c_str());
+             play_file(system_path("pb_reboot").c_str());
              g_reboot_pending = true;
              g_reboot_request_time = esp_timer_get_time() / 1000;
         }
@@ -1218,6 +1225,14 @@ void input_task(void *pvParameters) {
     }
 #endif
     while(1) {
+        // Reset ramp duration if fade-in finished
+        if (g_gain_ramp_ms != APP_GAIN_RAMP_MS) {
+            int64_t now_check = esp_timer_get_time() / 1000;
+            if (now_check > g_fade_in_end_time) {
+                g_gain_ramp_ms = APP_GAIN_RAMP_MS;
+            }
+        }
+
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
 

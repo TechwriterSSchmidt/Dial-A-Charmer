@@ -56,6 +56,7 @@
 #define APP_WAV_SWITCH_DELAY_MS 10
 #define APP_OUTPUT_MUTE_DELAY_MS 20
 #define APP_WAV_FADE_OUT_EXTRA_MS 20
+#define APP_WAV_FADE_IN_MS 50
 #define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
 
 // Timer settings
@@ -70,7 +71,7 @@
 
 // Software gain defaults
 #define APP_GAIN_DEFAULT_LEFT 0.5f
-#define APP_GAIN_DEFAULT_RIGHT 0.5f
+#define APP_GAIN_DEFAULT_RIGHT 0.6f
 #define APP_GAIN_RAMP_MS 40
 
 // Handset noise gate (reduce hiss during quiet passages)
