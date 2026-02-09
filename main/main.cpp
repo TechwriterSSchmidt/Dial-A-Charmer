@@ -1823,7 +1823,9 @@ extern "C" void app_main(void)
                         g_persona_playback_active = false;
                         ESP_LOGI(TAG, "Persona finished -> busy tone (pause)");
                         vTaskDelay(pdMS_TO_TICKS(PERSONA_PAUSE_MS));
-                        play_busy_tone();
+                        if (g_off_hook) {
+                            play_busy_tone();
+                        }
                         continue;
                     }
                     if (g_line_busy && g_off_hook && !g_alarm_active) {
