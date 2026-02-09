@@ -769,7 +769,7 @@ function renderSetup() {
     // Modal or Input Area
     if (state.selectedWifi) {
         content = `
-            <h3>${t('connect_to')} ${state.selectedWifi}</h3>
+            <p style="margin-bottom: 10px;">${t('connect_to')} ${state.selectedWifi}</p>
             <input type="password" id="wifi-pass" placeholder="${t('password')}" style="width:100%; padding:10px; margin:10px 0; color:black;">
             <br>
             <button onclick="connectWifi()" style="padding:10px 20px;">${t('connect')}</button>
@@ -779,7 +779,6 @@ function renderSetup() {
 
     return `
         <div class="card">
-            <h3>${t('setup')}</h3>
             <p>${t('select_network')}</p>
             <div style="max-height:300px; overflow-y:auto; border:1px solid #555;">
                 ${content}

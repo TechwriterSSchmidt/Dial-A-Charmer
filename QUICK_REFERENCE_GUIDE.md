@@ -17,7 +17,7 @@
 
 3. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
-   - **Snooze:** Lift receiver but **DO NOT** hang up (put it aside).
+   - **Snooze:** Press the **Extra Button** (if installed).
    - *Snooze duration is configurable in Web Interface (Default: 9 min).*
 
 4. **Voice Menu & Admin:**

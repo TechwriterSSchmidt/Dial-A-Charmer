@@ -1178,7 +1178,10 @@ void on_hook_change(bool off_hook) {
             } else {
                 reset_alarm_state(true);
                 g_snooze_active = false;
-                update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
+                g_force_base_output = true;
+                update_audio_output(); 
+                play_file(system_path("alarm_stopped").c_str());
+                skip_dialtone = true;
             }
         }
         // Play dial tone
