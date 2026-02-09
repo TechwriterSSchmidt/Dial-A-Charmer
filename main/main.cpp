@@ -918,7 +918,7 @@ void play_file(const char* path) {
 
 
     // Track last playback type
-    g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dialtone_1.wav") == 0);
+    g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dial_tone.wav") == 0);
 
     // Force Output Selection immediately after run logic
     update_audio_output();
@@ -1157,6 +1157,12 @@ void on_hook_change(bool off_hook) {
         g_output_mode_handset = true;
         update_audio_output();
 
+        // Boot Bug Fix: Prevent "System Ready" from overriding Dial Tone if picked up during startup
+        if (g_startup_silence_playing) {
+            ESP_LOGI(TAG, "Pickup during startup -> Cancelling startup sequence");
+            g_startup_silence_playing = false;
+        }
+
         // Receiver Picked Up
         bool skip_dialtone = false;
         dial_buffer = "";
@@ -1186,7 +1192,7 @@ void on_hook_change(bool off_hook) {
         }
         // Play dial tone
         if (!skip_dialtone) {
-            play_file("/sdcard/system/dialtone_1.wav");
+            play_file("/sdcard/system/dial_tone.wav");
         }
     } else {
         // Receiver Hung Up
@@ -1821,13 +1827,30 @@ extern "C" void app_main(void)
                     }
                     if (g_persona_playback_active && g_off_hook) {
                         g_persona_playback_active = false;
-                        ESP_LOGI(TAG, "Persona finished -> busy tone (pause)");
-                        vTaskDelay(pdMS_TO_TICKS(PERSONA_PAUSE_MS));
+                        ESP_LOGI(TAG, "Persona finished -> playing hangup click -> busy tone");
+                        
+                        // Play soft hangup click
+                        play_file("/sdcard/system/hook_hangup.wav");
+                        
+                        // IMPORTANT: play_file is blocking or async? 
+                        // In this loop context, play_file restarts the pipeline.
+                        // We need to wait for it to finish OR chain it naturally.
+                        // However, play_file sends a command and returns. 
+                        // The loop will receive another FINISHED event for the hangup sound.
+                        // So we need a state to know we just played the hangup sound to transition to busy tone.
+                        g_persona_hangup_pending = true; 
+                        continue;
+                    }
+
+                    if (g_persona_hangup_pending) {
+                        g_persona_hangup_pending = false;
                         if (g_off_hook) {
-                            play_busy_tone();
+                             vTaskDelay(pdMS_TO_TICKS(500)); // Short pause after click before busy tone
+                             play_busy_tone();
                         }
                         continue;
                     }
+
                     if (g_line_busy && g_off_hook && !g_alarm_active) {
                         play_busy_tone();
                         continue;
