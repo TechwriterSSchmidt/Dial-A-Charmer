@@ -157,6 +157,7 @@ SYSTEM_PROMPTS = {
     # English System Messages (Piper)
     "system/snooze_active_en.wav": ("Snooze active.", "en", None),
     "system/system_ready_en.wav": ("System ready.", "en", None),
+    "system/system_sleep_en.wav": ("System going to sleep.", "en", None),
     "system/time_unavailable_en.wav": ("Time synchronization failed.", "en", None),
     "system/error_msg_en.wav": ("An error occurred.", "en", None),
     "system/number_invalid_en.wav": ("The number you have dialed is not in service.", "en", None),
@@ -177,6 +178,7 @@ SYSTEM_PROMPTS = {
     "system/pb_reboot_opt_en.wav": ("Choose 999 for System reboot.", "en", None),
     "system/timer_set_en.wav": ("Timer set for", "en", None),
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", None),
+    "system/alarm_stopped_en.wav": ("About time. I thought you'd never wake up.", "en", None),
     "system/next_alarm_en.wav": ("Next alarm.", "en", None),
     "system/next_alarm_none_en.wav": ("No alarms scheduled.", "en", None),
     "system/night_on_en.wav": ("Night mode active. Signal lamp dimmed and volume reduced for 6 hours.", "en", None),
@@ -224,6 +226,7 @@ SYSTEM_PROMPTS = {
     "system/pb_menu_opt_de.wav": ("Wähle 0 für Sprachmenü.", "de", None),
     "system/pb_reboot_opt_de.wav": ("Wähle 999 für System Neustart.", "de", None),
     "system/timer_deleted_de.wav": ("Timer gelöscht.", "de", None),
+    "system/alarm_stopped_de.wav": ("Na endlich. Ich dachte schon, du wachst nie auf.", "de", None),
     "system/timer_set_de.wav": ("Timer gesetzt für", "de", None),
     "system/next_alarm_de.wav": ("Nächster Wecker.", "de", None),
     "system/next_alarm_none_de.wav": ("Kein Wecker aktiv.", "de", None),
@@ -253,7 +256,8 @@ SYSTEM_PROMPTS = {
 
 # Static Files to Copy (Source Path relative to template, Destination relative to SD Root)
 STATIC_COPY_MAP = {
-    # Ringtones are handled separately via folder copy
+    "system/hook_pickup.wav": "system/hook_pickup.wav",
+    "system/hook_hangup.wav": "system/hook_hangup.wav"
 }
 
 # Time Announcements (Range Definitions)
@@ -302,6 +306,11 @@ def generate_tones(base_dir):
     # 4. Beep (Simple 1000Hz)
     beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-5.0)
     save(beep, "beep.wav")
+
+    # Hook sounds are now provided via external high-quality recording split (process_hooks.py)
+    # We skip synthesizing them here to preserve the manual files.
+    
+    save(error_tone, "error_tone.wav")
 
     # 4b. Silence (300ms)
     silence = AudioSegment.silent(duration=300)
@@ -912,56 +921,6 @@ def generate_sd_card_structure(categories):
 
     # phonebook.json generation removed; defaults are now in firmware.
 
-def generate_tones(base_dir):
-    """
-    Generates standard telephony tones (Dial tone, Busy signal, etc.)
-    """
-    print("\n\n--- Generating Telephony Tones ---")
-    target_dir = base_dir / "system"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    
-    # helper
-    def save(seg, name):
-        out_path = target_dir / name
-        seg = seg.set_channels(1).set_sample_width(2).set_frame_rate(AUDIO_RATE)
-        seg.export(str(out_path), format="wav")
-        print(f"  [GEN] {name}")
-
-    # 1. Dial Tone 1 (US standard: 350Hz + 440Hz continuous)
-    # 10 seconds long
-    dt_350 = Sine(350).to_audio_segment(duration=10000)
-    dt_440 = Sine(440).to_audio_segment(duration=10000)
-    dial_tone = dt_350.overlay(dt_440).apply_gain(TELEPHONY_DIALTONE_GAIN_DB)
-    save(dial_tone, "dialtone_1.wav")
-
-    # 2. Busy Tone (US): 480Hz + 620Hz, 0.5s on, 0.5s off
-    # Repeat for ~6 seconds
-    busy_on = (Sine(480).to_audio_segment(duration=500)
-               .overlay(Sine(620).to_audio_segment(duration=500))
-               .apply_gain(TELEPHONY_BUSY_GAIN_DB))
-    busy_off = AudioSegment.silent(duration=500)
-    busy_tone = (busy_on + busy_off) * 6
-    save(busy_tone, "busy_tone.wav")
-
-    # 3. Beep (1000Hz, 200ms)
-    beep = Sine(1000).to_audio_segment(duration=200).apply_gain(-3.0)
-    save(beep, "beep.wav")
-
-    # 3a. Hook pickup/hangup clicks (soft, characteristic)
-    hook_pickup = WhiteNoise().to_audio_segment(duration=40).apply_gain(-12.0).fade_out(28)
-    save(hook_pickup, "hook_pickup.wav")
-    hook_hangup = WhiteNoise().to_audio_segment(duration=30).apply_gain(-14.0).fade_out(22)
-    save(hook_hangup, "hook_hangup.wav")
-
-    # 3b. Silence (300ms)
-    silence = AudioSegment.silent(duration=300)
-    save(silence, "silence_300ms.wav")
-
-    # 4. Error Tone (gentle two-tone chime)
-    chime_1 = Sine(600).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(40)
-    chime_2 = Sine(800).to_audio_segment(duration=120).apply_gain(-15.0).fade_in(5).fade_out(60)
-    error = chime_1 + AudioSegment.silent(duration=40) + chime_2
-    save(error, "error_tone.wav")
 
 def generate_procedural_tones():
     """
@@ -1304,7 +1263,8 @@ def generate_system_sounds():
 
 
     # 3. Copy Static Files (SFX, Ringtones)
-    template_root = PROJECT_ROOT / "effects"
+    # Changed from "effects" to "static_assets" for clarity and consistency
+    template_root = PROJECT_ROOT / "static_assets"
     
     # Specific mapped files
     for src_rel, dest_rel in STATIC_COPY_MAP.items():
@@ -1319,16 +1279,19 @@ def generate_system_sounds():
         else:
             print(f"  [WARN] Source file missing: {src}")
 
-    # 3b. Copy Fonts (from Project Root)
-    fonts_src = PROJECT_ROOT / "fonts"
+    # 3b. Copy Fonts (from Static Assets)
+    fonts_src = PROJECT_ROOT / "static_assets" / "fonts"
     fonts_dest = SD_ROOT / "fonts"
+    fonts_dest.mkdir(parents=True, exist_ok=True)
     if fonts_src.exists():
-         fonts_dest.mkdir(parents=True, exist_ok=True)
          for font in fonts_src.glob("*.*"):
              dest_file = fonts_dest / font.name
+             # Force copy or check existence? Let's check existence to avoid redundant IO
              if not dest_file.exists():
                  print(f"  [COPY] Font {font.name}")
                  shutil.copy2(font, dest_file)
+    else:
+         print(f"  [WARN] Static Fonts missing: {fonts_src}")
 
     # 3c. (DISABLED) web_ui is embedded in Flash now.
     # web_ui_src = PROJECT_ROOT / "main" / "web_ui"
@@ -1342,14 +1305,15 @@ def generate_system_sounds():
     # else:
     #      print(f"  [WARN] Web UI source missing: {web_ui_src}")
 
-    # 4. Copy Ringtones (From multiple potential sources)
+    # 4. Copy Ringtones (From Static Assets)
     ringtones_dest = SD_ROOT / "ringtones"
     ringtones_dest.mkdir(parents=True, exist_ok=True)
     
-    # Check both root/ringtones and effects/ringtones
+    # Primary Source: static_assets/ringtones
+    # Secondary Source: root/ringtones (Legacy check)
     ringtone_sources = [
-        PROJECT_ROOT / "ringtones",
-        PROJECT_ROOT / "effects" / "ringtones"
+        PROJECT_ROOT / "static_assets" / "ringtones",
+        PROJECT_ROOT / "ringtones"
     ]
     
     for r_src in ringtone_sources:

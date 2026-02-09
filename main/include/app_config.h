@@ -53,10 +53,14 @@
 #define APP_PERSONA_PAUSE_MS 1500
 #define APP_DIALTONE_SILENCE_MS 1000
 #define APP_BUSY_TIMEOUT_MS 5000
-#define APP_WAV_SWITCH_DELAY_MS 10
-#define APP_OUTPUT_MUTE_DELAY_MS 20
+#define APP_WAV_SWITCH_DELAY_MS 15
+#define APP_OUTPUT_MUTE_DELAY_MS 25
 #define APP_WAV_FADE_OUT_EXTRA_MS 20
+#define APP_WAV_FADE_IN_MS 50
 #define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
+
+// Extra button (Key 5) long-press handling
+#define APP_EXTRA_BTN_DEEPSLEEP_MS 10000
 
 // Timer settings
 #define APP_TIMER_MIN_MINUTES 1
@@ -70,7 +74,7 @@
 
 // Software gain defaults
 #define APP_GAIN_DEFAULT_LEFT 0.5f
-#define APP_GAIN_DEFAULT_RIGHT 0.5f
+#define APP_GAIN_DEFAULT_RIGHT 0.6f
 #define APP_GAIN_RAMP_MS 40
 
 // Handset noise gate (reduce hiss during quiet passages)

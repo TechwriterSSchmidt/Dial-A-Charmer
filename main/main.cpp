@@ -17,6 +17,7 @@
 #include "esp_vfs_fat.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
+#include "esp_sleep.h"
 #include "audio_element.h"
 #include "audio_pipeline.h"
 #include "audio_event_iface.h"
@@ -36,6 +37,7 @@
 #include "PhonebookManager.h"
 #include "WebManager.h"
 #include "TimeManager.h" 
+#include "driver/rtc_io.h"
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 
@@ -61,7 +63,7 @@ bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
 bool g_any_digit_dialed = false;
-int64_t g_off_hook_start_ms = 0;
+uint32_t g_off_hook_start_ms = 0;
 int64_t g_last_playback_finished_ms = 0;
 bool g_last_playback_was_dialtone = false;
 bool g_timer_active = false;
@@ -93,6 +95,9 @@ bool g_pending_handset_restore = false;
 bool g_pending_handset_state = false;
 bool g_reboot_pending = false;
 int64_t g_reboot_request_time = 0;
+bool g_extra_btn_active = false;
+bool g_extra_btn_long_handled = false;
+int64_t g_extra_btn_press_start_ms = 0;
 // Alarm State
 int g_saved_volume = -1;
 
@@ -111,6 +116,10 @@ static bool g_alarm_fade_active = false;
 static float g_alarm_fade_factor = 1.0f;
 static int64_t g_alarm_fade_start_time = 0;
 
+static bool g_persona_hangup_pending = false;
+
+static int64_t g_fade_in_end_time = 0;
+
 #if APP_ENABLE_TASK_WDT
 static bool g_wdt_main_registered = false;
 static bool g_wdt_input_registered = false;
@@ -120,6 +129,8 @@ static bool g_wdt_input_registered = false;
 static void start_voice_queue(const std::vector<std::string> &files);
 void play_file(const char* path);
 void update_audio_output();
+static void handle_extra_button_short_press();
+static void enter_deep_sleep();
 
 static bool is_lang_en() {
     nvs_handle_t my_handle;
@@ -909,9 +920,14 @@ void play_file(const char* path) {
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
     g_gain_right_cur = 0.0f;
+    
+    // Apply initial fade-in ramp
+    g_gain_ramp_ms = APP_WAV_FADE_IN_MS;
+    g_fade_in_end_time = (esp_timer_get_time() / 1000) + APP_WAV_FADE_IN_MS + 100;
+
 
     // Track last playback type
-    g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dialtone_1.wav") == 0);
+    g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dial_tone.wav") == 0);
 
     // Force Output Selection immediately after run logic
     update_audio_output();
@@ -995,9 +1011,9 @@ static void play_persona_with_hook_sfx(const std::string &file) {
     if (file.empty()) return;
     g_persona_playback_active = true;
     start_voice_queue({
-        "/sdcard/system/hook_pickup.wav",
-        file,
-        "/sdcard/system/hook_hangup.wav",
+        "/sdcard/system/hook_pickup.wav", 
+        file 
+        // Hangup is handled by event loop logic after queue finishes
     });
 }
 
@@ -1029,7 +1045,7 @@ void process_phonebook_function(PhonebookEntry entry) {
         }
         else if (entry.value == "REBOOT") {
              ESP_LOGW(TAG, "Reboot requested. Playing ack...");
-             play_file(system_path("system_ready").c_str());
+             play_file("/sdcard/system/pb_reboot_en.wav");
              g_reboot_pending = true;
              g_reboot_request_time = esp_timer_get_time() / 1000;
         }
@@ -1101,6 +1117,12 @@ void on_dial_complete(int number) {
 
 void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
+    g_extra_btn_active = true;
+    g_extra_btn_long_handled = false;
+    g_extra_btn_press_start_ms = esp_timer_get_time() / 1000;
+}
+
+static void handle_extra_button_short_press() {
     if (!g_alarm_active && g_timer_active) {
         cancel_timer_with_feedback("Key 5");
         return;
@@ -1140,32 +1162,54 @@ void on_button_press() {
     }
 }
 
+static void enter_deep_sleep() {
+    ESP_LOGI(TAG, "Entering deep sleep (Key 5 long press)");
+    play_file("/sdcard/system/system_sleep_en.wav");
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    stop_playback();
+    set_pa_enable(false);
+    set_led_color(0, 0, 0);
+    
+    // Wait for button release before entering sleep
+    ESP_LOGI(TAG, "Waiting for button release before sleep...");
+    while (gpio_get_level((gpio_num_t)APP_PIN_EXTRA_BTN) == 0) {
+        #if APP_ENABLE_TASK_WDT
+        if (g_wdt_input_registered) {
+            esp_task_wdt_reset();
+        }
+        #endif
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    ESP_LOGI(TAG, "Button released, entering sleep now");
+    
+    vTaskDelay(pdMS_TO_TICKS(50));
+    esp_deep_sleep_start();
+}
+
 void on_hook_change(bool off_hook) {
     ESP_LOGI(TAG, "--- HOOK STATE: %s ---", off_hook ? "OFF HOOK (Active/Pickup)" : "ON HOOK (Idle/Hangup)");
 
     g_off_hook = off_hook;
 
-    bool timer_canceled = false;
-    if (!g_alarm_active && g_timer_active) {
-        timer_canceled = cancel_timer_with_feedback(off_hook ? "pickup" : "hangup");
-    }
-
     if (off_hook) {
         // Switch Audio Output to handset before any playback
-        if (!timer_canceled) {
-            g_output_mode_handset = true;
-            update_audio_output();
+        g_output_mode_handset = true;
+        update_audio_output();
+
+        // Boot Bug Fix: Prevent "System Ready" from overriding Dial Tone if picked up during startup
+        if (g_startup_silence_playing) {
+            ESP_LOGI(TAG, "Pickup during startup -> Cancelling startup sequence");
+            g_startup_silence_playing = false;
         }
+
         // Receiver Picked Up
         bool skip_dialtone = false;
         dial_buffer = "";
         g_line_busy = false;
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
-        g_off_hook_start_ms = esp_timer_get_time() / 1000;
-        if (timer_canceled) {
-            skip_dialtone = true;
-        }
+        g_off_hook_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
         if (g_alarm_active) {
             TimeManager::stopAlarm();
             if (g_alarm_source == ALARM_TIMER) {
@@ -1179,19 +1223,21 @@ void on_hook_change(bool off_hook) {
             } else {
                 reset_alarm_state(true);
                 g_snooze_active = false;
-                update_audio_output(); // Restore audio routing (e.g. back to handset if off-hook)
+                g_force_base_output = true;
+                update_audio_output(); 
+                play_file(system_path("alarm_stopped").c_str());
+                skip_dialtone = true;
             }
         }
         // Play dial tone
         if (!skip_dialtone) {
-            play_file("/sdcard/system/dialtone_1.wav");
+            play_file("/sdcard/system/dial_tone.wav");
         }
     } else {
         // Receiver Hung Up
-        if (!timer_canceled) {
-            stop_playback();
-            set_pa_enable(false);
-        }
+        stop_playback();
+        set_pa_enable(false);
+
         if (g_voice_menu_active) {
             g_voice_menu_active = false;
             g_voice_menu_reannounce = false;
@@ -1218,8 +1264,36 @@ void input_task(void *pvParameters) {
     }
 #endif
     while(1) {
+        // Reset ramp duration if fade-in finished
+        if (g_gain_ramp_ms != APP_GAIN_RAMP_MS) {
+            int64_t now_check = esp_timer_get_time() / 1000;
+            if (now_check > g_fade_in_end_time) {
+                g_gain_ramp_ms = APP_GAIN_RAMP_MS;
+            }
+        }
+
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
+
+        int64_t now_ms = esp_timer_get_time() / 1000;
+        bool btn_down = dial.isButtonDown();
+        if (btn_down) {
+            if (!g_extra_btn_active) {
+                g_extra_btn_active = true;
+                g_extra_btn_long_handled = false;
+                g_extra_btn_press_start_ms = now_ms;
+            }
+            if (!g_extra_btn_long_handled &&
+                (now_ms - g_extra_btn_press_start_ms) >= APP_EXTRA_BTN_DEEPSLEEP_MS) {
+                g_extra_btn_long_handled = true;
+                enter_deep_sleep();
+            }
+        } else if (g_extra_btn_active) {
+            if (!g_extra_btn_long_handled) {
+                handle_extra_button_short_press();
+            }
+            g_extra_btn_active = false;
+        }
 
         // Calculate Target Gain Base
         float target_left = APP_GAIN_DEFAULT_LEFT;
@@ -1308,10 +1382,19 @@ extern "C" void app_main(void)
         .idle_core_mask = 0,
         .trigger_panic = APP_TASK_WDT_PANIC,
     };
+    
+    // Attempt init, suppressing error log if already initialized
+    esp_log_level_set("task_wdt", ESP_LOG_NONE);
     esp_err_t wdt_err = esp_task_wdt_init(&wdt_cfg);
-    if (wdt_err != ESP_OK && wdt_err != ESP_ERR_INVALID_STATE) {
+    esp_log_level_set("task_wdt", ESP_LOG_INFO);
+
+    if (wdt_err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "TWDT already initialized, reconfiguring...");
+        esp_task_wdt_reconfigure(&wdt_cfg);
+    } else if (wdt_err != ESP_OK) {
         ESP_LOGE(TAG, "Task WDT init failed: %s", esp_err_to_name(wdt_err));
     }
+
     if (esp_task_wdt_add(NULL) == ESP_OK) {
         g_wdt_main_registered = true;
     } else {
@@ -1709,8 +1792,8 @@ extern "C" void app_main(void)
 
         // Busy tone after 5s off-hook without dialing
         if (g_off_hook && !g_voice_menu_active && !g_line_busy && !g_any_digit_dialed && dial_buffer.empty()) {
-            int64_t now = esp_timer_get_time() / 1000;
-            if ((now - g_off_hook_start_ms) > APP_BUSY_TIMEOUT_MS) {
+            uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+            if ((uint32_t)(now - g_off_hook_start_ms) > (uint32_t)APP_BUSY_TIMEOUT_MS) {
                 ESP_LOGI(TAG, "Idle timeout -> busy tone");
                 play_busy_tone();
             }
@@ -1776,7 +1859,7 @@ extern "C" void app_main(void)
                     }
                     if (g_startup_silence_playing) {
                         g_startup_silence_playing = false;
-                        play_file(system_path("system_ready").c_str());
+                        play_file("/sdcard/system/system_ready_en.wav");
                         continue;
                     }
                     if (g_timer_intro_playing && g_timer_announce_pending) {
@@ -1812,11 +1895,30 @@ extern "C" void app_main(void)
                     }
                     if (g_persona_playback_active && g_off_hook) {
                         g_persona_playback_active = false;
-                        ESP_LOGI(TAG, "Persona finished -> busy tone (pause)");
-                        vTaskDelay(pdMS_TO_TICKS(PERSONA_PAUSE_MS));
-                        play_busy_tone();
+                        ESP_LOGI(TAG, "Persona finished -> playing hangup click -> busy tone");
+                        
+                        // Play soft hangup click
+                        play_file("/sdcard/system/hook_hangup.wav");
+                        
+                        // IMPORTANT: play_file is blocking or async? 
+                        // In this loop context, play_file restarts the pipeline.
+                        // We need to wait for it to finish OR chain it naturally.
+                        // However, play_file sends a command and returns. 
+                        // The loop will receive another FINISHED event for the hangup sound.
+                        // So we need a state to know we just played the hangup sound to transition to busy tone.
+                        g_persona_hangup_pending = true; 
                         continue;
                     }
+
+                    if (g_persona_hangup_pending) {
+                        g_persona_hangup_pending = false;
+                        if (g_off_hook) {
+                             vTaskDelay(pdMS_TO_TICKS(500)); // Short pause after click before busy tone
+                             play_busy_tone();
+                        }
+                        continue;
+                    }
+
                     if (g_line_busy && g_off_hook && !g_alarm_active) {
                         play_busy_tone();
                         continue;

@@ -18,7 +18,7 @@ SYSTEM_PROMPTS_DE = {
     "system/system_ready_de.wav": "System ready.",
     "system/time_unavailable_de.wav": "Zeit-Synchronisation fehlgeschlagen.",
     "system/timer_stopped_de.wav": "Timer abgebrochen.",
-    "system/alarm_stopped_de.wav": "Alarm abgebrochen.",
+    "system/alarm_stopped_de.wav": "Na endlich. Ich dachte schon, du stehst nie auf.",
     "system/reindex_warning_de.wav": "Bitte warten. Inhalte werden neu indexiert.",
     "system/alarm_active_de.wav": "Alarm aktiv.",
     "system/alarm_confirm_de.wav": "Alarm bestätigt.",
