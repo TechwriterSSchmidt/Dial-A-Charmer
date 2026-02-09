@@ -131,7 +131,6 @@ void play_file(const char* path);
 void update_audio_output();
 static void handle_extra_button_short_press();
 static void enter_deep_sleep();
-static void configure_extra_btn_wakeup();
 
 static bool is_lang_en() {
     nvs_handle_t my_handle;
@@ -1163,14 +1162,6 @@ static void handle_extra_button_short_press() {
     }
 }
 
-static void configure_extra_btn_wakeup() {
-    if (APP_PIN_EXTRA_BTN < 0) return;
-    rtc_gpio_init((gpio_num_t)APP_PIN_EXTRA_BTN);
-    rtc_gpio_set_direction((gpio_num_t)APP_PIN_EXTRA_BTN, RTC_GPIO_MODE_INPUT_ONLY);
-    rtc_gpio_pulldown_dis((gpio_num_t)APP_PIN_EXTRA_BTN);
-    rtc_gpio_pullup_en((gpio_num_t)APP_PIN_EXTRA_BTN);
-}
-
 static void enter_deep_sleep() {
     ESP_LOGI(TAG, "Entering deep sleep (Key 5 long press)");
     play_file("/sdcard/system/system_sleep_en.wav");
@@ -1181,7 +1172,7 @@ static void enter_deep_sleep() {
     
     // Wait for button release before entering sleep
     ESP_LOGI(TAG, "Waiting for button release before sleep...");
-    while (dial.isButtonDown()) {
+    while (gpio_get_level((gpio_num_t)APP_PIN_EXTRA_BTN) == 0) {
         #if APP_ENABLE_TASK_WDT
         if (g_wdt_input_registered) {
             esp_task_wdt_reset();
@@ -1191,8 +1182,6 @@ static void enter_deep_sleep() {
     }
     ESP_LOGI(TAG, "Button released, entering sleep now");
     
-    configure_extra_btn_wakeup();
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)APP_PIN_EXTRA_BTN, 0);
     vTaskDelay(pdMS_TO_TICKS(50));
     esp_deep_sleep_start();
 }
@@ -1377,24 +1366,6 @@ extern "C" void app_main(void)
         err = nvs_flash_init();
     }
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
-
-    if (APP_PIN_EXTRA_BTN >= 0) {
-        configure_extra_btn_wakeup();
-        esp_sleep_wakeup_cause_t wake_cause = esp_sleep_get_wakeup_cause();
-        if (wake_cause == ESP_SLEEP_WAKEUP_EXT0) {
-            ESP_LOGI(TAG, "Wakeup via Key 5, waiting for %d ms hold", APP_EXTRA_BTN_WAKE_MS);
-            int64_t start_ms = esp_timer_get_time() / 1000;
-            while ((esp_timer_get_time() / 1000) - start_ms < APP_EXTRA_BTN_WAKE_MS) {
-                int level = rtc_gpio_get_level((gpio_num_t)APP_PIN_EXTRA_BTN);
-                if (level != 0) {
-                    ESP_LOGI(TAG, "Key 5 released early, returning to deep sleep");
-                    esp_sleep_enable_ext0_wakeup((gpio_num_t)APP_PIN_EXTRA_BTN, 0);
-                    esp_deep_sleep_start();
-                }
-                vTaskDelay(pdMS_TO_TICKS(50));
-            }
-        }
-    }
 
     g_audio_mutex = xSemaphoreCreateMutex();
     if (!g_audio_mutex) {
