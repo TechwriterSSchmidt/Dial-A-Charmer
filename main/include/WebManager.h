@@ -6,6 +6,7 @@ class WebManager {
 public:
     void begin();
     void loop(); // Process mDNS queries etc.
+    void startAPMode();
 
 private:
     httpd_handle_t server = NULL;
