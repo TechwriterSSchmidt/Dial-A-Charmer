@@ -59,6 +59,10 @@
 #define APP_WAV_FADE_IN_MS 50
 #define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
 
+// Extra button (Key 5) long-press handling
+#define APP_EXTRA_BTN_DEEPSLEEP_MS 10000
+#define APP_EXTRA_BTN_WAKE_MS 3000
+
 // Timer settings
 #define APP_TIMER_MIN_MINUTES 1
 #define APP_TIMER_MAX_MINUTES 500

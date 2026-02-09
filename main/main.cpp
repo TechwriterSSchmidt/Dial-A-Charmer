@@ -17,6 +17,7 @@
 #include "esp_vfs_fat.h"
 #include "nvs_flash.h"
 #include "esp_task_wdt.h"
+#include "esp_sleep.h"
 #include "audio_element.h"
 #include "audio_pipeline.h"
 #include "audio_event_iface.h"
@@ -36,6 +37,7 @@
 #include "PhonebookManager.h"
 #include "WebManager.h"
 #include "TimeManager.h" 
+#include "driver/rtc_io.h"
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 
@@ -93,6 +95,9 @@ bool g_pending_handset_restore = false;
 bool g_pending_handset_state = false;
 bool g_reboot_pending = false;
 int64_t g_reboot_request_time = 0;
+bool g_extra_btn_active = false;
+bool g_extra_btn_long_handled = false;
+int64_t g_extra_btn_press_start_ms = 0;
 // Alarm State
 int g_saved_volume = -1;
 
@@ -124,6 +129,9 @@ static bool g_wdt_input_registered = false;
 static void start_voice_queue(const std::vector<std::string> &files);
 void play_file(const char* path);
 void update_audio_output();
+static void handle_extra_button_short_press();
+static void enter_deep_sleep();
+static void configure_extra_btn_wakeup();
 
 static bool is_lang_en() {
     nvs_handle_t my_handle;
@@ -1110,6 +1118,12 @@ void on_dial_complete(int number) {
 
 void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
+    g_extra_btn_active = true;
+    g_extra_btn_long_handled = false;
+    g_extra_btn_press_start_ms = esp_timer_get_time() / 1000;
+}
+
+static void handle_extra_button_short_press() {
     if (!g_alarm_active && g_timer_active) {
         cancel_timer_with_feedback("Key 5");
         return;
@@ -1147,6 +1161,25 @@ void on_button_press() {
         // g_timer_intro_playing = false;
         // So calling it here is SAFE and SILENT.
     }
+}
+
+static void configure_extra_btn_wakeup() {
+    if (APP_PIN_EXTRA_BTN < 0) return;
+    rtc_gpio_init((gpio_num_t)APP_PIN_EXTRA_BTN);
+    rtc_gpio_set_direction((gpio_num_t)APP_PIN_EXTRA_BTN, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pulldown_dis((gpio_num_t)APP_PIN_EXTRA_BTN);
+    rtc_gpio_pullup_en((gpio_num_t)APP_PIN_EXTRA_BTN);
+}
+
+static void enter_deep_sleep() {
+    ESP_LOGI(TAG, "Entering deep sleep (Key 5 long press)");
+    stop_playback();
+    set_pa_enable(false);
+    set_led_color(0, 0, 0);
+    configure_extra_btn_wakeup();
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)APP_PIN_EXTRA_BTN, 0);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    esp_deep_sleep_start();
 }
 
 void on_hook_change(bool off_hook) {
@@ -1238,6 +1271,26 @@ void input_task(void *pvParameters) {
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
 
+        int64_t now_ms = esp_timer_get_time() / 1000;
+        bool btn_down = dial.isButtonDown();
+        if (btn_down) {
+            if (!g_extra_btn_active) {
+                g_extra_btn_active = true;
+                g_extra_btn_long_handled = false;
+                g_extra_btn_press_start_ms = now_ms;
+            }
+            if (!g_extra_btn_long_handled &&
+                (now_ms - g_extra_btn_press_start_ms) >= APP_EXTRA_BTN_DEEPSLEEP_MS) {
+                g_extra_btn_long_handled = true;
+                enter_deep_sleep();
+            }
+        } else if (g_extra_btn_active) {
+            if (!g_extra_btn_long_handled) {
+                handle_extra_button_short_press();
+            }
+            g_extra_btn_active = false;
+        }
+
         // Calculate Target Gain Base
         float target_left = APP_GAIN_DEFAULT_LEFT;
         float target_right = APP_GAIN_DEFAULT_RIGHT;
@@ -1309,6 +1362,24 @@ extern "C" void app_main(void)
         err = nvs_flash_init();
     }
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
+
+    if (APP_PIN_EXTRA_BTN >= 0) {
+        configure_extra_btn_wakeup();
+        esp_sleep_wakeup_cause_t wake_cause = esp_sleep_get_wakeup_cause();
+        if (wake_cause == ESP_SLEEP_WAKEUP_EXT0) {
+            ESP_LOGI(TAG, "Wakeup via Key 5, waiting for %d ms hold", APP_EXTRA_BTN_WAKE_MS);
+            int64_t start_ms = esp_timer_get_time() / 1000;
+            while ((esp_timer_get_time() / 1000) - start_ms < APP_EXTRA_BTN_WAKE_MS) {
+                int level = rtc_gpio_get_level((gpio_num_t)APP_PIN_EXTRA_BTN);
+                if (level != 0) {
+                    ESP_LOGI(TAG, "Key 5 released early, returning to deep sleep");
+                    esp_sleep_enable_ext0_wakeup((gpio_num_t)APP_PIN_EXTRA_BTN, 0);
+                    esp_deep_sleep_start();
+                }
+                vTaskDelay(pdMS_TO_TICKS(50));
+            }
+        }
+    }
 
     g_audio_mutex = xSemaphoreCreateMutex();
     if (!g_audio_mutex) {
