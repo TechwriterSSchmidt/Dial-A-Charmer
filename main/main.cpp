@@ -1382,10 +1382,19 @@ extern "C" void app_main(void)
         .idle_core_mask = 0,
         .trigger_panic = APP_TASK_WDT_PANIC,
     };
+    
+    // Attempt init, suppressing error log if already initialized
+    esp_log_level_set("task_wdt", ESP_LOG_NONE);
     esp_err_t wdt_err = esp_task_wdt_init(&wdt_cfg);
-    if (wdt_err != ESP_OK && wdt_err != ESP_ERR_INVALID_STATE) {
+    esp_log_level_set("task_wdt", ESP_LOG_INFO);
+
+    if (wdt_err == ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "TWDT already initialized, reconfiguring...");
+        esp_task_wdt_reconfigure(&wdt_cfg);
+    } else if (wdt_err != ESP_OK) {
         ESP_LOGE(TAG, "Task WDT init failed: %s", esp_err_to_name(wdt_err));
     }
+
     if (esp_task_wdt_add(NULL) == ESP_OK) {
         g_wdt_main_registered = true;
     } else {
