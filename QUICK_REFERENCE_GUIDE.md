@@ -1,9 +1,10 @@
 # Quick Reference Guide - Dial-A-Charmer
 
 ## 📞 How to Use
+
 1. **Active Mode (Make a Call):**
    - Lift the receiver. Wait for the **Dial Tone**.
-   - **Important:** specific content must be dialed within **5 seconds**. 
+   - **Important:** specific content must be dialed within **5 seconds**.
    - *Behavior:* If no number is dialed, a **Busy Signal** plays. Hang up to reset.
    - **Dial 1-5:** Persona Playlists (Configurable).
    - **Dial 6:** Random Mix (non-repeating until all tracks played).
@@ -16,14 +17,16 @@
 
 3. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
-   - **Snooze:** Lift receiver but **DO NOT** hang up (put it aside). 
+   - **Snooze:** Lift receiver but **DO NOT** hang up (put it aside).
    - *Snooze duration is configurable in Web Interface (Default: 9 min).*
 
 4. **Voice Menu & Admin:**
    - **Dial 9:** System Menu Instructions.
 
 ## 📂 Content Management (SD Card)
+
 Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` script automatically creates the required structure:
+
 ```text
 /
 ├── system/
@@ -43,14 +46,17 @@ Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` scr
 ├── persona_05/             (Persona 5 - Dial 5, Fortune)
 │   └── fortune.txt         (Enables Fortune mode detection)
 ```
+
 *Note: Run `python utils/generate_sd_content.py` to generate system assets.*
 
 ## ⚙️ Web Configuration
+
 Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your local network IP to access settings.
 
-👉 **http://dial-a-charmer.local** (Fallback: use the IP announced via Dial `8` if mDNS fails)
+👉 <http://dial-a-charmer.local> (Fallback: use the IP announced via Dial `8` if mDNS fails)
 
 **Basic Settings (Home Page):**
+
 - **Language**: German/English.
 - **Volume**: Separate sliders for Handset (Voice) and Ringer (Alarm).
 - **Ringtones**: Select and Preview from 5 distinct styles.
@@ -59,6 +65,7 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 - **LED Brightness**: Day/Night levels.
 
 **Advanced Settings (/advanced):**
+
 - **WiFi**: Scan and connect logic.
 - **Timezone**: Set offset (e.g. UTC+1 Zurich).
 - **Half-Duplex**: Enhanced echo cancellation for AI features.

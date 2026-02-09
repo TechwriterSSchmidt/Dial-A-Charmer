@@ -5,7 +5,7 @@ import wave
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-SD_TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "sd_card_template")
+SD_TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "utils")
 
 FFMPEG_CMD = "ffmpeg"
 SAMPLE_RATE = 44100

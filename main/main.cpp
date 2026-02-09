@@ -1152,17 +1152,11 @@ void on_hook_change(bool off_hook) {
 
     g_off_hook = off_hook;
 
-    bool timer_canceled = false;
-    if (!g_alarm_active && g_timer_active) {
-        timer_canceled = cancel_timer_with_feedback(off_hook ? "pickup" : "hangup");
-    }
-
     if (off_hook) {
         // Switch Audio Output to handset before any playback
-        if (!timer_canceled) {
-            g_output_mode_handset = true;
-            update_audio_output();
-        }
+        g_output_mode_handset = true;
+        update_audio_output();
+
         // Receiver Picked Up
         bool skip_dialtone = false;
         dial_buffer = "";
@@ -1170,9 +1164,7 @@ void on_hook_change(bool off_hook) {
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
         g_off_hook_start_ms = esp_timer_get_time() / 1000;
-        if (timer_canceled) {
-            skip_dialtone = true;
-        }
+
         if (g_alarm_active) {
             TimeManager::stopAlarm();
             if (g_alarm_source == ALARM_TIMER) {
@@ -1195,10 +1187,9 @@ void on_hook_change(bool off_hook) {
         }
     } else {
         // Receiver Hung Up
-        if (!timer_canceled) {
-            stop_playback();
-            set_pa_enable(false);
-        }
+        stop_playback();
+        set_pa_enable(false);
+
         if (g_voice_menu_active) {
             g_voice_menu_active = false;
             g_voice_menu_reannounce = false;
