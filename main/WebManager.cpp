@@ -34,7 +34,7 @@ static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
 
 static const size_t LOG_LINE_COUNT = 20;
-static const size_t LOG_LINE_MAX = 192;
+static const size_t LOG_LINE_MAX = 256;
 
 static char s_log_lines[LOG_LINE_COUNT][LOG_LINE_MAX];
 static size_t s_log_head = 0;
@@ -250,10 +250,15 @@ static void strip_ansi(const char *src, char *dst, size_t dst_size) {
     }
     size_t di = 0;
     for (size_t i = 0; src[i] != '\0' && di + 1 < dst_size; ++i) {
+        // ANSI CSI sequence detection: \x1b [ ... [0x40-0x7E]
         if (src[i] == '\x1b' && src[i + 1] == '[') {
-            i += 2;
-            while (src[i] != '\0' && src[i] != 'm') {
-                ++i;
+            size_t j = i + 2;
+            while (src[j] != '\0') {
+                if (src[j] >= 0x40 && src[j] <= 0x7E) {
+                    i = j; // Found terminator, update i to skip sequence
+                    break;
+                }
+                j++;
             }
             continue;
         }
