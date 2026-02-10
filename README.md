@@ -147,7 +147,7 @@ This tool splits large, long audio files (e.g. combined recordings) into individ
 *   **Usage:** `python utils/split_audio.py -o my_output_folder (input_files)`
 *   **Function:** Detects silence gaps >1000ms and chops the file. Resulting files (`001.mp3`, `002.mp3`...) are ready for `persona_XX` folders.
 
-## Status Indication
+## Status Indication (To-Do)
 
 Single WS2812B LED provides visual feedback depending on the system state.
 
@@ -199,6 +199,13 @@ You can enable buffered SD logging during testing (see `app_config.h`). Logs are
 *   `/sdcard/logs/app.log`
 
 Logging is buffered and flushed periodically to reduce interference with audio playback.
+
+## Planned Improvements
+* Loud noise on reboot > need to ensure that amps are not powered during reboot?
+* Alarm-off text output is currently played over handset > should be switched to base speaker + instead of using a specific announcement, we should play random messages and make this feature switchable for each daily alarm
+* WIFI-bug ... system seems to hang when not connected to WIFI while using captive portal on iPhone to make settings
+* IP-Address should be displayed in Captive Portal and on Configuration page of the web-ui
+* 
 
 ## License
 
