@@ -42,6 +42,7 @@ const TEXT = {
         loading_alarms: "Wecker werden geladen...",
         minutes_short: "min",
         wifi_network: "WLAN Netzwerk",
+        ip_address: "IP-Adresse",
         scan: "Scannen",
         volume: "Lautstärke",
         base_speaker_timer: "Lautsprecher und Timer",
@@ -95,6 +96,7 @@ const TEXT = {
         loading_alarms: "Loading alarms...",
         minutes_short: "min",
         wifi_network: "WiFi Network",
+        ip_address: "IP Address",
         scan: "Scan",
         volume: "Volume",
         base_speaker_timer: "Base Speaker and Timer",
@@ -688,10 +690,11 @@ function renderAdvanced() {
               <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                  <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
 
-                  <div style="display:flex; flex-direction:column; gap:6px;">
-                     <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')}</div>
-                     <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
-                  </div>
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')}</div>
+                             <div class="wifi-ssid-text" style="margin:2px 0 0; color:#aaa;">${state.settings.ip || '--'}</div>
+                            <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
+                        </div>
             </div>
 
             <!-- CONSOLE PANEL -->
