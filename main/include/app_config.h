@@ -94,6 +94,13 @@
 #define APP_NIGHTMODE_LED_PERCENT 5
 #define APP_NIGHTMODE_VOLUME_PERCENT 50
 
+// LED signal lamp defaults
+#define APP_LED_DEFAULT_ENABLED 1
+#define APP_LED_DAY_PERCENT 100
+#define APP_LED_NIGHT_PERCENT 10
+#define APP_LED_DAY_START_HOUR 7
+#define APP_LED_NIGHT_START_HOUR 22
+
 // Phonebook default numbers (max 3 digits)
 #define APP_PB_NUM_PERSONA_1 "1"
 #define APP_PB_NUM_PERSONA_2 "2"

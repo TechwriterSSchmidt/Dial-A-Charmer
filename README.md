@@ -45,6 +45,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | :--- | :--- |
 | **Timekeeping** | Syncs via **NTP** with optional **DS3231 RTC** fallback (invalid RTC data is ignored until SNTP sync). |
 | **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
+| **Night Mode** | Toggles reduced output. System prompts like reboot/ready/hangup are muted while night mode is active. |
 
 ## Phonebook Defaults
 
@@ -98,6 +99,13 @@ Once the device is connected to your WiFi network (or you are connected to its A
 
 (Requires a modern browser on Android, iOS, Windows, or macOS. If mDNS fails, use the IP announced via the Voice Menu: Dial `0`, then `4` for Systemstatus.)
 
+### Signallampe Settings (Web UI)
+
+The Configuration page includes a **Signallampe** card (below **Timer-Ton**) with:
+- LED enable/disable toggle
+- Day and Night brightness sliders (percent)
+- Day/Night start hour selection (0-23)
+
 ## Project Structure
 
 *   **`main/`**: Main firmware C++ source code.
@@ -147,9 +155,11 @@ This tool splits large, long audio files (e.g. combined recordings) into individ
 *   **Usage:** `python utils/split_audio.py -o my_output_folder (input_files)`
 *   **Function:** Detects silence gaps >1000ms and chops the file. Resulting files (`001.mp3`, `002.mp3`...) are ready for `persona_XX` folders.
 
-## Status Indication (To-Do)
+## Status Indication
 
 Single WS2812B LED provides visual feedback depending on the system state.
+
+Brightness and schedule are configurable in the **Signallampe** card (Web UI).
 
 | State | Color/Effect | Meaning |
 | :--- | :--- | :--- |
@@ -171,6 +181,8 @@ The system uses specific WAV files in `/system/` for feedback:
 | `busy_tone.wav` | Call ended or invalid state. |
 | `hook_pickup.wav` | Short pickup click before persona playback. |
 | `hook_hangup.wav` | Short hangup click after persona playback. |
+
+Note: During **Night Mode**, selected system sounds (e.g., reboot/ready/hangup prompts) are suppressed to avoid waking the user.
 
 ## Getting Started
 

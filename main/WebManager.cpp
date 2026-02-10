@@ -624,6 +624,25 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     }
 
     cJSON_AddStringToObject(root, "timer_ringtone", ringtone_name.c_str());
+
+    // LED signal lamp settings
+    uint8_t led_enabled = APP_LED_DEFAULT_ENABLED ? 1 : 0;
+    uint8_t led_day_pct = APP_LED_DAY_PERCENT;
+    uint8_t led_night_pct = APP_LED_NIGHT_PERCENT;
+    uint8_t led_day_start = APP_LED_DAY_START_HOUR;
+    uint8_t led_night_start = APP_LED_NIGHT_START_HOUR;
+    if (err == ESP_OK) {
+        nvs_get_u8(my_handle, "led_enabled", &led_enabled);
+        nvs_get_u8(my_handle, "led_day_pct", &led_day_pct);
+        nvs_get_u8(my_handle, "led_night_pct", &led_night_pct);
+        nvs_get_u8(my_handle, "led_day_start", &led_day_start);
+        nvs_get_u8(my_handle, "led_night_start", &led_night_start);
+    }
+    cJSON_AddBoolToObject(root, "led_enabled", led_enabled != 0);
+    cJSON_AddNumberToObject(root, "led_day_pct", led_day_pct);
+    cJSON_AddNumberToObject(root, "led_night_pct", led_night_pct);
+    cJSON_AddNumberToObject(root, "led_day_start", led_day_start);
+    cJSON_AddNumberToObject(root, "led_night_start", led_night_start);
     
     // --- Time & Timezone ---
     struct tm now = TimeManager::getCurrentTime();
@@ -729,6 +748,45 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
             nvs_set_str(my_handle, "timer_ringtone", item->valuestring);
             ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
+        }
+
+        item = cJSON_GetObjectItem(root, "led_enabled");
+        if (cJSON_IsBool(item)) {
+            nvs_set_u8(my_handle, "led_enabled", cJSON_IsTrue(item) ? 1 : 0);
+        } else if (cJSON_IsNumber(item)) {
+            nvs_set_u8(my_handle, "led_enabled", item->valueint ? 1 : 0);
+        }
+
+        item = cJSON_GetObjectItem(root, "led_day_pct");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 100) v = 100;
+            nvs_set_u8(my_handle, "led_day_pct", (uint8_t)v);
+        }
+
+        item = cJSON_GetObjectItem(root, "led_night_pct");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 100) v = 100;
+            nvs_set_u8(my_handle, "led_night_pct", (uint8_t)v);
+        }
+
+        item = cJSON_GetObjectItem(root, "led_day_start");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 23) v = 23;
+            nvs_set_u8(my_handle, "led_day_start", (uint8_t)v);
+        }
+
+        item = cJSON_GetObjectItem(root, "led_night_start");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 23) v = 23;
+            nvs_set_u8(my_handle, "led_night_start", (uint8_t)v);
         }
 
         // Timezone configuration

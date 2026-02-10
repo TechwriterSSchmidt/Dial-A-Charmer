@@ -84,6 +84,12 @@ int64_t g_night_mode_end_ms = 0;
 uint8_t g_led_r = 50;
 uint8_t g_led_g = 20;
 uint8_t g_led_b = 0;
+bool g_led_enabled = (APP_LED_DEFAULT_ENABLED != 0);
+uint8_t g_led_day_percent = APP_LED_DAY_PERCENT;
+uint8_t g_led_night_percent = APP_LED_NIGHT_PERCENT;
+uint8_t g_led_day_start_hour = APP_LED_DAY_START_HOUR;
+uint8_t g_led_night_start_hour = APP_LED_NIGHT_START_HOUR;
+bool g_led_schedule_night = false;
 uint8_t g_night_prev_r = 50;
 uint8_t g_night_prev_g = 20;
 uint8_t g_night_prev_b = 0;
@@ -157,6 +163,35 @@ static std::string system_path(const char *base) {
     return std::string("/sdcard/system/") + base + "_" + lang_code() + ".wav";
 }
 
+static bool is_night_quiet_system_sound(const char *path) {
+    if (!g_night_mode_active || !path) return false;
+    const char *prefix = "/sdcard/system/";
+    size_t prefix_len = strlen(prefix);
+    if (strncmp(path, prefix, prefix_len) != 0) return false;
+
+    std::string base = path + prefix_len;
+    if (base.size() > 4 && base.rfind(".wav") == base.size() - 4) {
+        base = base.substr(0, base.size() - 4);
+    }
+    if (base.size() > 3) {
+        const std::string suffix = base.substr(base.size() - 3);
+        if (suffix == "_en" || suffix == "_de") {
+            base = base.substr(0, base.size() - 3);
+        }
+    }
+
+    return (base == "system_ready" ||
+            base == "pb_reboot" ||
+            base == "system_sleep" ||
+            base == "hook_hangup" ||
+            base == "busy_tone" ||
+            base == "timer_set" ||
+            base == "timer_deleted" ||
+            base == "timer_invalid" ||
+            base == "number_invalid" ||
+            base == "error_msg");
+}
+
 static std::string time_path(const char *name) {
     return std::string("/sdcard/time/") + lang_code() + "/" + name;
 }
@@ -209,6 +244,48 @@ static void set_led_color(uint8_t r, uint8_t g, uint8_t b) {
     }
 }
 
+static void load_led_settings_from_nvs() {
+    nvs_handle_t my_handle;
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) != ESP_OK) {
+        return;
+    }
+
+    uint8_t u8 = 0;
+    if (nvs_get_u8(my_handle, "led_enabled", &u8) == ESP_OK) {
+        g_led_enabled = (u8 != 0);
+    }
+    if (nvs_get_u8(my_handle, "led_day_pct", &u8) == ESP_OK) {
+        g_led_day_percent = (u8 > 100) ? 100 : u8;
+    }
+    if (nvs_get_u8(my_handle, "led_night_pct", &u8) == ESP_OK) {
+        g_led_night_percent = (u8 > 100) ? 100 : u8;
+    }
+    if (nvs_get_u8(my_handle, "led_day_start", &u8) == ESP_OK) {
+        g_led_day_start_hour = (u8 > 23) ? 23 : u8;
+    }
+    if (nvs_get_u8(my_handle, "led_night_start", &u8) == ESP_OK) {
+        g_led_night_start_hour = (u8 > 23) ? 23 : u8;
+    }
+
+    nvs_close(my_handle);
+}
+
+static bool is_led_night_hour(int hour) {
+    if (g_led_day_start_hour == g_led_night_start_hour) return false;
+    if (g_led_day_start_hour < g_led_night_start_hour) {
+        return (hour < g_led_day_start_hour) || (hour >= g_led_night_start_hour);
+    }
+    return (hour >= g_led_night_start_hour) && (hour < g_led_day_start_hour);
+}
+
+static uint8_t get_led_active_percent() {
+    uint8_t pct = g_led_schedule_night ? g_led_night_percent : g_led_day_percent;
+    if (g_night_mode_active) {
+        pct = g_led_night_percent;
+    }
+    return (pct > 100) ? 100 : pct;
+}
+
 enum LedState {
     LED_BOOTING,
     LED_IDLE,
@@ -237,11 +314,14 @@ static void set_pa_enable(bool enable) {
 }
 
 static void apply_led_color(uint8_t r, uint8_t g, uint8_t b) {
-    if (g_night_mode_active) {
-        r = (uint8_t)((r * APP_NIGHTMODE_LED_PERCENT) / 100);
-        g = (uint8_t)((g * APP_NIGHTMODE_LED_PERCENT) / 100);
-        b = (uint8_t)((b * APP_NIGHTMODE_LED_PERCENT) / 100);
+    if (!g_led_enabled) {
+        set_led_color(0, 0, 0);
+        return;
     }
+    uint8_t pct = get_led_active_percent();
+    r = (uint8_t)((r * pct) / 100);
+    g = (uint8_t)((g * pct) / 100);
+    b = (uint8_t)((b * pct) / 100);
     set_led_color(r, g, b);
 }
 
@@ -259,8 +339,21 @@ static void led_task(void *pvParameters) {
     int error_phase = 0;
     int error_ticks = 0;
     const int tick_ms = 50;
+    int64_t last_settings_ms = 0;
+    int64_t last_mode_ms = 0;
 
     while (true) {
+        int64_t now_ms = esp_timer_get_time() / 1000;
+        if ((now_ms - last_settings_ms) > 2000) {
+            load_led_settings_from_nvs();
+            last_settings_ms = now_ms;
+        }
+        if ((now_ms - last_mode_ms) > 1000) {
+            struct tm now_tm = TimeManager::getCurrentTime();
+            g_led_schedule_night = is_led_night_hour(now_tm.tm_hour);
+            last_mode_ms = now_ms;
+        }
+
         LedState state = get_led_state();
 
         if (state == LED_BOOTING) {
@@ -342,13 +435,10 @@ static void set_night_mode(bool enable) {
         g_night_prev_r = g_led_r;
         g_night_prev_g = g_led_g;
         g_night_prev_b = g_led_b;
-        uint8_t r = (uint8_t)((g_night_prev_r * APP_NIGHTMODE_LED_PERCENT) / 100);
-        uint8_t g = (uint8_t)((g_night_prev_g * APP_NIGHTMODE_LED_PERCENT) / 100);
-        uint8_t b = (uint8_t)((g_night_prev_b * APP_NIGHTMODE_LED_PERCENT) / 100);
-        set_led_color(r, g, b);
+        apply_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
     } else {
         g_night_mode_active = false;
-        set_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
+        apply_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
     }
     update_audio_output();
 }
@@ -900,6 +990,11 @@ void play_file(const char* path) {
         return;
     }
 
+    if (is_night_quiet_system_sound(path)) {
+        ESP_LOGI(TAG, "Night mode active: suppressing system sound %s", path);
+        return;
+    }
+
     if (pipeline == NULL) {
         ESP_LOGE(TAG, "Audio Pipeline not initialized yet, cannot play: %s", path);
         return;
@@ -1439,6 +1534,7 @@ extern "C" void app_main(void)
     // --- WS2812 Init ---
     #ifdef APP_PIN_LED
     ESP_LOGI(TAG, "Initializing WS2812 LED on GPIO %d", APP_PIN_LED);
+    load_led_settings_from_nvs();
     led_strip_config_t strip_config = {
         .strip_gpio_num = APP_PIN_LED,
         .max_leds = 1,
@@ -1458,7 +1554,7 @@ extern "C" void app_main(void)
     };
     // Note: ensure espressif/led_strip component is added
     if (led_strip_new_rmt_device(&strip_config, &rmt_config, &g_led_strip) == ESP_OK) {
-        set_led_color(50, 20, 0); // Orange startup
+        apply_led_color(50, 20, 0); // Orange startup
     } else {
         ESP_LOGE(TAG, "Failed to init WS2812!");
     }

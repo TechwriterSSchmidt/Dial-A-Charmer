@@ -47,6 +47,12 @@ const TEXT = {
         base_speaker_timer: "Lautsprecher und Timer",
         handset: "Telefonhörer",
         timer_sound: "Timer-Ton",
+        signal_lamp: "Signallampe",
+        led_enabled: "LED Aktiv",
+        day_brightness: "Tagmodus Helligkeit",
+        night_brightness: "Nachtmodus Helligkeit",
+        day_start: "Tagmodus Start",
+        night_start: "Nachtmodus Start",
         no_net: "Kein Netz",
         scanning_wifi: "WLAN wird gesucht...",
         please_wait: "Bitte warten",
@@ -94,6 +100,12 @@ const TEXT = {
         base_speaker_timer: "Base Speaker and Timer",
         handset: "Handset",
         timer_sound: "Timer Sound",
+        signal_lamp: "Signal Lamp",
+        led_enabled: "LED Enabled",
+        day_brightness: "Day Brightness",
+        night_brightness: "Night Brightness",
+        day_start: "Day Start",
+        night_start: "Night Start",
         no_net: "No Net",
         scanning_wifi: "Scanning WiFi Networks...",
         please_wait: "Please wait",
@@ -126,6 +138,16 @@ const TIMEZONES = [
     { name: "Asia/Tokyo", val: "JST-9" },
     { name: "Australia/Sydney", val: "AEST-10AEDT,M10.1.0,M4.1.0/3" }
 ];
+
+function renderHourOptions(selectedHour) {
+    let opts = '';
+    for (let h = 0; h < 24; h++) {
+        const sel = (h === selectedHour) ? 'selected' : '';
+        const label = `${String(h).padStart(2, '0')}:00`;
+        opts += `<option value="${h}" ${sel}>${label}</option>`;
+    }
+    return opts;
+}
 
 const API = {
     getSettings: () => fetch('/api/settings').then(r => r.json()),
@@ -632,6 +654,11 @@ window.saveAlarms = () => {
 function renderAdvanced() {
      const currentTime = state.settings.current_time || "--";
      const currentTz = state.settings.timezone || "";
+    const ledEnabled = (state.settings.led_enabled === undefined) ? true : !!state.settings.led_enabled;
+    const ledDayPct = (state.settings.led_day_pct === undefined) ? 100 : state.settings.led_day_pct;
+    const ledNightPct = (state.settings.led_night_pct === undefined) ? 10 : state.settings.led_night_pct;
+    const ledDayStart = (state.settings.led_day_start === undefined) ? 7 : state.settings.led_day_start;
+    const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
      
      let tzOptions = "";
      TIMEZONES.forEach(tz => {
@@ -732,6 +759,51 @@ function renderAdvanced() {
                 </div>
             </div>
 
+            <!-- SIGNAL LAMP PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('signal_lamp')}</h4>
+
+                <div style="display:flex; align-items:center; gap:10px; margin:6px 0 12px;">
+                    <label class="switch" title="${t('led_enabled')}">
+                        <input type="checkbox" id="led-enabled" ${ledEnabled ? 'checked' : ''} onchange="saveLampSettings({led_enabled: this.checked})">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="alarm-label">${t('led_enabled')}</span>
+                </div>
+
+                <div style="margin-top:6px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('day_brightness')}</label>
+                        <span id="led-day-disp" style="color:#d4af37; font-weight:bold;">${ledDayPct}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="${ledDayPct}"
+                           oninput="document.getElementById('led-day-disp').innerText=this.value+'%'"
+                           onchange="saveLampSettings({led_day_pct: parseInt(this.value)})" style="width:100%"/>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('day_start')}</label>
+                        <select id="led-day-start" onchange="saveLampSettings({led_day_start: parseInt(this.value)})" style="padding:6px; width:120px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem;">
+                            ${renderHourOptions(ledDayStart)}
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-top:12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('night_brightness')}</label>
+                        <span id="led-night-disp" style="color:#d4af37; font-weight:bold;">${ledNightPct}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="${ledNightPct}"
+                           oninput="document.getElementById('led-night-disp').innerText=this.value+'%'"
+                           onchange="saveLampSettings({led_night_pct: parseInt(this.value)})" style="width:100%"/>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('night_start')}</label>
+                        <select id="led-night-start" onchange="saveLampSettings({led_night_start: parseInt(this.value)})" style="padding:6px; width:120px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem;">
+                            ${renderHourOptions(ledNightStart)}
+                        </select>
+                    </div>
+                </div>
+            </div>
+
         </div>
     `;
 }
@@ -764,6 +836,12 @@ window.saveTimerRingtone = (filename) => {
     if (!filename) return;
     state.settings.timer_ringtone = filename;
     API.saveSettings({timer_ringtone: filename});
+};
+
+window.saveLampSettings = (patch) => {
+    if (!patch || typeof patch !== 'object') return;
+    Object.assign(state.settings, patch);
+    API.saveSettings(patch);
 };
 
 function renderSetup() {
