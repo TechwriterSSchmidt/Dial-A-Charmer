@@ -31,6 +31,7 @@ const TEXT = {
         save: "Speichern",
         active: "Aktiv", // New
         fade: "Ansteigend", // New
+        msg: "Mit Spruch",
         snooze: "Schlummerzeit", // New
         alarm: "Wecker",
         datetime: "Datum & Zeit",
@@ -77,6 +78,7 @@ const TEXT = {
         save: "Save",
         active: "Active", // New
         fade: "Rising Volume", // New
+        msg: "With message",
         snooze: "Snooze Time", // New
         alarm: "Alarm",
         datetime: "Date & Time",
@@ -481,6 +483,7 @@ function renderSettings() {
             const timeVal = `${hh}:${mm}`;
             const checked = a.en ? "checked" : "";
             const rampChecked = a.rmp ? "checked" : ""; // Rising volume
+            const msgChecked = a.msg ? "checked" : ""; // With message
             const currentSound = a.snd || "digital_alarm.wav";
             
             let soundOpts = "";
@@ -498,7 +501,7 @@ function renderSettings() {
                 </div>
 
                 <!-- Row 2: Active (Left) - Time (Right) -->
-                <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom: 8px;">
+                <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom: 3px;">
                     <div style="display:flex; align-items:center;">
                         <label class="switch" title="${t('active')}">
                             <input type="checkbox" id="check-${a.d}" ${checked}>
@@ -524,6 +527,18 @@ function renderSettings() {
                         ${soundOpts}
                     </select>
                 </div>
+
+                <!-- Row 4: With Message -->
+                <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 3px;">
+                     <div style="display:flex; align-items:center;">
+                        <label class="switch" title="${t('msg')}">
+                            <input type="checkbox" id="msg-${a.d}" ${msgChecked}>
+                            <span class="slider"></span>
+                        </label>
+                        <span class="alarm-label">${t('msg')}</span>
+                    </div>
+                </div>
+
             </div>
             `;
         });
@@ -586,15 +601,17 @@ window.saveAlarms = () => {
         const timeInput = document.getElementById(`time-${i}`);
         const checkInput = document.getElementById(`check-${i}`);
         const rampInput = document.getElementById(`ramp-${i}`);
+        const msgInput = document.getElementById(`msg-${i}`);
         const sndInput = document.getElementById(`snd-${i}`);
         
         if(timeInput && checkInput) {
             const timeStr = timeInput.value; // "HH:MM"
             const en = checkInput.checked;
             const rmp = rampInput ? rampInput.checked : false;
+            const msg = msgInput ? msgInput.checked : false;
             const snd = sndInput ? sndInput.value : "digital_alarm.wav";
             const [h, m] = timeStr.split(':').map(Number);
-            newAlarms.push({d: i, h: h, m: m, en: en, rmp: rmp, snd: snd});
+            newAlarms.push({d: i, h: h, m: m, en: en, rmp: rmp, msg: msg, snd: snd});
         }
     }
     

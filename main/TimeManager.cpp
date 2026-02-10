@@ -288,22 +288,24 @@ std::string TimeManager::getTimezone() {
     return tz;
 }
 
-void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool volumeRamp, const char* ringtone) {
+void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool volumeRamp, bool useMsg, const char* ringtone) {
     if (dayIndex < 0 || dayIndex > 6) return;
 
     nvs_handle_t my_handle;
     if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
-        char key_h[16], key_m[16], key_en[16], key_rmp[16], key_snd[16];
+        char key_h[16], key_m[16], key_en[16], key_rmp[16], key_msg[16], key_snd[16];
         snprintf(key_h, sizeof(key_h), "alm_%d_h", dayIndex);
         snprintf(key_m, sizeof(key_m), "alm_%d_m", dayIndex);
         snprintf(key_en, sizeof(key_en), "alm_%d_en", dayIndex);
         snprintf(key_rmp, sizeof(key_rmp), "alm_%d_rmp", dayIndex);
+        snprintf(key_msg, sizeof(key_msg), "alm_%d_msg", dayIndex);
         snprintf(key_snd, sizeof(key_snd), "alm_%d_snd", dayIndex);
 
         nvs_set_i32(my_handle, key_h, hour);
         nvs_set_i32(my_handle, key_m, minute);
         nvs_set_u8(my_handle, key_en, active ? 1 : 0);
         nvs_set_u8(my_handle, key_rmp, volumeRamp ? 1 : 0);
+        nvs_set_u8(my_handle, key_msg, useMsg ? 1 : 0);
         
         if (ringtone && strlen(ringtone) > 0) {
             nvs_set_str(my_handle, key_snd, ringtone);
@@ -314,41 +316,39 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
         nvs_commit(my_handle);
         nvs_close(my_handle);
         int logDay = (dayIndex == 0) ? 7 : dayIndex;
-        ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d) Tone: %s", logDay, hour, minute, active, volumeRamp, ringtone);
+        ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d Msg:%d) Tone: %s", logDay, hour, minute, active, volumeRamp, useMsg, ringtone);
     }
 }
 
 DayAlarm TimeManager::getAlarm(int dayIndex) {
-    DayAlarm alarm = {7, 0, false, false, APP_DEFAULT_TIMER_RINGTONE}; // Default
+    DayAlarm alarm = {7, 0, false, false, false, APP_DEFAULT_TIMER_RINGTONE}; // Default
     if (dayIndex < 0 || dayIndex > 6) return alarm;
 
     nvs_handle_t my_handle;
     if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
-        char key_h[16], key_m[16], key_en[16], key_rmp[16], key_snd[16];
+        char key_h[16], key_m[16], key_en[16], key_rmp[16], key_msg[16], key_snd[16];
         snprintf(key_h, sizeof(key_h), "alm_%d_h", dayIndex);
         snprintf(key_m, sizeof(key_m), "alm_%d_m", dayIndex);
         snprintf(key_en, sizeof(key_en), "alm_%d_en", dayIndex);
         snprintf(key_rmp, sizeof(key_rmp), "alm_%d_rmp", dayIndex);
+        snprintf(key_msg, sizeof(key_msg), "alm_%d_msg", dayIndex);
         snprintf(key_snd, sizeof(key_snd), "alm_%d_snd", dayIndex);
 
-        int32_t h = 7, m = 0;
-        uint8_t en = 0;
-        uint8_t rmp = 0;
-        char snd[64] = {0};
-        size_t len = sizeof(snd);
+        int32_t val_i32;
+        uint8_t val_u8;
+        size_t len;
+        char buf[64];
 
-        nvs_get_i32(my_handle, key_h, &h);
-        nvs_get_i32(my_handle, key_m, &m);
-        nvs_get_u8(my_handle, key_en, &en);
-        nvs_get_u8(my_handle, key_rmp, &rmp);
-        if (nvs_get_str(my_handle, key_snd, snd, &len) == ESP_OK) {
-            alarm.ringtone = std::string(snd);
+        if (nvs_get_i32(my_handle, key_h, &val_i32) == ESP_OK) alarm.hour = val_i32;
+        if (nvs_get_i32(my_handle, key_m, &val_i32) == ESP_OK) alarm.minute = val_i32;
+        if (nvs_get_u8(my_handle, key_en, &val_u8) == ESP_OK) alarm.active = (val_u8 == 1);
+        if (nvs_get_u8(my_handle, key_rmp, &val_u8) == ESP_OK) alarm.volumeRamp = (val_u8 == 1);
+        if (nvs_get_u8(my_handle, key_msg, &val_u8) == ESP_OK) alarm.useRandomMsg = (val_u8 == 1);
+
+        len = sizeof(buf);
+        if (nvs_get_str(my_handle, key_snd, buf, &len) == ESP_OK && len > 0) {
+            alarm.ringtone = buf;
         }
-        
-        alarm.hour = (int)h;
-        alarm.minute = (int)m;
-        alarm.active = (en == 1);
-        alarm.volumeRamp = (rmp == 1);
 
         nvs_close(my_handle);
     }

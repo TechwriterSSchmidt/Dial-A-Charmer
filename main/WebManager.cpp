@@ -644,6 +644,7 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
         cJSON_AddNumberToObject(itm, "m", a.minute);
         cJSON_AddBoolToObject(itm, "en", a.active);
         cJSON_AddBoolToObject(itm, "rmp", a.volumeRamp);
+        cJSON_AddBoolToObject(itm, "msg", a.useRandomMsg);
         cJSON_AddStringToObject(itm, "snd", a.ringtone.c_str());
         cJSON_AddItemToArray(alarms, itm);
     }
@@ -743,6 +744,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             int day0_m = 0;
             bool day0_active = false;
             bool day0_ramp = false;
+            bool day0_msg = false;
             std::string day0_ringtone;
             cJSON *elem;
             cJSON_ArrayForEach(elem, alarms_arr) {
@@ -751,16 +753,21 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
                 cJSON *m = cJSON_GetObjectItem(elem, "m");
                 cJSON *en = cJSON_GetObjectItem(elem, "en");
                 cJSON *rmp = cJSON_GetObjectItem(elem, "rmp");
+                cJSON *msg = cJSON_GetObjectItem(elem, "msg");
                 cJSON *snd = cJSON_GetObjectItem(elem, "snd");
                 
                 if (cJSON_IsNumber(d) && cJSON_IsNumber(h) && cJSON_IsNumber(m)) {
                     bool active = false;
                     bool ramp = false;
+                    bool useMsg = false;
                     if (cJSON_IsBool(en)) active = cJSON_IsTrue(en);
                     if (cJSON_IsNumber(en)) active = (en->valueint == 1);
                     
                     if (cJSON_IsBool(rmp)) ramp = cJSON_IsTrue(rmp);
                     if (cJSON_IsNumber(rmp)) ramp = (rmp->valueint == 1);
+
+                    if (cJSON_IsBool(msg)) useMsg = cJSON_IsTrue(msg);
+                    if (cJSON_IsNumber(msg)) useMsg = (msg->valueint == 1);
 
                     const char* ringtone = (snd && cJSON_IsString(snd)) ? snd->valuestring : "";
                     if (d->valueint == 0) {
@@ -769,15 +776,16 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
                         day0_m = m->valueint;
                         day0_active = active;
                         day0_ramp = ramp;
+                        day0_msg = useMsg;
                         day0_ringtone = ringtone ? ringtone : "";
                         continue;
                     }
-                    TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, ringtone);
+                    TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, useMsg, ringtone);
                     alarm_updates++;
                 }
             }
             if (has_day0) {
-                TimeManager::setAlarm(0, day0_h, day0_m, day0_active, day0_ramp, day0_ringtone.c_str());
+                TimeManager::setAlarm(0, day0_h, day0_m, day0_active, day0_ramp, day0_msg, day0_ringtone.c_str());
                 alarm_updates++;
             }
             ESP_LOGI(TAG, "Alarm settings saved: %d entries", alarm_updates);

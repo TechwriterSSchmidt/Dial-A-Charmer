@@ -109,6 +109,7 @@ enum AlarmSource {
 
 static bool g_alarm_active = false;
 static AlarmSource g_alarm_source = ALARM_NONE;
+static bool g_alarm_msg_active = false;
 static int64_t g_alarm_end_ms = 0;
 static int64_t g_alarm_retry_last_ms = 0;
 // Alarm Fade Logic
@@ -551,6 +552,7 @@ static void restore_volume_after_alarm() {
 static void reset_alarm_state(bool restore_volume) {
     g_alarm_active = false;
     g_alarm_source = ALARM_NONE;
+    g_alarm_msg_active = false;
     g_alarm_fade_active = false;
     g_alarm_fade_factor = 1.0f;
     if (restore_volume) {
@@ -1227,7 +1229,19 @@ void on_hook_change(bool off_hook) {
                 g_snooze_active = false;
                 g_force_base_output = true;
                 update_audio_output(); 
-                play_file(system_path("alarm_stopped").c_str());
+                
+                // Play specific message if enabled for this alarm
+                if (g_alarm_msg_active) {
+                    // Logic from "11" (COMPLIMENT_MIX)
+                    int persona = (esp_random() % 5) + 1;
+                    std::string folder = "/sdcard/persona_0" + std::to_string(persona) + "/" + lang_code();
+                    std::string file = get_random_file(folder);
+                    
+                    if (!file.empty()) {
+                        play_file(file.c_str());
+                    }
+                }
+                
                 skip_dialtone = true;
             }
         }
@@ -1642,6 +1656,7 @@ extern "C" void app_main(void)
                  // Get specifics for today
                  struct tm now_tm = TimeManager::getCurrentTime();
                  DayAlarm today = TimeManager::getAlarm(now_tm.tm_wday);
+                 g_alarm_msg_active = today.useRandomMsg;
                  
                  // Handle Fade
                  g_alarm_fade_active = today.volumeRamp;
