@@ -691,8 +691,7 @@ function renderAdvanced() {
                  <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
 
                         <div style="display:flex; flex-direction:column; gap:6px;">
-                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')}</div>
-                             <div class="wifi-ssid-text" style="margin:2px 0 0; color:#aaa;">${state.settings.ip || '--'}</div>
+                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
                             <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
                         </div>
             </div>
