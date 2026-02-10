@@ -29,6 +29,8 @@
 
 // External reference to play_file from main.cpp
 extern void play_file(const char* path);
+// External reference to safe_reboot from main.cpp
+extern void safe_reboot();
 
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
@@ -814,7 +816,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
     if (wifi_updated) {
         ESP_LOGI(TAG, "WiFi Settings changed. Restarting...");
         vTaskDelay(pdMS_TO_TICKS(500));
-        esp_restart();
+        safe_reboot();
     }
     
     return ESP_OK;

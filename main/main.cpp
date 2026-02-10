@@ -130,6 +130,7 @@ static bool g_wdt_input_registered = false;
 static void start_voice_queue(const std::vector<std::string> &files);
 void play_file(const char* path);
 void update_audio_output();
+void safe_reboot();
 static void handle_extra_button_short_press();
 static void enter_deep_sleep();
 
@@ -1088,6 +1089,19 @@ void stop_playback() {
     }
 }
 
+void safe_reboot() {
+    ESP_LOGW(TAG, "Safe reboot: muting audio and disabling PA");
+    stop_playback();
+    if (board_handle && board_handle->audio_hal) {
+        audio_hal_set_mute(board_handle->audio_hal, true);
+    }
+    set_pa_enable(false);
+    vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
+    vTaskDelay(pdMS_TO_TICKS(APP_PA_DISABLE_DELAY_MS));
+    vTaskDelay(pdMS_TO_TICKS(150));
+    esp_restart();
+}
+
 // Callbacks
 void on_dial_complete(int number) {
     if (g_line_busy) {
@@ -1837,9 +1851,7 @@ extern "C" void app_main(void)
             // Reboot if not playing OR timeout (5s)
             if (!is_playing || (now_ms - g_reboot_request_time) > 5000) {
                  ESP_LOGW(TAG, "PERFORMING SYSTEM REBOOT NOW");
-                 set_pa_enable(false); // Ensure PA off
-                 vTaskDelay(pdMS_TO_TICKS(200));
-                 esp_restart();
+                 safe_reboot();
             }
         }
 
