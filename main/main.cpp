@@ -131,6 +131,8 @@ static bool g_persona_hangup_pending = false;
 
 static int64_t g_fade_in_end_time = 0;
 
+RTC_DATA_ATTR static uint32_t g_boot_count = 0;
+
 #if APP_ENABLE_TASK_WDT
 static bool g_wdt_main_registered = false;
 static bool g_wdt_input_registered = false;
@@ -138,6 +140,22 @@ static bool g_wdt_input_registered = false;
 
 // Helper Forward Declarations
 static void start_voice_queue(const std::vector<std::string> &files);
+
+static const char *reset_reason_to_str(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "poweron";
+        case ESP_RST_EXT: return "ext";
+        case ESP_RST_SW: return "sw";
+        case ESP_RST_PANIC: return "panic";
+        case ESP_RST_INT_WDT: return "int_wdt";
+        case ESP_RST_TASK_WDT: return "task_wdt";
+        case ESP_RST_WDT: return "wdt";
+        case ESP_RST_BROWNOUT: return "brownout";
+        case ESP_RST_SDIO: return "sdio";
+        case ESP_RST_DEEPSLEEP: return "deepsleep";
+        default: return "unknown";
+    }
+}
 void play_file(const char* path);
 void update_audio_output();
 void safe_reboot();
@@ -1538,6 +1556,13 @@ extern "C" void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }
+    webManager.startLogCapture();
+    g_boot_count++;
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    ESP_LOGW(TAG, "Boot #%u reset_reason=%s (%d)",
+             (unsigned)g_boot_count,
+             reset_reason_to_str(reset_reason),
+             (int)reset_reason);
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
 
     load_night_mode_from_nvs();

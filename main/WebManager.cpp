@@ -141,7 +141,18 @@ static void sd_log_flush_task(void *pvParameters) {
         fseek(s_sd_log_file, 0, SEEK_END);
         long size = ftell(s_sd_log_file);
         if (size >= (long)APP_SD_LOG_MAX_BYTES) {
-            freopen(APP_SD_LOG_PATH, "w", s_sd_log_file);
+            fclose(s_sd_log_file);
+            s_sd_log_file = nullptr;
+
+            char backup_path[160];
+            snprintf(backup_path, sizeof(backup_path), "%s.1", APP_SD_LOG_PATH);
+            remove(backup_path);
+            rename(APP_SD_LOG_PATH, backup_path);
+
+            s_sd_log_file = fopen(APP_SD_LOG_PATH, "w");
+            if (!s_sd_log_file) {
+                continue;
+            }
         }
         for (size_t i = 0; i < count; ++i) {
             fputs(s_sd_log_flush_buf[i], s_sd_log_file);
@@ -555,6 +566,48 @@ static esp_err_t api_logs_handler(httpd_req_t *req) {
 static esp_err_t api_logs_download_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "text/plain");
     httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=console_log.txt");
+
+#if APP_ENABLE_SD_LOG
+    auto send_file = [&](const char *path) -> esp_err_t {
+        FILE *f = fopen(path, "r");
+        if (!f) {
+            return ESP_FAIL;
+        }
+        char buf[512];
+        size_t n = 0;
+        while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
+                fclose(f);
+                httpd_resp_sendstr_chunk(req, NULL);
+                return ESP_FAIL;
+            }
+        }
+        fclose(f);
+        return ESP_OK;
+    };
+
+    const char *current_path = APP_SD_LOG_PATH;
+    char backup_path[160];
+    snprintf(backup_path, sizeof(backup_path), "%s.1", APP_SD_LOG_PATH);
+
+    bool sent_any = false;
+    if (access(backup_path, F_OK) == 0) {
+        if (send_file(backup_path) == ESP_OK) {
+            const char *sep = "\n--- current log ---\n";
+            httpd_resp_send_chunk(req, sep, strlen(sep));
+            sent_any = true;
+        }
+    }
+    if (access(current_path, F_OK) == 0) {
+        if (send_file(current_path) == ESP_OK) {
+            sent_any = true;
+        }
+    }
+    if (sent_any) {
+        httpd_resp_sendstr_chunk(req, NULL);
+        return ESP_OK;
+    }
+#endif
 
     char lines[LOG_LINE_COUNT][LOG_LINE_MAX];
     size_t count = 0;
@@ -1555,6 +1608,10 @@ void WebManager::begin() {
     setupWifi();
     setupMdns();
     setupWebServer();
+}
+
+void WebManager::startLogCapture() {
+    init_log_capture();
 }
 
 void WebManager::loop() {

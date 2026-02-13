@@ -127,6 +127,6 @@
 // SD log capture (debug)
 #define APP_ENABLE_SD_LOG 1
 #define APP_SD_LOG_PATH "/sdcard/logs/app.log"
-#define APP_SD_LOG_MAX_BYTES (512 * 1024)
+#define APP_SD_LOG_MAX_BYTES (2 * 1024 * 1024)
 #define APP_SD_LOG_FLUSH_INTERVAL_MS 5000
 #define APP_SD_LOG_BUFFER_LINES 120
