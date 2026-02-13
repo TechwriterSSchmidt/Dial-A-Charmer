@@ -42,6 +42,7 @@ private:
     int64_t _last_pulse_time;
     volatile bool _dialing;
     volatile bool _new_pulse;
+    volatile int32_t _last_pulse_delta_ms;
     bool _mode_active_low;
     bool _pulse_active_low;
 
