@@ -74,14 +74,17 @@ const TEXT = {
         select_network: "Bitte lokales Netzwerk auswählen:",
         saving_connecting: "Speichern und verbinden...",
         ota_title: "Firmware Update",
-        ota_token: "OTA Token",
+        ota_password: "OTA Passwort",
         ota_select: "Firmware-Datei auswählen (.bin)",
         ota_upload: "Update starten",
         ota_hint: "Das Gerät startet nach erfolgreichem Update neu.",
         ota_status_idle: "Bereit",
         ota_status_uploading: "Upload läuft...",
         ota_status_done: "Update OK, Neustart...",
-        ota_status_failed: "Update fehlgeschlagen"
+        ota_status_failed: "Update fehlgeschlagen",
+        reboot_title: "Neustart",
+        reboot_button: "Jetzt neu starten",
+        reboot_hint: "Das Gerät startet sofort neu."
     },
     en: {
         title: "Dial-A-Charmer",
@@ -138,14 +141,17 @@ const TEXT = {
         select_network: "Select your local network:",
         saving_connecting: "Saving and Connecting...",
         ota_title: "Firmware Update",
-        ota_token: "OTA Token",
+        ota_password: "OTA Password",
         ota_select: "Select firmware file (.bin)",
         ota_upload: "Start Update",
         ota_hint: "Device will reboot after a successful update.",
         ota_status_idle: "Ready",
         ota_status_uploading: "Uploading...",
         ota_status_done: "Update OK, rebooting...",
-        ota_status_failed: "Update failed"
+        ota_status_failed: "Update failed",
+        reboot_title: "Reboot",
+        reboot_button: "Reboot now",
+        reboot_hint: "Device will reboot immediately."
     }
 };
 
@@ -179,12 +185,12 @@ const API = {
     getLogs: () => fetch('/api/logs').then(r => r.json()),
     getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
     getTime: () => fetch('/api/time').then(r => r.json()),
-    uploadOta: (file, token, onProgress) => {
+    uploadOta: (file, password, onProgress) => {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/api/ota');
-            if (token) {
-                xhr.setRequestHeader('X-OTA-Token', token);
+            if (password) {
+                xhr.setRequestHeader('X-OTA-Password', password);
             }
             xhr.upload.onprogress = (evt) => {
                 if (evt.lengthComputable && typeof onProgress === 'function') {
@@ -203,7 +209,8 @@ const API = {
             xhr.onerror = () => reject(new Error('OTA failed'));
             xhr.send(file);
         });
-    }
+    },
+    reboot: () => fetch('/api/reboot', { method: 'POST' })
 };
 
 // Update alarm clock time display
@@ -714,7 +721,7 @@ function renderAdvanced() {
     const ledDayStart = (state.settings.led_day_start === undefined) ? 7 : state.settings.led_day_start;
     const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
     const nightBaseVol = (state.settings.night_base_volume === undefined) ? 50 : state.settings.night_base_volume;
-    const otaToken = state.settings.ota_token || "";
+    const otaPassword = "";
      
      let tzOptions = "";
      TIMEZONES.forEach(tz => {
@@ -877,8 +884,8 @@ function renderAdvanced() {
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('ota_title')}</h4>
 
                 <div style="margin-top:6px;">
-                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_token')}</label>
-                    <input type="password" id="ota-token" value="${otaToken}" placeholder="${t('ota_token')}" style="margin-top:6px;" />
+                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_password')}</label>
+                    <input type="password" id="ota-password" value="${otaPassword}" placeholder="${t('ota_password')}" style="margin-top:6px;" />
                 </div>
 
                 <div style="margin-top:10px;">
@@ -893,6 +900,13 @@ function renderAdvanced() {
 
                 <button onclick="startOtaUpload()" style="margin-top:12px;">${t('ota_upload')}</button>
                 <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('ota_hint')}</div>
+            </div>
+
+            <!-- REBOOT PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('reboot_title')}</h4>
+                <button onclick="requestReboot()" style="margin-top:10px;">${t('reboot_button')}</button>
+                <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('reboot_hint')}</div>
             </div>
 
         </div>
@@ -938,7 +952,7 @@ window.saveLampSettings = (patch) => {
 
 window.startOtaUpload = () => {
     const fileInput = document.getElementById('ota-file');
-    const tokenInput = document.getElementById('ota-token');
+    const passwordInput = document.getElementById('ota-password');
     const statusEl = document.getElementById('ota-status');
     const progressEl = document.getElementById('ota-progress');
 
@@ -948,23 +962,22 @@ window.startOtaUpload = () => {
     }
 
     const file = fileInput.files[0];
-    const token = tokenInput ? tokenInput.value : '';
+    const password = passwordInput ? passwordInput.value : '';
 
     if (statusEl) statusEl.textContent = t('ota_status_uploading');
     if (progressEl) progressEl.textContent = '0%';
 
-    if (tokenInput) {
-        state.settings.ota_token = token;
-        API.saveSettings({ota_token: token});
-    }
-
-    API.uploadOta(file, token, (pct) => {
+    API.uploadOta(file, password, (pct) => {
         if (progressEl) progressEl.textContent = `${pct}%`;
     }).then(() => {
         if (statusEl) statusEl.textContent = t('ota_status_done');
     }).catch(() => {
         if (statusEl) statusEl.textContent = t('ota_status_failed');
     });
+};
+
+window.requestReboot = () => {
+    API.reboot().catch(() => {});
 };
 
 function renderSetup() {

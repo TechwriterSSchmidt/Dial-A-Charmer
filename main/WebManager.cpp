@@ -45,14 +45,6 @@ static size_t s_log_count = 0;
 static portMUX_TYPE s_log_mux = portMUX_INITIALIZER_UNLOCKED;
 static vprintf_like_t s_prev_vprintf = nullptr;
 
-#if APP_ENABLE_SD_LOG
-static FILE *s_sd_log_file = nullptr;
-static TaskHandle_t s_sd_log_task = nullptr;
-static portMUX_TYPE s_sd_log_mux = portMUX_INITIALIZER_UNLOCKED;
-static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
-static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
-static size_t s_sd_log_buf_count = 0;
-
 // WiFi / AP Logic
 static esp_event_handler_instance_t s_wifi_event_instance = NULL;
 static esp_event_handler_instance_t s_ip_event_instance = NULL;
@@ -77,9 +69,18 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "WiFi connected, IP address: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_retry_count = 0;
     }
 }
+
+#if APP_ENABLE_SD_LOG
+static FILE *s_sd_log_file = nullptr;
+static TaskHandle_t s_sd_log_task = nullptr;
+static portMUX_TYPE s_sd_log_mux = portMUX_INITIALIZER_UNLOCKED;
+static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static size_t s_sd_log_buf_count = 0;
 
 static void sd_log_write_line(const char *line) {
     if (!line || !line[0]) {
@@ -269,28 +270,6 @@ static void compact_log_line(const char *src, char *dst, size_t dst_size) {
     }
 }
 
-static void strip_ansi(const char *src, char *dst, size_t dst_size) {
-    if (!src || !dst || dst_size == 0) {
-        return;
-    }
-    size_t di = 0;
-    for (size_t i = 0; src[i] != '\0' && di + 1 < dst_size; ++i) {
-        // ANSI CSI sequence detection: \x1b [ ... [0x40-0x7E]
-        if (src[i] == '\x1b' && src[i + 1] == '[') {
-            size_t j = i + 2;
-            while (src[j] != '\0') {
-                if (src[j] >= 0x40 && src[j] <= 0x7E) {
-                    i = j; // Found terminator, update i to skip sequence
-                    break;
-                }
-                j++;
-            }
-            continue;
-        }
-        dst[di++] = src[i];
-    }
-    dst[di] = '\0';
-}
 
 static void log_buffer_add(const char *line) {
     if (!line || !line[0]) {
@@ -563,6 +542,13 @@ static esp_err_t api_time_handler(httpd_req_t *req) {
     httpd_resp_send(req, json_str, strlen(json_str));
     free((void *)json_str);
     cJSON_Delete(root);
+    return ESP_OK;
+}
+
+static esp_err_t api_reboot_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"ok\":true,\"rebooting\":true}", HTTPD_RESP_USE_STRLEN);
+    xTaskCreate(ota_reboot_task, "reboot_task", 2048, NULL, 5, NULL);
     return ESP_OK;
 }
 
@@ -1374,7 +1360,7 @@ void WebManager::setupMdns() {
 
 void WebManager::setupWebServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 13;
+    config.max_uri_handlers = 14;
     config.stack_size = 8192; // More stack for file handling
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
 
@@ -1452,6 +1438,14 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &time_uri);
+
+        httpd_uri_t reboot_uri = {
+            .uri       = "/api/reboot",
+            .method    = HTTP_POST,
+            .handler   = api_reboot_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &reboot_uri);
 
         httpd_uri_t ota_uri = {
             .uri       = "/api/ota",
