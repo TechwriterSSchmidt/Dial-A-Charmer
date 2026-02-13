@@ -62,6 +62,10 @@ audio_hal_handle_t audio_board_codec_init(void)
         return NULL;
     }
     
+    // Start codec muted with zero volume to avoid boot/reboot pop or hiss
+    audio_hal_set_volume(board_handle->audio_hal, 0);
+    audio_hal_set_mute(board_handle->audio_hal, true);
+
     // No manual codec register writes here (restore minimal defaults from the 440Hz test)
     
     return board_handle->audio_hal;
