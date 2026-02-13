@@ -1104,8 +1104,13 @@ void play_file(const char* path) {
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
         is_playing = false;
+        set_pa_enable(false);
     } else {
         is_playing = true;
+        set_pa_enable(true);
+        if (board_handle && board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, false);
+        }
     }
     
     audio_unlock();
@@ -1559,6 +1564,7 @@ extern "C" void app_main(void)
     webManager.startLogCapture();
     g_boot_count++;
     esp_reset_reason_t reset_reason = esp_reset_reason();
+    webManager.setResetInfo(g_boot_count, reset_reason_to_str(reset_reason), (int)reset_reason);
     ESP_LOGW(TAG, "Boot #%u reset_reason=%s (%d)",
              (unsigned)g_boot_count,
              reset_reason_to_str(reset_reason),
@@ -1603,7 +1609,7 @@ extern "C" void app_main(void)
 #endif
 
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
-    xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
+        xTaskCreate(monitor_task, "monitor_task", 4096, NULL, 1, NULL);
     #endif
 
     // --- WS2812 Init ---

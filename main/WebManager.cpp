@@ -36,6 +36,10 @@ extern void safe_reboot();
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
 
+static char s_reset_reason[32] = "";
+static int s_reset_reason_code = -1;
+static uint32_t s_boot_count = 0;
+
 #if APP_OTA_DEBUG
 #define OTA_LOGE(...) ESP_LOGE(TAG, __VA_ARGS__)
 #else
@@ -781,6 +785,10 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
         snprintf(ip_buf, sizeof(ip_buf), IPSTR, IP2STR(&ip_info.ip));
     }
     cJSON_AddStringToObject(root, "ip", ip_buf);
+
+    cJSON_AddNumberToObject(root, "boot_count", (double)s_boot_count);
+    cJSON_AddStringToObject(root, "reset_reason", s_reset_reason[0] ? s_reset_reason : "unknown");
+    cJSON_AddNumberToObject(root, "reset_reason_code", s_reset_reason_code);
 
     // WiFi Pass (Always return empty or placeholder)
     cJSON_AddStringToObject(root, "wifi_pass", "");
@@ -1612,6 +1620,16 @@ void WebManager::begin() {
 
 void WebManager::startLogCapture() {
     init_log_capture();
+}
+
+void WebManager::setResetInfo(uint32_t boot_count, const char *reason, int reason_code) {
+    s_boot_count = boot_count;
+    s_reset_reason_code = reason_code;
+    if (reason && reason[0]) {
+        snprintf(s_reset_reason, sizeof(s_reset_reason), "%s", reason);
+    } else {
+        snprintf(s_reset_reason, sizeof(s_reset_reason), "unknown");
+    }
 }
 
 void WebManager::loop() {

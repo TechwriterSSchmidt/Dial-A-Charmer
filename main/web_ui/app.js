@@ -85,7 +85,10 @@ const TEXT = {
         ota_status_failed: "Update fehlgeschlagen",
         reboot_title: "Neustart",
         reboot_button: "Jetzt neu starten",
-        reboot_hint: "Das Gerät startet sofort neu."
+        reboot_hint: "Das Gerät startet sofort neu.",
+        last_reset: "Letzter Reset",
+        reset_reason: "Grund",
+        boot_count: "Boots"
     },
     en: {
         title: "Dial-A-Charmer",
@@ -153,7 +156,10 @@ const TEXT = {
         ota_status_failed: "Update failed",
         reboot_title: "Reboot",
         reboot_button: "Reboot now",
-        reboot_hint: "Device will reboot immediately."
+        reboot_hint: "Device will reboot immediately.",
+        last_reset: "Last Reset",
+        reset_reason: "Reason",
+        boot_count: "Boots"
     }
 };
 
@@ -728,6 +734,9 @@ function renderAdvanced() {
     const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
     const nightBaseVol = (state.settings.night_base_volume === undefined) ? 50 : state.settings.night_base_volume;
     const otaPassword = "";
+    const resetReason = state.settings.reset_reason || "--";
+    const resetCode = (state.settings.reset_reason_code === undefined) ? "--" : state.settings.reset_reason_code;
+    const bootCount = (state.settings.boot_count === undefined) ? "--" : state.settings.boot_count;
      
      let tzOptions = "";
      TIMEZONES.forEach(tz => {
@@ -761,6 +770,19 @@ function renderAdvanced() {
                             <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
                             <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
                         </div>
+            </div>
+
+            <!-- RESET STATUS PANEL -->
+            <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('last_reset')}</h4>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('reset_reason')}</div>
+                    <div style="color:#d4af37; font-weight:bold;">${resetReason} (${resetCode})</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('boot_count')}</div>
+                    <div style="color:#d4af37; font-weight:bold;">${bootCount}</div>
+                </div>
             </div>
 
             <!-- CONSOLE PANEL -->
