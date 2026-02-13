@@ -6,8 +6,9 @@
 #include "app_config.h"
 
 // Hardcoded configs for component independence
-#define DIAL_DEBOUNCE_PULSE_MS 40
-#define DIAL_TIMEOUT_MS 700
+#define DIAL_DEBOUNCE_PULSE_MS APP_DIAL_PULSE_DEBOUNCE_MS
+#define DIAL_DIGIT_GAP_MS APP_DIAL_DIGIT_GAP_MS
+#define DIAL_TIMEOUT_MS APP_DIAL_TIMEOUT_MS
 #define DIAL_MODE_ACTIVE_LOW true
 #define DIAL_PULSE_ACTIVE_LOW true
 
@@ -261,8 +262,18 @@ void RotaryDial::loop() {
             }
         }
     } else {
-         // Timeout Logic
-         if (_dialing && (now - _last_pulse_time > DIAL_TIMEOUT_MS)) {
+         // Timeout/Gap Logic (No mode pin)
+         if (_dialing && (now - _last_pulse_time > DIAL_DIGIT_GAP_MS)) {
+             _dialing = false;
+             int digit = _pulse_count;
+             if (digit > 9) digit = 0;
+             if (digit == 10) digit = 0;
+             if (_dial_callback) _dial_callback(digit);
+#if APP_DIAL_DEBUG_SERIAL
+             ets_printf("DIAL GAP digit=%d pulses=%d gap_ms=%lld\n", digit, _pulse_count, (now - _last_pulse_time));
+#endif
+             _pulse_count = 0;
+         } else if (_dialing && (now - _last_pulse_time > DIAL_TIMEOUT_MS)) {
              _dialing = false;
              int digit = _pulse_count;
              if (digit > 9) digit = 0;
