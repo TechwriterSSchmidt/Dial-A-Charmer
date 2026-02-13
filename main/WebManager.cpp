@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <sys/param.h>
 #include <dirent.h>
+#include <time.h>
 #include <sys/types.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -91,6 +92,7 @@ static portMUX_TYPE s_sd_log_mux = portMUX_INITIALIZER_UNLOCKED;
 static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
 static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
 static size_t s_sd_log_buf_count = 0;
+static bool s_sd_log_enabled = true;
 
 static void sd_log_write_line(const char *line) {
     if (!line || !line[0]) {
@@ -103,6 +105,24 @@ static void sd_log_write_line(const char *line) {
         s_sd_log_buf_count++;
     }
     portEXIT_CRITICAL(&s_sd_log_mux);
+}
+
+static void sd_log_format_with_time(const char *line, char *dst, size_t dst_size) {
+    if (!line || !dst || dst_size == 0) {
+        return;
+    }
+    time_t now = time(NULL);
+    struct tm now_tm;
+    if (localtime_r(&now, &now_tm) == NULL || now_tm.tm_year < 120) {
+        snprintf(dst, dst_size, "[%lu] %s", (unsigned long)esp_log_timestamp(), line);
+        return;
+    }
+    char time_buf[32];
+    if (strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &now_tm) == 0) {
+        snprintf(dst, dst_size, "%s", line);
+        return;
+    }
+    snprintf(dst, dst_size, "%s %s", time_buf, line);
 }
 
 static void sd_log_flush_task(void *pvParameters) {
@@ -177,6 +197,23 @@ static void sd_log_flush_task(void *pvParameters) {
             s_sd_log_buf_count = 0;
         }
         portEXIT_CRITICAL(&s_sd_log_mux);
+    }
+}
+
+static void sd_log_set_enabled(bool enabled) {
+    s_sd_log_enabled = enabled;
+    if (!enabled) {
+        if (s_sd_log_file) {
+            fclose(s_sd_log_file);
+            s_sd_log_file = nullptr;
+        }
+        portENTER_CRITICAL(&s_sd_log_mux);
+        s_sd_log_buf_count = 0;
+        portEXIT_CRITICAL(&s_sd_log_mux);
+        return;
+    }
+    if (!s_sd_log_task) {
+        xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
     }
 }
 #endif
@@ -340,9 +377,13 @@ static int log_vprintf(const char *fmt, va_list args) {
     log_buffer_add(buf);
 
 #if APP_ENABLE_SD_LOG
-    char clean[LOG_LINE_MAX];
-    strip_ansi(buf, clean, sizeof(clean));
-    sd_log_write_line(clean);
+    if (s_sd_log_enabled) {
+        char clean[LOG_LINE_MAX];
+        char stamped[LOG_LINE_MAX];
+        strip_ansi(buf, clean, sizeof(clean));
+        sd_log_format_with_time(clean, stamped, sizeof(stamped));
+        sd_log_write_line(stamped);
+    }
 #endif
 
     if (s_prev_vprintf) {
@@ -356,10 +397,25 @@ static void init_log_capture() {
         s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
     }
 #if APP_ENABLE_SD_LOG
-    if (!s_sd_log_task) {
+    if (s_sd_log_enabled && !s_sd_log_task) {
         xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
     }
 #endif
+}
+
+static void load_sd_log_setting() {
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("dialcharm", NVS_READONLY, &my_handle);
+    if (err != ESP_OK) {
+        return;
+    }
+    uint8_t enabled = APP_ENABLE_SD_LOG ? 1 : 0;
+    if (nvs_get_u8(my_handle, "sd_log_enabled", &enabled) == ESP_OK) {
+#if APP_ENABLE_SD_LOG
+        sd_log_set_enabled(enabled != 0);
+#endif
+    }
+    nvs_close(my_handle);
 }
 
 // DNS Server Task
@@ -790,6 +846,12 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(root, "reset_reason", s_reset_reason[0] ? s_reset_reason : "unknown");
     cJSON_AddNumberToObject(root, "reset_reason_code", s_reset_reason_code);
 
+    uint8_t sd_log_enabled = APP_ENABLE_SD_LOG ? 1 : 0;
+    if (err == ESP_OK) {
+        nvs_get_u8(my_handle, "sd_log_enabled", &sd_log_enabled);
+    }
+    cJSON_AddBoolToObject(root, "sd_log_enabled", sd_log_enabled != 0);
+
     // WiFi Pass (Always return empty or placeholder)
     cJSON_AddStringToObject(root, "wifi_pass", "");
 
@@ -945,6 +1007,15 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         item = cJSON_GetObjectItem(root, "wifi_pass");
         if (cJSON_IsString(item)) {
             nvs_set_str(my_handle, "wifi_pass", item->valuestring);
+        }
+
+        item = cJSON_GetObjectItem(root, "sd_log_enabled");
+        if (cJSON_IsBool(item) || cJSON_IsNumber(item)) {
+            bool enabled = cJSON_IsBool(item) ? cJSON_IsTrue(item) : (item->valueint != 0);
+            nvs_set_u8(my_handle, "sd_log_enabled", enabled ? 1 : 0);
+#if APP_ENABLE_SD_LOG
+            sd_log_set_enabled(enabled);
+#endif
         }
 
         item = cJSON_GetObjectItem(root, "volume");
@@ -1493,7 +1564,7 @@ void WebManager::setupMdns() {
 void WebManager::setupWebServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 14;
-    config.stack_size = 8192; // More stack for file handling
+    config.stack_size = 16384; // Larger stack to avoid httpd task overflow
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
 
     ESP_LOGI(TAG, "Starting Web Server...");
@@ -1612,13 +1683,14 @@ void WebManager::setupDnsServer() {
 }
 
 void WebManager::begin() {
-    init_log_capture();
+    startLogCapture();
     setupWifi();
     setupMdns();
     setupWebServer();
 }
 
 void WebManager::startLogCapture() {
+    load_sd_log_setting();
     init_log_capture();
 }
 

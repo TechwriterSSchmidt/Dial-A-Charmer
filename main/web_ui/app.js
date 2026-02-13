@@ -72,6 +72,8 @@ const TEXT = {
         network_error: "Netzwerkfehler",
         check_console: "Konsole prüfen",
         download_logs: "Logs herunterladen",
+        sd_log: "SD-Log",
+        sd_log_enabled: "SD-Log aktiv",
         select_network: "Bitte lokales Netzwerk auswählen:",
         saving_connecting: "Speichern und verbinden...",
         ota_title: "Firmware Update",
@@ -143,6 +145,8 @@ const TEXT = {
         network_error: "Network Error",
         check_console: "Check Console",
         download_logs: "Download Logs",
+        sd_log: "SD Log",
+        sd_log_enabled: "SD log enabled",
         select_network: "Select your local network:",
         saving_connecting: "Saving and Connecting...",
         ota_title: "Firmware Update",
@@ -737,6 +741,7 @@ function renderAdvanced() {
     const resetReason = state.settings.reset_reason || "--";
     const resetCode = (state.settings.reset_reason_code === undefined) ? "--" : state.settings.reset_reason_code;
     const bootCount = (state.settings.boot_count === undefined) ? "--" : state.settings.boot_count;
+    const sdLogEnabled = (state.settings.sd_log_enabled === undefined) ? true : !!state.settings.sd_log_enabled;
      
      let tzOptions = "";
      TIMEZONES.forEach(tz => {
@@ -772,6 +777,16 @@ function renderAdvanced() {
                         </div>
             </div>
 
+            <!-- CONSOLE PANEL -->
+            <div class="crt-panel">
+                <div class="crt-screen">
+                    <div class="crt-text" id="crt-log">READY&gt;_</div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin:6px 0 12px;">
+                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
+            </div>
+
             <!-- RESET STATUS PANEL -->
             <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('last_reset')}</h4>
@@ -783,16 +798,13 @@ function renderAdvanced() {
                     <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('boot_count')}</div>
                     <div style="color:#d4af37; font-weight:bold;">${bootCount}</div>
                 </div>
-            </div>
-
-            <!-- CONSOLE PANEL -->
-            <div class="crt-panel">
-                <div class="crt-screen">
-                    <div class="crt-text" id="crt-log">READY&gt;_</div>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+                    <label class="switch" title="${t('sd_log')}">
+                        <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="alarm-label">${t('sd_log_enabled')}</span>
                 </div>
-            </div>
-            <div style="display:flex; justify-content:flex-end; margin:6px 0 12px;">
-                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
             </div>
 
             <!-- VOLUME PANEL -->
@@ -979,6 +991,12 @@ window.saveLampSettings = (patch) => {
     Object.assign(state.settings, patch);
     API.saveSettings(patch);
     logLampSettings('settings', patch);
+};
+
+window.saveSdLogEnabled = (enabled) => {
+    const value = !!enabled;
+    state.settings.sd_log_enabled = value;
+    API.saveSettings({sd_log_enabled: value});
 };
 
 window.startOtaUpload = () => {
