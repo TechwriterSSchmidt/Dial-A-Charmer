@@ -11,6 +11,7 @@
 // Key3 (handset button)
 #define APP_PIN_KEY3       19
 #define APP_KEY3_ACTIVE_LOW true
+#define APP_HOOK_ACTIVE_LOW  true 
 
 // Dial Mode behavior (Ignored if pin is -1)
 #define APP_DIAL_MODE_ACTIVE_LOW true 
@@ -19,11 +20,11 @@
 // Logic counts when input matches the "Active Low" setting logic
 #define APP_DIAL_PULSE_ACTIVE_LOW true
 
+// WS2812 LED (Boot Indicator and Night Mode)
+#define APP_PIN_LED        23
+
 // SD Card
 #define APP_PIN_SD_CS      13
-#define APP_PIN_LED        23 // Reused from Dial Mode for WS2812
-
-#define APP_HOOK_ACTIVE_LOW  true 
 
 // Power Amplifier
 #define APP_PIN_PA_ENABLE  21 
@@ -93,6 +94,13 @@
 #define APP_NIGHTMODE_LED_PERCENT 5
 #define APP_NIGHTMODE_VOLUME_PERCENT 50
 
+// LED signal lamp defaults
+#define APP_LED_DEFAULT_ENABLED 1
+#define APP_LED_DAY_PERCENT 100
+#define APP_LED_NIGHT_PERCENT 10
+#define APP_LED_DAY_START_HOUR 7
+#define APP_LED_NIGHT_START_HOUR 22
+
 // Phonebook default numbers (max 3 digits)
 #define APP_PB_NUM_PERSONA_1 "1"
 #define APP_PB_NUM_PERSONA_2 "2"
@@ -104,10 +112,6 @@
 #define APP_PB_NUM_VOICE_MENU "0"
 #define APP_PB_NUM_REBOOT "999"
 
-
-// SD Card
-#define APP_PIN_SD_CS      13
-// APP_PIN_LED defined above
 
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0

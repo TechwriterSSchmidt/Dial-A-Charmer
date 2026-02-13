@@ -486,6 +486,19 @@ select.alarm-sound-select {
   letter-spacing: 1px;
   margin: 6px 0 10px;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  line-height: 1.1;
+}
+.wifi-ip-text {
+  color: #d4af37;
+  font-size: 1rem;
+  letter-spacing: 1px;
+  line-height: 1.1;
+  position: relative;
+  top: -3px;
 }
 
 /* CRT-style console frame */

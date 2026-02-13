@@ -29,6 +29,8 @@
 
 // External reference to play_file from main.cpp
 extern void play_file(const char* path);
+// External reference to safe_reboot from main.cpp
+extern void safe_reboot();
 
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
@@ -570,6 +572,18 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
         cJSON_AddStringToObject(root, "wifi_ssid", "");
     }
 
+    // IP Address (STA preferred, fallback to AP)
+    char ip_buf[16] = "";
+    esp_netif_ip_info_t ip_info = {};
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (!netif) {
+        netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    }
+    if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+        snprintf(ip_buf, sizeof(ip_buf), IPSTR, IP2STR(&ip_info.ip));
+    }
+    cJSON_AddStringToObject(root, "ip", ip_buf);
+
     // WiFi Pass (Always return empty or placeholder)
     cJSON_AddStringToObject(root, "wifi_pass", "");
 
@@ -622,6 +636,25 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     }
 
     cJSON_AddStringToObject(root, "timer_ringtone", ringtone_name.c_str());
+
+    // LED signal lamp settings
+    uint8_t led_enabled = APP_LED_DEFAULT_ENABLED ? 1 : 0;
+    uint8_t led_day_pct = APP_LED_DAY_PERCENT;
+    uint8_t led_night_pct = APP_LED_NIGHT_PERCENT;
+    uint8_t led_day_start = APP_LED_DAY_START_HOUR;
+    uint8_t led_night_start = APP_LED_NIGHT_START_HOUR;
+    if (err == ESP_OK) {
+        nvs_get_u8(my_handle, "led_enabled", &led_enabled);
+        nvs_get_u8(my_handle, "led_day_pct", &led_day_pct);
+        nvs_get_u8(my_handle, "led_night_pct", &led_night_pct);
+        nvs_get_u8(my_handle, "led_day_start", &led_day_start);
+        nvs_get_u8(my_handle, "led_night_start", &led_night_start);
+    }
+    cJSON_AddBoolToObject(root, "led_enabled", led_enabled != 0);
+    cJSON_AddNumberToObject(root, "led_day_pct", led_day_pct);
+    cJSON_AddNumberToObject(root, "led_night_pct", led_night_pct);
+    cJSON_AddNumberToObject(root, "led_day_start", led_day_start);
+    cJSON_AddNumberToObject(root, "led_night_start", led_night_start);
     
     // --- Time & Timezone ---
     struct tm now = TimeManager::getCurrentTime();
@@ -644,6 +677,7 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
         cJSON_AddNumberToObject(itm, "m", a.minute);
         cJSON_AddBoolToObject(itm, "en", a.active);
         cJSON_AddBoolToObject(itm, "rmp", a.volumeRamp);
+        cJSON_AddBoolToObject(itm, "msg", a.useRandomMsg);
         cJSON_AddStringToObject(itm, "snd", a.ringtone.c_str());
         cJSON_AddItemToArray(alarms, itm);
     }
@@ -728,6 +762,93 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
         }
 
+        bool led_seen = false;
+        bool led_changed = false;
+        uint8_t led_enabled_old = APP_LED_DEFAULT_ENABLED ? 1 : 0;
+        uint8_t led_day_pct_old = APP_LED_DAY_PERCENT;
+        uint8_t led_night_pct_old = APP_LED_NIGHT_PERCENT;
+        uint8_t led_day_start_old = APP_LED_DAY_START_HOUR;
+        uint8_t led_night_start_old = APP_LED_NIGHT_START_HOUR;
+
+        nvs_get_u8(my_handle, "led_enabled", &led_enabled_old);
+        nvs_get_u8(my_handle, "led_day_pct", &led_day_pct_old);
+        nvs_get_u8(my_handle, "led_night_pct", &led_night_pct_old);
+        nvs_get_u8(my_handle, "led_day_start", &led_day_start_old);
+        nvs_get_u8(my_handle, "led_night_start", &led_night_start_old);
+
+        uint8_t led_enabled_new = led_enabled_old;
+        uint8_t led_day_pct_new = led_day_pct_old;
+        uint8_t led_night_pct_new = led_night_pct_old;
+        uint8_t led_day_start_new = led_day_start_old;
+        uint8_t led_night_start_new = led_night_start_old;
+
+        item = cJSON_GetObjectItem(root, "led_enabled");
+        if (cJSON_IsBool(item)) {
+            led_enabled_new = cJSON_IsTrue(item) ? 1 : 0;
+            nvs_set_u8(my_handle, "led_enabled", led_enabled_new);
+            led_seen = true;
+        } else if (cJSON_IsNumber(item)) {
+            led_enabled_new = item->valueint ? 1 : 0;
+            nvs_set_u8(my_handle, "led_enabled", led_enabled_new);
+            led_seen = true;
+        }
+
+        item = cJSON_GetObjectItem(root, "led_day_pct");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 100) v = 100;
+            led_day_pct_new = (uint8_t)v;
+            nvs_set_u8(my_handle, "led_day_pct", led_day_pct_new);
+            led_seen = true;
+        }
+
+        item = cJSON_GetObjectItem(root, "led_night_pct");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 100) v = 100;
+            led_night_pct_new = (uint8_t)v;
+            nvs_set_u8(my_handle, "led_night_pct", led_night_pct_new);
+            led_seen = true;
+        }
+
+        item = cJSON_GetObjectItem(root, "led_day_start");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 23) v = 23;
+            led_day_start_new = (uint8_t)v;
+            nvs_set_u8(my_handle, "led_day_start", led_day_start_new);
+            led_seen = true;
+        }
+
+        item = cJSON_GetObjectItem(root, "led_night_start");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 23) v = 23;
+            led_night_start_new = (uint8_t)v;
+            nvs_set_u8(my_handle, "led_night_start", led_night_start_new);
+            led_seen = true;
+        }
+
+        led_changed = (led_enabled_new != led_enabled_old) ||
+                      (led_day_pct_new != led_day_pct_old) ||
+                      (led_night_pct_new != led_night_pct_old) ||
+                      (led_day_start_new != led_day_start_old) ||
+                      (led_night_start_new != led_night_start_old);
+
+        if (led_seen && led_changed) {
+            ESP_LOGI(TAG,
+                "Signallampe settings updated: enabled=%d day=%d%% night=%d%% day_start=%d night_start=%d",
+                (int)led_enabled_new,
+                (int)led_day_pct_new,
+                (int)led_night_pct_new,
+                (int)led_day_start_new,
+                (int)led_night_start_new);
+        }
+
         // Timezone configuration
         item = cJSON_GetObjectItem(root, "timezone");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
@@ -743,6 +864,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             int day0_m = 0;
             bool day0_active = false;
             bool day0_ramp = false;
+            bool day0_msg = false;
             std::string day0_ringtone;
             cJSON *elem;
             cJSON_ArrayForEach(elem, alarms_arr) {
@@ -751,16 +873,21 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
                 cJSON *m = cJSON_GetObjectItem(elem, "m");
                 cJSON *en = cJSON_GetObjectItem(elem, "en");
                 cJSON *rmp = cJSON_GetObjectItem(elem, "rmp");
+                cJSON *msg = cJSON_GetObjectItem(elem, "msg");
                 cJSON *snd = cJSON_GetObjectItem(elem, "snd");
                 
                 if (cJSON_IsNumber(d) && cJSON_IsNumber(h) && cJSON_IsNumber(m)) {
                     bool active = false;
                     bool ramp = false;
+                    bool useMsg = false;
                     if (cJSON_IsBool(en)) active = cJSON_IsTrue(en);
                     if (cJSON_IsNumber(en)) active = (en->valueint == 1);
                     
                     if (cJSON_IsBool(rmp)) ramp = cJSON_IsTrue(rmp);
                     if (cJSON_IsNumber(rmp)) ramp = (rmp->valueint == 1);
+
+                    if (cJSON_IsBool(msg)) useMsg = cJSON_IsTrue(msg);
+                    if (cJSON_IsNumber(msg)) useMsg = (msg->valueint == 1);
 
                     const char* ringtone = (snd && cJSON_IsString(snd)) ? snd->valuestring : "";
                     if (d->valueint == 0) {
@@ -769,15 +896,16 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
                         day0_m = m->valueint;
                         day0_active = active;
                         day0_ramp = ramp;
+                        day0_msg = useMsg;
                         day0_ringtone = ringtone ? ringtone : "";
                         continue;
                     }
-                    TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, ringtone);
+                    TimeManager::setAlarm(d->valueint, h->valueint, m->valueint, active, ramp, useMsg, ringtone);
                     alarm_updates++;
                 }
             }
             if (has_day0) {
-                TimeManager::setAlarm(0, day0_h, day0_m, day0_active, day0_ramp, day0_ringtone.c_str());
+                TimeManager::setAlarm(0, day0_h, day0_m, day0_active, day0_ramp, day0_msg, day0_ringtone.c_str());
                 alarm_updates++;
             }
             ESP_LOGI(TAG, "Alarm settings saved: %d entries", alarm_updates);
@@ -806,7 +934,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
     if (wifi_updated) {
         ESP_LOGI(TAG, "WiFi Settings changed. Restarting...");
         vTaskDelay(pdMS_TO_TICKS(500));
-        esp_restart();
+        safe_reboot();
     }
     
     return ESP_OK;

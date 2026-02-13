@@ -45,6 +45,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | :--- | :--- |
 | **Timekeeping** | Syncs via **NTP** with optional **DS3231 RTC** fallback (invalid RTC data is ignored until SNTP sync). |
 | **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
+| **Night Mode** | Toggles reduced output. System prompts like reboot/ready/hangup are muted while night mode is active. |
 
 ## Phonebook Defaults
 
@@ -97,6 +98,13 @@ Once the device is connected to your WiFi network (or you are connected to its A
 👉 **http://dial-a-charmer.local**
 
 (Requires a modern browser on Android, iOS, Windows, or macOS. If mDNS fails, use the IP announced via the Voice Menu: Dial `0`, then `4` for Systemstatus.)
+
+### Signallampe Settings (Web UI)
+
+The Configuration page includes a **Signallampe** card (below **Timer-Ton**) with:
+- LED enable/disable toggle
+- Day and Night brightness sliders (percent)
+- Day/Night start hour selection (0-23)
 
 ## Project Structure
 
@@ -151,6 +159,8 @@ This tool splits large, long audio files (e.g. combined recordings) into individ
 
 Single WS2812B LED provides visual feedback depending on the system state.
 
+Brightness and schedule are configurable in the **Signallampe** card (Web UI).
+
 | State | Color/Effect | Meaning |
 | :--- | :--- | :--- |
 | **Booting** | 🔵 Blue/Gold Pulsing | System initializing or connecting to WiFi |
@@ -171,6 +181,8 @@ The system uses specific WAV files in `/system/` for feedback:
 | `busy_tone.wav` | Call ended or invalid state. |
 | `hook_pickup.wav` | Short pickup click before persona playback. |
 | `hook_hangup.wav` | Short hangup click after persona playback. |
+
+Note: During **Night Mode**, selected system sounds (e.g., reboot/ready/hangup prompts) are suppressed to avoid waking the user.
 
 ## Getting Started
 
@@ -199,6 +211,13 @@ You can enable buffered SD logging during testing (see `app_config.h`). Logs are
 *   `/sdcard/logs/app.log`
 
 Logging is buffered and flushed periodically to reduce interference with audio playback.
+
+## Planned Improvements
+* Loud noise on reboot > need to ensure that amps are not powered during reboot?
+* Alarm-off text output is currently played over handset > should be switched to base speaker + instead of using a specific announcement, we should play random messages and make this feature switchable for each daily alarm
+* WIFI-bug ... system seems to hang when not connected to WIFI while using captive portal on iPhone to make settings
+* IP-Address should be displayed in Captive Portal and on Configuration page of the web-ui
+* 
 
 ## License
 

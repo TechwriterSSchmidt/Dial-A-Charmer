@@ -21,7 +21,8 @@
    - *Snooze duration is configurable in Web Interface (Default: 9 min).*
 
 4. **Voice Menu & Admin:**
-   - **Dial 9:** System Menu Instructions.
+   - **Dial 0:** System Menu Instructions.
+   - **While the menu speaks:** Dial `1`-`4`, or `999` for quick actions.
 
 ## 📂 Content Management (SD Card)
 
@@ -53,7 +54,7 @@ Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` scr
 
 Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your local network IP to access settings.
 
-👉 <http://dial-a-charmer.local> (Fallback: use the IP announced via Dial `8` if mDNS fails)
+👉 <http://dial-a-charmer.local> (Fallback: use the IP announced via Dial `0`, then `4` if mDNS fails)
 
 **Basic Settings (Home Page):**
 
@@ -62,7 +63,10 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 - **Ringtones**: Select and Preview from 5 distinct styles.
 - **Repeating Alarm**: Set a daily schedule (Time + Active Days) for your regular wake-up call.
 - **Snooze Duration**: Configurable 0-20 minutes.
-- **LED Brightness**: Day/Night levels.
+- **Signallampe (LED)**: On/Off, Day/Night brightness, and day/night start hours.
+
+**Night Mode Behavior:**
+- When Night Mode is active, selected system prompts (e.g., reboot/ready/hangup) are muted to avoid waking the user.
 
 **Advanced Settings (/advanced):**
 

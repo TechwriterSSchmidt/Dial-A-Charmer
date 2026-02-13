@@ -9,6 +9,7 @@ struct DayAlarm {
     int minute;
     bool active;
     bool volumeRamp;
+    bool useRandomMsg;
     std::string ringtone;
 };
 
@@ -17,7 +18,7 @@ public:
     static void init();
     
     // dayIndex: 0=Sunday, 1=Monday, ..., 6=Saturday
-    static void setAlarm(int dayIndex, int hour, int minute, bool active, bool volumeRamp, const char* ringtone); 
+    static void setAlarm(int dayIndex, int hour, int minute, bool active, bool volumeRamp, bool useMsg, const char* ringtone); 
     static DayAlarm getAlarm(int dayIndex);
     
     static bool checkAlarm(); // Returns true if alarm trigger condition is met ONE TIME
