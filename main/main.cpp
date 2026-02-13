@@ -40,6 +40,8 @@
 #include "driver/rtc_io.h"
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
+static const int kNightModeDurationHours = 6;
+static const uint8_t kNightBaseVolumeDefault = 50;
 
 // Global Objects
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
@@ -59,6 +61,7 @@ const int DIALTONE_SILENCE_MS = APP_DIALTONE_SILENCE_MS;
 bool is_playing = false;
 bool g_output_mode_handset = false; 
 int g_last_effective_handset = -1;
+static volatile bool g_effective_handset = false;
 bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
@@ -80,6 +83,7 @@ std::vector<std::string> g_voice_queue;
 bool g_voice_queue_active = false;
 bool g_voice_menu_reannounce = false;
 bool g_night_mode_active = false;
+bool g_night_mode_manual = false;
 int64_t g_night_mode_end_ms = 0;
 uint8_t g_led_r = 50;
 uint8_t g_led_g = 20;
@@ -127,6 +131,8 @@ static bool g_persona_hangup_pending = false;
 
 static int64_t g_fade_in_end_time = 0;
 
+RTC_DATA_ATTR static uint32_t g_boot_count = 0;
+
 #if APP_ENABLE_TASK_WDT
 static bool g_wdt_main_registered = false;
 static bool g_wdt_input_registered = false;
@@ -134,6 +140,22 @@ static bool g_wdt_input_registered = false;
 
 // Helper Forward Declarations
 static void start_voice_queue(const std::vector<std::string> &files);
+
+static const char *reset_reason_to_str(esp_reset_reason_t reason) {
+    switch (reason) {
+        case ESP_RST_POWERON: return "poweron";
+        case ESP_RST_EXT: return "ext";
+        case ESP_RST_SW: return "sw";
+        case ESP_RST_PANIC: return "panic";
+        case ESP_RST_INT_WDT: return "int_wdt";
+        case ESP_RST_TASK_WDT: return "task_wdt";
+        case ESP_RST_WDT: return "wdt";
+        case ESP_RST_BROWNOUT: return "brownout";
+        case ESP_RST_SDIO: return "sdio";
+        case ESP_RST_DEEPSLEEP: return "deepsleep";
+        default: return "unknown";
+    }
+}
 void play_file(const char* path);
 void update_audio_output();
 void safe_reboot();
@@ -165,31 +187,18 @@ static std::string system_path(const char *base) {
 
 static bool is_night_quiet_system_sound(const char *path) {
     if (!g_night_mode_active || !path) return false;
+
+    bool effective_handset = g_output_mode_handset;
+    if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
+        effective_handset = false;
+    }
+    if (effective_handset) return false;
+
     const char *prefix = "/sdcard/system/";
     size_t prefix_len = strlen(prefix);
     if (strncmp(path, prefix, prefix_len) != 0) return false;
 
-    std::string base = path + prefix_len;
-    if (base.size() > 4 && base.rfind(".wav") == base.size() - 4) {
-        base = base.substr(0, base.size() - 4);
-    }
-    if (base.size() > 3) {
-        const std::string suffix = base.substr(base.size() - 3);
-        if (suffix == "_en" || suffix == "_de") {
-            base = base.substr(0, base.size() - 3);
-        }
-    }
-
-    return (base == "system_ready" ||
-            base == "pb_reboot" ||
-            base == "system_sleep" ||
-            base == "hook_hangup" ||
-            base == "busy_tone" ||
-            base == "timer_set" ||
-            base == "timer_deleted" ||
-            base == "timer_invalid" ||
-            base == "number_invalid" ||
-            base == "error_msg");
+    return true;
 }
 
 static std::string time_path(const char *name) {
@@ -427,11 +436,11 @@ static void led_task(void *pvParameters) {
     }
 }
 
-static void set_night_mode(bool enable) {
+static void set_night_mode(bool enable, bool manual_override) {
     if (enable) {
         g_night_mode_active = true;
         g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
-            (int64_t)APP_NIGHTMODE_DURATION_HOURS * 60 * 60 * 1000;
+            (int64_t)kNightModeDurationHours * 60 * 60 * 1000;
         g_night_prev_r = g_led_r;
         g_night_prev_g = g_led_g;
         g_night_prev_b = g_led_b;
@@ -440,7 +449,48 @@ static void set_night_mode(bool enable) {
         g_night_mode_active = false;
         apply_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
     }
+    g_night_mode_manual = manual_override;
+    nvs_handle_t my_handle;
+    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
+        nvs_set_u8(my_handle, "night_mode_active", g_night_mode_active ? 1 : 0);
+        nvs_set_u8(my_handle, "night_mode_manual", g_night_mode_manual ? 1 : 0);
+        nvs_commit(my_handle);
+        nvs_close(my_handle);
+    }
     update_audio_output();
+}
+
+static void load_night_mode_from_nvs() {
+    nvs_handle_t my_handle;
+    uint8_t active = 0;
+    uint8_t manual = 0;
+    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
+        nvs_get_u8(my_handle, "night_mode_active", &active);
+        nvs_get_u8(my_handle, "night_mode_manual", &manual);
+        nvs_close(my_handle);
+    }
+    g_night_mode_manual = (manual != 0);
+    if (active) {
+        g_night_mode_active = true;
+        g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
+            (int64_t)kNightModeDurationHours * 60 * 60 * 1000;
+    }
+}
+
+static void refresh_night_mode_from_schedule() {
+    if (g_night_mode_manual) {
+        struct tm now = TimeManager::getCurrentTime();
+        if (now.tm_year >= 120 && !is_led_night_hour(now.tm_hour)) {
+            set_night_mode(false, false);
+        }
+        return;
+    }
+    struct tm now = TimeManager::getCurrentTime();
+    if (now.tm_year < 120) return;
+    bool should_be_night = is_led_night_hour(now.tm_hour);
+    if (should_be_night != g_night_mode_active) {
+        set_night_mode(should_be_night, false);
+    }
 }
 
 static void start_voice_queue(const std::vector<std::string> &files) {
@@ -539,10 +589,10 @@ static void handle_voice_menu_digit(int digit) {
         start_voice_queue(files);
     } else if (digit == 2) {
         if (g_night_mode_active) {
-            set_night_mode(false);
+            set_night_mode(false, true);
             start_voice_queue({system_path("night_off")});
         } else {
-            set_night_mode(true);
+            set_night_mode(true, true);
             start_voice_queue({system_path("night_on")});
         }
     } else if (digit == 3) {
@@ -912,6 +962,7 @@ void update_audio_output() {
     if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
         effective_handset = false; 
     }
+    g_effective_handset = effective_handset;
 
     bool output_changed = (g_last_effective_handset < 0) || (effective_handset != (g_last_effective_handset != 0));
     if (output_changed) {
@@ -929,17 +980,19 @@ void update_audio_output() {
     nvs_handle_t my_handle;
     uint8_t vol = APP_DEFAULT_BASE_VOLUME; // Default Base Speaker
     
+    uint8_t night_base_vol = kNightBaseVolumeDefault;
     if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
         if (effective_handset) {
             if (nvs_get_u8(my_handle, "volume_handset", &vol) != ESP_OK) vol = APP_DEFAULT_HANDSET_VOLUME;
         } else {
             if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = APP_DEFAULT_BASE_VOLUME;
         }
+        nvs_get_u8(my_handle, "night_base_volume", &night_base_vol);
         nvs_close(my_handle);
     }
     
-    if (g_night_mode_active) {
-        vol = APP_NIGHTMODE_VOLUME_PERCENT;
+    if (g_night_mode_active && !effective_handset) {
+        vol = night_base_vol;
     }
 
     audio_hal_set_volume(board_handle->audio_hal, vol);
@@ -1001,19 +1054,29 @@ void play_file(const char* path) {
     }
 
     if (board_handle && board_handle->audio_hal) {
-        audio_hal_set_mute(board_handle->audio_hal, false);
+        audio_hal_set_mute(board_handle->audio_hal, true);
     }
-    
-    set_pa_enable(true);
 
     // Optimized Stop Logic for Fast Switching
     audio_lock();
-    
-    // Always force stop first, skipping fade-out/mute for responsiveness
+
+    // Short soft fade + mute to reduce clicks between WAVs
+    if (is_playing) {
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
+        if (board_handle && board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, true);
+        }
+        vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
+    }
+
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
     is_playing = false;
     g_last_playback_finished_ms = esp_timer_get_time() / 1000;
+
+    if (APP_WAV_SWITCH_DELAY_MS > 0) {
+        vTaskDelay(pdMS_TO_TICKS(APP_WAV_SWITCH_DELAY_MS));
+    }
 
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
@@ -1031,9 +1094,6 @@ void play_file(const char* path) {
     update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
 
-    // Small delay to ensure hardware buffers clear (reduced from default if needed)
-    vTaskDelay(pdMS_TO_TICKS(10)); 
-    
     audio_pipeline_reset_ringbuffer(pipeline);
     audio_pipeline_reset_items_state(pipeline);
     audio_element_set_uri(fatfs_stream, path);
@@ -1044,8 +1104,13 @@ void play_file(const char* path) {
         audio_pipeline_stop(pipeline);
         audio_pipeline_wait_for_stop(pipeline);
         is_playing = false;
+        set_pa_enable(false);
     } else {
         is_playing = true;
+        set_pa_enable(true);
+        if (board_handle && board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, false);
+        }
     }
     
     audio_unlock();
@@ -1424,6 +1489,12 @@ void input_task(void *pvParameters) {
         float target_left = APP_GAIN_DEFAULT_LEFT;
         float target_right = APP_GAIN_DEFAULT_RIGHT;
 
+        if (g_effective_handset) {
+            target_right = 0.0f;
+        } else {
+            target_left = 0.0f;
+        }
+
         if (APP_PIN_KEY3 >= 0) {
             int level = gpio_get_level((gpio_num_t)APP_PIN_KEY3);
             bool pressed = APP_KEY3_ACTIVE_LOW ? (level == 0) : (level == 1);
@@ -1490,7 +1561,17 @@ extern "C" void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_erase());
         err = nvs_flash_init();
     }
+    webManager.startLogCapture();
+    g_boot_count++;
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    webManager.setResetInfo(g_boot_count, reset_reason_to_str(reset_reason), (int)reset_reason);
+    ESP_LOGW(TAG, "Boot #%u reset_reason=%s (%d)",
+             (unsigned)g_boot_count,
+             reset_reason_to_str(reset_reason),
+             (int)reset_reason);
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
+
+    load_night_mode_from_nvs();
 
     g_audio_mutex = xSemaphoreCreateMutex();
     if (!g_audio_mutex) {
@@ -1528,7 +1609,7 @@ extern "C" void app_main(void)
 #endif
 
     #if defined(ENABLE_SYSTEM_MONITOR) && (ENABLE_SYSTEM_MONITOR == 1)
-    xTaskCreate(monitor_task, "monitor_task", 2048, NULL, 1, NULL);
+        xTaskCreate(monitor_task, "monitor_task", 4096, NULL, 1, NULL);
     #endif
 
     // --- WS2812 Init ---
@@ -1585,7 +1666,9 @@ extern "C" void app_main(void)
     ESP_LOGW(TAG, "Power Amplifier control DISABLED via config");
 #endif
     
-    audio_hal_set_volume(board_handle->audio_hal, APP_DEFAULT_BASE_VOLUME); // Set volume
+    // Keep codec muted on boot; volume will be set during first playback
+    audio_hal_set_volume(board_handle->audio_hal, 0);
+    audio_hal_set_mute(board_handle->audio_hal, true);
 
     // --- 3. SD Card Peripheral ---
     ESP_LOGI(TAG, "Starting SD Card...");
@@ -1595,24 +1678,32 @@ extern "C" void app_main(void)
     periph_sdcard_cfg_t sdcard_cfg = {
         .card_detect_pin = SD_CARD_INTR_GPIO,
         .root = "/sdcard",
-        .mode = SD_MODE_SPI, 
+        .mode = SD_MODE_SPI,
     };
-    esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
-    esp_periph_start(set, sdcard_handle);
-    
-    int64_t sd_start_ms = esp_timer_get_time() / 1000;
-    const int64_t sd_timeout_ms = 5000;
-    while (!periph_sdcard_is_mounted(sdcard_handle)) {
-        if ((esp_timer_get_time() / 1000) - sd_start_ms > sd_timeout_ms) {
-            ESP_LOGE(TAG, "SD Card mount timeout");
-            g_sd_error = true;
+    const int sd_max_attempts = 3;
+    for (int attempt = 1; attempt <= sd_max_attempts; ++attempt) {
+        esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
+        esp_periph_start(set, sdcard_handle);
+
+        int64_t sd_start_ms = esp_timer_get_time() / 1000;
+        const int64_t sd_timeout_ms = 5000;
+        while (!periph_sdcard_is_mounted(sdcard_handle)) {
+            if ((esp_timer_get_time() / 1000) - sd_start_ms > sd_timeout_ms) {
+                ESP_LOGW(TAG, "SD Card mount timeout (attempt %d/%d)", attempt, sd_max_attempts);
+                g_sd_error = true;
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (periph_sdcard_is_mounted(sdcard_handle)) {
+            ESP_LOGI(TAG, "SD Card mounted successfully");
+            g_sd_error = false;
             break;
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    if (periph_sdcard_is_mounted(sdcard_handle)) {
-        ESP_LOGI(TAG, "SD Card mounted successfully");
-        g_sd_error = false;
+
+        esp_periph_stop(sdcard_handle);
+        esp_periph_destroy(sdcard_handle);
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     if (g_sd_error) {
@@ -1740,6 +1831,7 @@ extern "C" void app_main(void)
     }
 #endif
         // --- Regular Tasks ---
+        refresh_night_mode_from_schedule();
         // Check Daily Alarm
         if (TimeManager::checkAlarm()) {
              ESP_LOGI(TAG, "Daily Alarm Triggered! Starting Ring...");
@@ -1894,10 +1986,10 @@ extern "C" void app_main(void)
         }
 
         // Night mode timeout
-        if (g_night_mode_active) {
+        if (g_night_mode_active && !g_night_mode_manual) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_night_mode_end_ms) {
-                set_night_mode(false);
+                set_night_mode(false, false);
             }
         }
 

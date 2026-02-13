@@ -3,10 +3,12 @@
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "rom/ets_sys.h" 
+#include "app_config.h"
 
 // Hardcoded configs for component independence
-#define DIAL_DEBOUNCE_PULSE_MS 40
-#define DIAL_TIMEOUT_MS 700
+#define DIAL_DEBOUNCE_PULSE_MS APP_DIAL_PULSE_DEBOUNCE_MS
+#define DIAL_DIGIT_GAP_MS APP_DIAL_DIGIT_GAP_MS
+#define DIAL_TIMEOUT_MS APP_DIAL_TIMEOUT_MS
 #define DIAL_MODE_ACTIVE_LOW true
 #define DIAL_PULSE_ACTIVE_LOW true
 
@@ -26,6 +28,7 @@ RotaryDial::RotaryDial(int pulse_pin, int hook_pin, int extra_btn_pin, int mode_
     _last_pulse_time = 0;
     _dialing = false;
     _new_pulse = false;
+    _last_pulse_delta_ms = 0;
     
     _off_hook = false;
     _last_hook_debounce = 0;
@@ -98,8 +101,13 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
 
     int64_t now_ms = MILLIS();
     if (now_ms - _instance->_last_pulse_time > DIAL_DEBOUNCE_PULSE_MS) {
+        int32_t delta_ms = 0;
+        if (_instance->_pulse_count > 0) {
+            delta_ms = (int32_t)(now_ms - _instance->_last_pulse_time);
+        }
         _instance->_pulse_count++;
         _instance->_last_pulse_time = now_ms;
+        _instance->_last_pulse_delta_ms = delta_ms;
         _instance->_dialing = true;
         _instance->_new_pulse = true;
     }
@@ -147,6 +155,13 @@ void RotaryDial::begin() {
 
 void RotaryDial::loop() {
     int64_t now = MILLIS();
+
+#if APP_DIAL_DEBUG_SERIAL
+    if (_new_pulse) {
+        _new_pulse = false;
+        ets_printf("DIAL PULSE count=%d delta_ms=%d\n", _pulse_count, _last_pulse_delta_ms);
+    }
+#endif
     
     // --- Hook Logic ---
     int hook_level = gpio_get_level(_hook_pin);
@@ -172,6 +187,9 @@ void RotaryDial::loop() {
              _off_hook = current_off_hook;
              if (_hook_callback) _hook_callback(_off_hook);
              _last_hook_debounce = now;
+#if APP_DIAL_DEBUG_SERIAL
+            ets_printf("HOOK state=%s level=%d time=%lld\n", _off_hook ? "OFF" : "ON", hook_level, now);
+#endif
         }
     } else {
         _last_hook_debounce = now;
@@ -206,10 +224,16 @@ void RotaryDial::loop() {
         if (mode_active != last_raw_mode) {
             mode_change_time = now;
             last_raw_mode = mode_active;
+#if APP_DIAL_DEBUG_SERIAL
+            ets_printf("MODE raw=%d level=%d time=%lld\n", mode_active ? 1 : 0, mode_level, now);
+#endif
         }
         
         if ((now - mode_change_time) > 20) {
             stable_mode_active = mode_active;
+#if APP_DIAL_DEBUG_SERIAL
+            ets_printf("MODE stable=%d time=%lld\n", stable_mode_active ? 1 : 0, now);
+#endif
         }
 
         if (stable_mode_active) {
@@ -229,19 +253,35 @@ void RotaryDial::loop() {
                     // Sanity check: Only send valid digits 0-9
                     if (digit <= 9) { 
                         if (_dial_callback) _dial_callback(digit);
+#if APP_DIAL_DEBUG_SERIAL
+                        ets_printf("DIAL DIGIT=%d pulses=%d\n", digit, raw_pulses);
+#endif
                     }
                 }
                 _pulse_count = 0;
             }
         }
     } else {
-         // Timeout Logic
-         if (_dialing && (now - _last_pulse_time > DIAL_TIMEOUT_MS)) {
+         // Timeout/Gap Logic (No mode pin)
+         if (_dialing && (now - _last_pulse_time > DIAL_DIGIT_GAP_MS)) {
              _dialing = false;
              int digit = _pulse_count;
              if (digit > 9) digit = 0;
              if (digit == 10) digit = 0;
              if (_dial_callback) _dial_callback(digit);
+#if APP_DIAL_DEBUG_SERIAL
+             ets_printf("DIAL GAP digit=%d pulses=%d gap_ms=%lld\n", digit, _pulse_count, (now - _last_pulse_time));
+#endif
+             _pulse_count = 0;
+         } else if (_dialing && (now - _last_pulse_time > DIAL_TIMEOUT_MS)) {
+             _dialing = false;
+             int digit = _pulse_count;
+             if (digit > 9) digit = 0;
+             if (digit == 10) digit = 0;
+             if (_dial_callback) _dial_callback(digit);
+#if APP_DIAL_DEBUG_SERIAL
+             ets_printf("DIAL TIMEOUT digit=%d pulses=%d\n", digit, _pulse_count);
+#endif
              _pulse_count = 0;
          }
     }

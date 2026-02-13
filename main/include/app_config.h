@@ -51,13 +51,15 @@
 
 // Timing settings (ms)
 #define APP_DIAL_TIMEOUT_MS 2000
+#define APP_DIAL_PULSE_DEBOUNCE_MS 60
+#define APP_DIAL_DIGIT_GAP_MS 500
 #define APP_PERSONA_PAUSE_MS 1500
 #define APP_DIALTONE_SILENCE_MS 1000
 #define APP_BUSY_TIMEOUT_MS 5000
-#define APP_WAV_SWITCH_DELAY_MS 15
+#define APP_WAV_SWITCH_DELAY_MS 30
 #define APP_OUTPUT_MUTE_DELAY_MS 25
 #define APP_WAV_FADE_OUT_EXTRA_MS 20
-#define APP_WAV_FADE_IN_MS 50
+#define APP_WAV_FADE_IN_MS 55
 #define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
 
 // Extra button (Key 5) long-press handling
@@ -89,17 +91,15 @@
 #define APP_ALARM_MIN_VOLUME 55
 #define APP_ALARM_DEFAULT_VOLUME 90
 
-// Night mode settings
-#define APP_NIGHTMODE_DURATION_HOURS 6
-#define APP_NIGHTMODE_LED_PERCENT 5
-#define APP_NIGHTMODE_VOLUME_PERCENT 50
-
 // LED signal lamp defaults
 #define APP_LED_DEFAULT_ENABLED 1
 #define APP_LED_DAY_PERCENT 100
 #define APP_LED_NIGHT_PERCENT 10
 #define APP_LED_DAY_START_HOUR 7
 #define APP_LED_NIGHT_START_HOUR 22
+
+// OTA
+#define APP_OTA_PASSWORD "dialy1935"
 
 // Phonebook default numbers (max 3 digits)
 #define APP_PB_NUM_PERSONA_1 "1"
@@ -116,6 +116,8 @@
 // Debug / Monitor
 #define ENABLE_SYSTEM_MONITOR 0
 #define SYSTEM_MONITOR_INTERVAL_MS 30000
+#define APP_DIAL_DEBUG_SERIAL 0
+#define APP_OTA_DEBUG 0
 
 // Task watchdog
 #define APP_ENABLE_TASK_WDT 1
@@ -125,6 +127,6 @@
 // SD log capture (debug)
 #define APP_ENABLE_SD_LOG 1
 #define APP_SD_LOG_PATH "/sdcard/logs/app.log"
-#define APP_SD_LOG_MAX_BYTES (512 * 1024)
+#define APP_SD_LOG_MAX_BYTES (2 * 1024 * 1024)
 #define APP_SD_LOG_FLUSH_INTERVAL_MS 5000
 #define APP_SD_LOG_BUFFER_LINES 120

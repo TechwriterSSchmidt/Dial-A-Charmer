@@ -48,8 +48,9 @@ const TEXT = {
         base_speaker_timer: "Lautsprecher und Timer",
         handset: "Telefonhörer",
         timer_sound: "Timer-Ton",
-        signal_lamp: "Signallampe",
-        led_enabled: "LED Aktiv",
+        day_night_settings: "Tag- & Nachtmodus",
+        led_enabled: "Signallampe Aktiv",
+        night_base_volume: "Nachtlautstärke (Basis)",
         day_brightness: "Tagmodus Helligkeit",
         night_brightness: "Nachtmodus Helligkeit",
         day_start: "Tagmodus Start",
@@ -70,8 +71,26 @@ const TEXT = {
         find_device_at: "Gerät erreichbar unter:",
         network_error: "Netzwerkfehler",
         check_console: "Konsole prüfen",
+        download_logs: "Logs herunterladen",
+        sd_log: "SD-Log",
+        sd_log_enabled: "SD-Log aktiv",
         select_network: "Bitte lokales Netzwerk auswählen:",
-        saving_connecting: "Speichern und verbinden..."
+        saving_connecting: "Speichern und verbinden...",
+        ota_title: "Firmware Update",
+        ota_password: "OTA Passwort",
+        ota_select: "Firmware-Datei auswählen (.bin)",
+        ota_upload: "Update starten",
+        ota_hint: "Das Gerät startet nach erfolgreichem Update neu.",
+        ota_status_idle: "Bereit",
+        ota_status_uploading: "Upload läuft...",
+        ota_status_done: "Update OK, Neustart...",
+        ota_status_failed: "Update fehlgeschlagen",
+        reboot_title: "Neustart",
+        reboot_button: "Jetzt neu starten",
+        reboot_hint: "Das Gerät startet sofort neu.",
+        last_reset: "Letzter Reset",
+        reset_reason: "Grund",
+        boot_count: "Boots"
     },
     en: {
         title: "Dial-A-Charmer",
@@ -102,8 +121,9 @@ const TEXT = {
         base_speaker_timer: "Base Speaker and Timer",
         handset: "Handset",
         timer_sound: "Timer Sound",
-        signal_lamp: "Signal Lamp",
-        led_enabled: "LED Enabled",
+        day_night_settings: "Day & Night Mode",
+        led_enabled: "Signal Lamp Enabled",
+        night_base_volume: "Night Base Volume",
         day_brightness: "Day Brightness",
         night_brightness: "Night Brightness",
         day_start: "Day Start",
@@ -124,8 +144,26 @@ const TEXT = {
         find_device_at: "Please find the device at:",
         network_error: "Network Error",
         check_console: "Check Console",
+        download_logs: "Download Logs",
+        sd_log: "SD Log",
+        sd_log_enabled: "SD log enabled",
         select_network: "Select your local network:",
-        saving_connecting: "Saving and Connecting..."
+        saving_connecting: "Saving and Connecting...",
+        ota_title: "Firmware Update",
+        ota_password: "OTA Password",
+        ota_select: "Select firmware file (.bin)",
+        ota_upload: "Start Update",
+        ota_hint: "Device will reboot after a successful update.",
+        ota_status_idle: "Ready",
+        ota_status_uploading: "Uploading...",
+        ota_status_done: "Update OK, rebooting...",
+        ota_status_failed: "Update failed",
+        reboot_title: "Reboot",
+        reboot_button: "Reboot now",
+        reboot_hint: "Device will reboot immediately.",
+        last_reset: "Last Reset",
+        reset_reason: "Reason",
+        boot_count: "Boots"
     }
 };
 
@@ -158,8 +196,38 @@ const API = {
     getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
     getLogs: () => fetch('/api/logs').then(r => r.json()),
     getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
-    getTime: () => fetch('/api/time').then(r => r.json())
+    getTime: () => fetch('/api/time').then(r => r.json()),
+    uploadOta: (file, password, onProgress) => {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/ota');
+            if (password) {
+                xhr.setRequestHeader('X-OTA-Password', password);
+            }
+            xhr.upload.onprogress = (evt) => {
+                if (evt.lengthComputable && typeof onProgress === 'function') {
+                    onProgress(Math.round((evt.loaded / evt.total) * 100));
+                }
+            };
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4) {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(xhr.responseText);
+                    } else {
+                        reject(new Error(xhr.responseText || 'OTA failed'));
+                    }
+                }
+            };
+            xhr.onerror = () => reject(new Error('OTA failed'));
+            xhr.send(file);
+        });
+    },
+    reboot: () => fetch('/api/reboot', { method: 'POST' })
 };
+
+function downloadLogs() {
+    window.location.href = '/api/logs/download';
+}
 
 // Update alarm clock time display
 function updateAlarmTime() {
@@ -310,6 +378,13 @@ function startLogPolling() {
     };
     fetchLogs();
     state.logTimer = setInterval(fetchLogs, 1500);
+}
+
+function logLampSettings(label, patch) {
+    const parts = Object.keys(patch).map(key => `${key}=${patch[key]}`);
+    const line = `LAMP ${label}: ${parts.join(', ')}`;
+    state.logLines = [...state.logLines.slice(-9), line];
+    updateCrt(state.logLines);
 }
 
 function stopLogPolling() {
@@ -661,6 +736,12 @@ function renderAdvanced() {
     const ledNightPct = (state.settings.led_night_pct === undefined) ? 10 : state.settings.led_night_pct;
     const ledDayStart = (state.settings.led_day_start === undefined) ? 7 : state.settings.led_day_start;
     const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
+    const nightBaseVol = (state.settings.night_base_volume === undefined) ? 50 : state.settings.night_base_volume;
+    const otaPassword = "";
+    const resetReason = state.settings.reset_reason || "--";
+    const resetCode = (state.settings.reset_reason_code === undefined) ? "--" : state.settings.reset_reason_code;
+    const bootCount = (state.settings.boot_count === undefined) ? "--" : state.settings.boot_count;
+    const sdLogEnabled = (state.settings.sd_log_enabled === undefined) ? true : !!state.settings.sd_log_enabled;
      
      let tzOptions = "";
      TIMEZONES.forEach(tz => {
@@ -700,6 +781,29 @@ function renderAdvanced() {
             <div class="crt-panel">
                 <div class="crt-screen">
                     <div class="crt-text" id="crt-log">READY&gt;_</div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin:6px 0 12px;">
+                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
+            </div>
+
+            <!-- RESET STATUS PANEL -->
+            <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('last_reset')}</h4>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('reset_reason')}</div>
+                    <div style="color:#d4af37; font-weight:bold;">${resetReason} (${resetCode})</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('boot_count')}</div>
+                    <div style="color:#d4af37; font-weight:bold;">${bootCount}</div>
+                </div>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+                    <label class="switch" title="${t('sd_log')}">
+                        <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="alarm-label">${t('sd_log_enabled')}</span>
                 </div>
             </div>
 
@@ -763,7 +867,7 @@ function renderAdvanced() {
 
             <!-- SIGNAL LAMP PANEL -->
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('signal_lamp')}</h4>
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('day_night_settings')}</h4>
 
                 <div style="display:flex; align-items:center; gap:10px; margin:6px 0 12px;">
                     <label class="switch" title="${t('led_enabled')}">
@@ -773,7 +877,7 @@ function renderAdvanced() {
                     <span class="alarm-label">${t('led_enabled')}</span>
                 </div>
 
-                <div style="margin-top:6px;">
+                <div style="margin-top:12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('day_brightness')}</label>
                         <span id="led-day-disp" style="color:#d4af37; font-weight:bold;">${ledDayPct}%</span>
@@ -788,6 +892,8 @@ function renderAdvanced() {
                         </select>
                     </div>
                 </div>
+
+                <div style="margin-top:14px; border-top:1px solid #333;"></div>
 
                 <div style="margin-top:12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
@@ -804,6 +910,46 @@ function renderAdvanced() {
                         </select>
                     </div>
                 </div>
+
+                <div style="margin-top:12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('night_base_volume')}</label>
+                        <span id="night-base-vol-disp" style="color:#d4af37; font-weight:bold;">${nightBaseVol}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="${nightBaseVol}"
+                           oninput="document.getElementById('night-base-vol-disp').innerText=this.value+'%'"
+                           onchange="saveLampSettings({night_base_volume: parseInt(this.value)})" style="width:100%"/>
+                </div>
+            </div>
+
+            <!-- OTA PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('ota_title')}</h4>
+
+                <div style="margin-top:6px;">
+                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_password')}</label>
+                    <input type="password" id="ota-password" value="${otaPassword}" placeholder="${t('ota_password')}" style="margin-top:6px;" />
+                </div>
+
+                <div style="margin-top:10px;">
+                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_select')}</label>
+                    <input type="file" id="ota-file" accept=".bin" style="margin-top:6px;" />
+                </div>
+
+                <div style="margin-top:10px;">
+                    <div id="ota-status" style="font-size:0.85rem; letter-spacing:0.5px;">${t('ota_status_idle')}</div>
+                    <div id="ota-progress" style="font-size:0.85rem; color:#d4af37; margin-top:4px;">0%</div>
+                </div>
+
+                <button onclick="startOtaUpload()" style="margin-top:12px;">${t('ota_upload')}</button>
+                <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('ota_hint')}</div>
+            </div>
+
+            <!-- REBOOT PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('reboot_title')}</h4>
+                <button onclick="requestReboot()" style="margin-top:10px;">${t('reboot_button')}</button>
+                <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('reboot_hint')}</div>
             </div>
 
         </div>
@@ -844,6 +990,43 @@ window.saveLampSettings = (patch) => {
     if (!patch || typeof patch !== 'object') return;
     Object.assign(state.settings, patch);
     API.saveSettings(patch);
+    logLampSettings('settings', patch);
+};
+
+window.saveSdLogEnabled = (enabled) => {
+    const value = !!enabled;
+    state.settings.sd_log_enabled = value;
+    API.saveSettings({sd_log_enabled: value});
+};
+
+window.startOtaUpload = () => {
+    const fileInput = document.getElementById('ota-file');
+    const passwordInput = document.getElementById('ota-password');
+    const statusEl = document.getElementById('ota-status');
+    const progressEl = document.getElementById('ota-progress');
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        if (statusEl) statusEl.textContent = t('ota_status_failed');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const password = passwordInput ? passwordInput.value : '';
+
+    if (statusEl) statusEl.textContent = t('ota_status_uploading');
+    if (progressEl) progressEl.textContent = '0%';
+
+    API.uploadOta(file, password, (pct) => {
+        if (progressEl) progressEl.textContent = `${pct}%`;
+    }).then(() => {
+        if (statusEl) statusEl.textContent = t('ota_status_done');
+    }).catch(() => {
+        if (statusEl) statusEl.textContent = t('ota_status_failed');
+    });
+};
+
+window.requestReboot = () => {
+    API.reboot().catch(() => {});
 };
 
 function renderSetup() {

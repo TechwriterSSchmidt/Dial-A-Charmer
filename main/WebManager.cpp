@@ -5,6 +5,7 @@
 #include <stdarg.h>
 #include <sys/param.h>
 #include <dirent.h>
+#include <time.h>
 #include <sys/types.h>
 #include <strings.h>
 #include <sys/stat.h>
@@ -26,6 +27,7 @@
 #include "PhonebookManager.h"
 #include "cJSON.h"
 #include "lwip/sockets.h"
+#include "esp_ota_ops.h"
 
 // External reference to play_file from main.cpp
 extern void play_file(const char* path);
@@ -35,6 +37,16 @@ extern void safe_reboot();
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
 
+static char s_reset_reason[32] = "";
+static int s_reset_reason_code = -1;
+static uint32_t s_boot_count = 0;
+
+#if APP_OTA_DEBUG
+#define OTA_LOGE(...) ESP_LOGE(TAG, __VA_ARGS__)
+#else
+#define OTA_LOGE(...) do { } while (0)
+#endif
+
 static const size_t LOG_LINE_COUNT = 20;
 static const size_t LOG_LINE_MAX = 256;
 
@@ -43,14 +55,6 @@ static size_t s_log_head = 0;
 static size_t s_log_count = 0;
 static portMUX_TYPE s_log_mux = portMUX_INITIALIZER_UNLOCKED;
 static vprintf_like_t s_prev_vprintf = nullptr;
-
-#if APP_ENABLE_SD_LOG
-static FILE *s_sd_log_file = nullptr;
-static TaskHandle_t s_sd_log_task = nullptr;
-static portMUX_TYPE s_sd_log_mux = portMUX_INITIALIZER_UNLOCKED;
-static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
-static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
-static size_t s_sd_log_buf_count = 0;
 
 // WiFi / AP Logic
 static esp_event_handler_instance_t s_wifi_event_instance = NULL;
@@ -76,9 +80,19 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
+        ESP_LOGI(TAG, "WiFi connected, IP address: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_retry_count = 0;
     }
 }
+
+#if APP_ENABLE_SD_LOG
+static FILE *s_sd_log_file = nullptr;
+static TaskHandle_t s_sd_log_task = nullptr;
+static portMUX_TYPE s_sd_log_mux = portMUX_INITIALIZER_UNLOCKED;
+static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
+static size_t s_sd_log_buf_count = 0;
+static bool s_sd_log_enabled = true;
 
 static void sd_log_write_line(const char *line) {
     if (!line || !line[0]) {
@@ -91,6 +105,24 @@ static void sd_log_write_line(const char *line) {
         s_sd_log_buf_count++;
     }
     portEXIT_CRITICAL(&s_sd_log_mux);
+}
+
+static void sd_log_format_with_time(const char *line, char *dst, size_t dst_size) {
+    if (!line || !dst || dst_size == 0) {
+        return;
+    }
+    time_t now = time(NULL);
+    struct tm now_tm;
+    if (localtime_r(&now, &now_tm) == NULL || now_tm.tm_year < 120) {
+        snprintf(dst, dst_size, "[%lu] %s", (unsigned long)esp_log_timestamp(), line);
+        return;
+    }
+    char time_buf[32];
+    if (strftime(time_buf, sizeof(time_buf), "%Y-%m-%d %H:%M:%S", &now_tm) == 0) {
+        snprintf(dst, dst_size, "%s", line);
+        return;
+    }
+    snprintf(dst, dst_size, "%s %s", time_buf, line);
 }
 
 static void sd_log_flush_task(void *pvParameters) {
@@ -133,7 +165,18 @@ static void sd_log_flush_task(void *pvParameters) {
         fseek(s_sd_log_file, 0, SEEK_END);
         long size = ftell(s_sd_log_file);
         if (size >= (long)APP_SD_LOG_MAX_BYTES) {
-            freopen(APP_SD_LOG_PATH, "w", s_sd_log_file);
+            fclose(s_sd_log_file);
+            s_sd_log_file = nullptr;
+
+            char backup_path[160];
+            snprintf(backup_path, sizeof(backup_path), "%s.1", APP_SD_LOG_PATH);
+            remove(backup_path);
+            rename(APP_SD_LOG_PATH, backup_path);
+
+            s_sd_log_file = fopen(APP_SD_LOG_PATH, "w");
+            if (!s_sd_log_file) {
+                continue;
+            }
         }
         for (size_t i = 0; i < count; ++i) {
             fputs(s_sd_log_flush_buf[i], s_sd_log_file);
@@ -156,7 +199,46 @@ static void sd_log_flush_task(void *pvParameters) {
         portEXIT_CRITICAL(&s_sd_log_mux);
     }
 }
+
+static void sd_log_set_enabled(bool enabled) {
+    s_sd_log_enabled = enabled;
+    if (!enabled) {
+        if (s_sd_log_file) {
+            fclose(s_sd_log_file);
+            s_sd_log_file = nullptr;
+        }
+        portENTER_CRITICAL(&s_sd_log_mux);
+        s_sd_log_buf_count = 0;
+        portEXIT_CRITICAL(&s_sd_log_mux);
+        return;
+    }
+    if (!s_sd_log_task) {
+        xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
+    }
+}
 #endif
+
+static const size_t OTA_PASSWORD_MAX = 64;
+
+static void ota_reboot_task(void *pvParameters) {
+    (void)pvParameters;
+    vTaskDelay(pdMS_TO_TICKS(1500));
+    safe_reboot();
+    vTaskDelete(NULL);
+}
+
+static bool ota_password_matches(httpd_req_t *req) {
+    char token_header[OTA_PASSWORD_MAX + 1] = {0};
+    if (httpd_req_get_hdr_value_str(req, "X-OTA-Password", token_header, sizeof(token_header)) != ESP_OK) {
+        return false;
+    }
+
+    if (strlen(APP_OTA_PASSWORD) == 0) {
+        return false;
+    }
+
+    return strncmp(token_header, APP_OTA_PASSWORD, OTA_PASSWORD_MAX) == 0;
+}
 
 static std::string get_first_ringtone_name() {
     const char *dir_path = "/sdcard/ringtones";
@@ -250,24 +332,20 @@ static void strip_ansi(const char *src, char *dst, size_t dst_size) {
     if (!src || !dst || dst_size == 0) {
         return;
     }
-    size_t di = 0;
-    for (size_t i = 0; src[i] != '\0' && di + 1 < dst_size; ++i) {
-        // ANSI CSI sequence detection: \x1b [ ... [0x40-0x7E]
+    size_t out = 0;
+    for (size_t i = 0; src[i] != '\0' && out + 1 < dst_size; ++i) {
         if (src[i] == '\x1b' && src[i + 1] == '[') {
-            size_t j = i + 2;
-            while (src[j] != '\0') {
-                if (src[j] >= 0x40 && src[j] <= 0x7E) {
-                    i = j; // Found terminator, update i to skip sequence
-                    break;
-                }
-                j++;
+            i += 2;
+            while (src[i] && src[i] != 'm') {
+                i++;
             }
             continue;
         }
-        dst[di++] = src[i];
+        dst[out++] = src[i];
     }
-    dst[di] = '\0';
+    dst[out] = '\0';
 }
+
 
 static void log_buffer_add(const char *line) {
     if (!line || !line[0]) {
@@ -299,9 +377,13 @@ static int log_vprintf(const char *fmt, va_list args) {
     log_buffer_add(buf);
 
 #if APP_ENABLE_SD_LOG
-    char clean[LOG_LINE_MAX];
-    strip_ansi(buf, clean, sizeof(clean));
-    sd_log_write_line(clean);
+    if (s_sd_log_enabled) {
+        char clean[LOG_LINE_MAX];
+        char stamped[LOG_LINE_MAX];
+        strip_ansi(buf, clean, sizeof(clean));
+        sd_log_format_with_time(clean, stamped, sizeof(stamped));
+        sd_log_write_line(stamped);
+    }
 #endif
 
     if (s_prev_vprintf) {
@@ -315,10 +397,25 @@ static void init_log_capture() {
         s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
     }
 #if APP_ENABLE_SD_LOG
-    if (!s_sd_log_task) {
+    if (s_sd_log_enabled && !s_sd_log_task) {
         xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
     }
 #endif
+}
+
+static void load_sd_log_setting() {
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("dialcharm", NVS_READONLY, &my_handle);
+    if (err != ESP_OK) {
+        return;
+    }
+    uint8_t enabled = APP_ENABLE_SD_LOG ? 1 : 0;
+    if (nvs_get_u8(my_handle, "sd_log_enabled", &enabled) == ESP_OK) {
+#if APP_ENABLE_SD_LOG
+        sd_log_set_enabled(enabled != 0);
+#endif
+    }
+    nvs_close(my_handle);
 }
 
 // DNS Server Task
@@ -526,6 +623,79 @@ static esp_err_t api_logs_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_logs_download_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=console_log.txt");
+
+#if APP_ENABLE_SD_LOG
+    auto send_file = [&](const char *path) -> esp_err_t {
+        FILE *f = fopen(path, "r");
+        if (!f) {
+            return ESP_FAIL;
+        }
+        char buf[512];
+        size_t n = 0;
+        while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
+                fclose(f);
+                httpd_resp_sendstr_chunk(req, NULL);
+                return ESP_FAIL;
+            }
+        }
+        fclose(f);
+        return ESP_OK;
+    };
+
+    const char *current_path = APP_SD_LOG_PATH;
+    char backup_path[160];
+    snprintf(backup_path, sizeof(backup_path), "%s.1", APP_SD_LOG_PATH);
+
+    bool sent_any = false;
+    if (access(backup_path, F_OK) == 0) {
+        if (send_file(backup_path) == ESP_OK) {
+            const char *sep = "\n--- current log ---\n";
+            httpd_resp_send_chunk(req, sep, strlen(sep));
+            sent_any = true;
+        }
+    }
+    if (access(current_path, F_OK) == 0) {
+        if (send_file(current_path) == ESP_OK) {
+            sent_any = true;
+        }
+    }
+    if (sent_any) {
+        httpd_resp_sendstr_chunk(req, NULL);
+        return ESP_OK;
+    }
+#endif
+
+    char lines[LOG_LINE_COUNT][LOG_LINE_MAX];
+    size_t count = 0;
+    size_t start = 0;
+
+    portENTER_CRITICAL(&s_log_mux);
+    count = s_log_count;
+    start = (s_log_head + LOG_LINE_COUNT - count) % LOG_LINE_COUNT;
+    for (size_t i = 0; i < count; ++i) {
+        size_t idx = (start + i) % LOG_LINE_COUNT;
+        strncpy(lines[i], s_log_lines[idx], LOG_LINE_MAX - 1);
+        lines[i][LOG_LINE_MAX - 1] = '\0';
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+
+    std::string body;
+    body.reserve(count * 64);
+    for (size_t i = 0; i < count; ++i) {
+        char compacted[LOG_LINE_MAX];
+        compact_log_line(lines[i], compacted, sizeof(compacted));
+        body.append(compacted);
+        body.push_back('\n');
+    }
+
+    httpd_resp_send(req, body.c_str(), body.size());
+    return ESP_OK;
+}
+
 static esp_err_t api_time_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     
@@ -540,6 +710,94 @@ static esp_err_t api_time_handler(httpd_req_t *req) {
     httpd_resp_send(req, json_str, strlen(json_str));
     free((void *)json_str);
     cJSON_Delete(root);
+    return ESP_OK;
+}
+
+static esp_err_t api_reboot_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"ok\":true,\"rebooting\":true}", HTTPD_RESP_USE_STRLEN);
+    xTaskCreate(ota_reboot_task, "reboot_task", 2048, NULL, 5, NULL);
+    return ESP_OK;
+}
+
+static esp_err_t api_ota_handler(httpd_req_t *req) {
+    if (!ota_password_matches(req)) {
+        httpd_resp_set_status(req, "403 Forbidden");
+        httpd_resp_send(req, "Forbidden", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    if (req->content_len <= 0) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing firmware", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+    if (!update_partition) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    if ((size_t)req->content_len > update_partition->size) {
+        OTA_LOGE("OTA image too large: %d > %d", req->content_len, update_partition->size);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Firmware too large for OTA slot", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    esp_ota_handle_t ota_handle = 0;
+    esp_err_t err = esp_ota_begin(update_partition, req->content_len, &ota_handle);
+    if (err != ESP_OK) {
+        OTA_LOGE("OTA begin failed: %s", esp_err_to_name(err));
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    size_t remaining = req->content_len;
+    uint8_t buf[4096];
+    while (remaining > 0) {
+        int recv_len = httpd_req_recv(req, (char *)buf, remaining > sizeof(buf) ? sizeof(buf) : remaining);
+        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
+            continue;
+        }
+        if (recv_len <= 0) {
+            esp_ota_abort(ota_handle);
+            httpd_resp_set_status(req, "500 Internal Server Error");
+            httpd_resp_send(req, "OTA receive failed", HTTPD_RESP_USE_STRLEN);
+            return ESP_FAIL;
+        }
+        err = esp_ota_write(ota_handle, buf, recv_len);
+        if (err != ESP_OK) {
+            esp_ota_abort(ota_handle);
+            OTA_LOGE("OTA write failed: %s", esp_err_to_name(err));
+            httpd_resp_set_status(req, "500 Internal Server Error");
+            httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
+            return ESP_FAIL;
+        }
+        remaining -= recv_len;
+    }
+
+    err = esp_ota_end(ota_handle);
+    if (err != ESP_OK) {
+        OTA_LOGE("OTA end failed: %s", esp_err_to_name(err));
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    err = esp_ota_set_boot_partition(update_partition);
+    if (err != ESP_OK) {
+        OTA_LOGE("OTA set boot failed: %s", esp_err_to_name(err));
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"ok\":true,\"rebooting\":true}", HTTPD_RESP_USE_STRLEN);
+    xTaskCreate(ota_reboot_task, "ota_reboot", 2048, NULL, 5, NULL);
     return ESP_OK;
 }
 
@@ -584,6 +842,16 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     }
     cJSON_AddStringToObject(root, "ip", ip_buf);
 
+    cJSON_AddNumberToObject(root, "boot_count", (double)s_boot_count);
+    cJSON_AddStringToObject(root, "reset_reason", s_reset_reason[0] ? s_reset_reason : "unknown");
+    cJSON_AddNumberToObject(root, "reset_reason_code", s_reset_reason_code);
+
+    uint8_t sd_log_enabled = APP_ENABLE_SD_LOG ? 1 : 0;
+    if (err == ESP_OK) {
+        nvs_get_u8(my_handle, "sd_log_enabled", &sd_log_enabled);
+    }
+    cJSON_AddBoolToObject(root, "sd_log_enabled", sd_log_enabled != 0);
+
     // WiFi Pass (Always return empty or placeholder)
     cJSON_AddStringToObject(root, "wifi_pass", "");
 
@@ -604,6 +872,11 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(root, "vol_alarm", vol_a);
     // Send configured minimum to frontend
     cJSON_AddNumberToObject(root, "vol_alarm_min", APP_ALARM_MIN_VOLUME);
+
+    // Night mode base speaker volume
+    uint8_t night_base_vol = 50;
+    if (err == ESP_OK) nvs_get_u8(my_handle, "night_base_volume", &night_base_vol);
+    cJSON_AddNumberToObject(root, "night_base_volume", night_base_vol);
 
     // Snooze Time
     int32_t snooze = APP_SNOOZE_DEFAULT_MINUTES;
@@ -655,6 +928,7 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(root, "led_night_pct", led_night_pct);
     cJSON_AddNumberToObject(root, "led_day_start", led_day_start);
     cJSON_AddNumberToObject(root, "led_night_start", led_night_start);
+
     
     // --- Time & Timezone ---
     struct tm now = TimeManager::getCurrentTime();
@@ -735,6 +1009,15 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_str(my_handle, "wifi_pass", item->valuestring);
         }
 
+        item = cJSON_GetObjectItem(root, "sd_log_enabled");
+        if (cJSON_IsBool(item) || cJSON_IsNumber(item)) {
+            bool enabled = cJSON_IsBool(item) ? cJSON_IsTrue(item) : (item->valueint != 0);
+            nvs_set_u8(my_handle, "sd_log_enabled", enabled ? 1 : 0);
+#if APP_ENABLE_SD_LOG
+            sd_log_set_enabled(enabled);
+#endif
+        }
+
         item = cJSON_GetObjectItem(root, "volume");
         if (cJSON_IsNumber(item)) {
             nvs_set_u8(my_handle, "volume", (uint8_t)item->valueint);
@@ -750,6 +1033,14 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_u8(my_handle, "vol_alarm", (uint8_t)item->valueint);
         }
 
+        item = cJSON_GetObjectItem(root, "night_base_volume");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 100) v = 100;
+            nvs_set_u8(my_handle, "night_base_volume", (uint8_t)v);
+        }
+
         item = cJSON_GetObjectItem(root, "snooze_min");
         if (cJSON_IsNumber(item)) {
             nvs_set_i32(my_handle, "snooze_min", item->valueint);
@@ -761,6 +1052,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_str(my_handle, "timer_ringtone", item->valuestring);
             ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
         }
+
 
         bool led_seen = false;
         bool led_changed = false;
@@ -1271,8 +1563,8 @@ void WebManager::setupMdns() {
 
 void WebManager::setupWebServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 12;
-    config.stack_size = 8192; // More stack for file handling
+    config.max_uri_handlers = 14;
+    config.stack_size = 16384; // Larger stack to avoid httpd task overflow
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
 
     ESP_LOGI(TAG, "Starting Web Server...");
@@ -1342,6 +1634,14 @@ void WebManager::setupWebServer() {
         };
         httpd_register_uri_handler(server, &logs_uri);
 
+        httpd_uri_t logs_download_uri = {
+            .uri       = "/api/logs/download",
+            .method    = HTTP_GET,
+            .handler   = api_logs_download_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &logs_download_uri);
+
         httpd_uri_t time_uri = {
             .uri       = "/api/time",
             .method    = HTTP_GET,
@@ -1349,6 +1649,22 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &time_uri);
+
+        httpd_uri_t reboot_uri = {
+            .uri       = "/api/reboot",
+            .method    = HTTP_POST,
+            .handler   = api_reboot_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &reboot_uri);
+
+        httpd_uri_t ota_uri = {
+            .uri       = "/api/ota",
+            .method    = HTTP_POST,
+            .handler   = api_ota_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &ota_uri);
 
         // Files (Catch-all)
         // We register this last or use a greedy match
@@ -1367,10 +1683,25 @@ void WebManager::setupDnsServer() {
 }
 
 void WebManager::begin() {
-    init_log_capture();
+    startLogCapture();
     setupWifi();
     setupMdns();
     setupWebServer();
+}
+
+void WebManager::startLogCapture() {
+    load_sd_log_setting();
+    init_log_capture();
+}
+
+void WebManager::setResetInfo(uint32_t boot_count, const char *reason, int reason_code) {
+    s_boot_count = boot_count;
+    s_reset_reason_code = reason_code;
+    if (reason && reason[0]) {
+        snprintf(s_reset_reason, sizeof(s_reset_reason), "%s", reason);
+    } else {
+        snprintf(s_reset_reason, sizeof(s_reset_reason), "unknown");
+    }
 }
 
 void WebManager::loop() {

@@ -7,6 +7,8 @@ public:
     void begin();
     void loop(); // Process mDNS queries etc.
     void startAPMode();
+    void startLogCapture();
+    void setResetInfo(uint32_t boot_count, const char *reason, int reason_code);
 
 private:
     httpd_handle_t server = NULL;
