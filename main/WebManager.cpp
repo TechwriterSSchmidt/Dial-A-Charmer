@@ -605,6 +605,11 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     // Send configured minimum to frontend
     cJSON_AddNumberToObject(root, "vol_alarm_min", APP_ALARM_MIN_VOLUME);
 
+    // Night mode base speaker volume
+    uint8_t night_base_vol = 50;
+    if (err == ESP_OK) nvs_get_u8(my_handle, "night_base_volume", &night_base_vol);
+    cJSON_AddNumberToObject(root, "night_base_volume", night_base_vol);
+
     // Snooze Time
     int32_t snooze = APP_SNOOZE_DEFAULT_MINUTES;
     if (err == ESP_OK) nvs_get_i32(my_handle, "snooze_min", &snooze);
@@ -748,6 +753,14 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         item = cJSON_GetObjectItem(root, "vol_alarm");
         if (cJSON_IsNumber(item)) {
             nvs_set_u8(my_handle, "vol_alarm", (uint8_t)item->valueint);
+        }
+
+        item = cJSON_GetObjectItem(root, "night_base_volume");
+        if (cJSON_IsNumber(item)) {
+            int v = item->valueint;
+            if (v < 0) v = 0;
+            if (v > 100) v = 100;
+            nvs_set_u8(my_handle, "night_base_volume", (uint8_t)v);
         }
 
         item = cJSON_GetObjectItem(root, "snooze_min");

@@ -40,6 +40,8 @@
 #include "driver/rtc_io.h"
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
+static const int kNightModeDurationHours = 6;
+static const uint8_t kNightBaseVolumeDefault = 50;
 
 // Global Objects
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
@@ -59,6 +61,7 @@ const int DIALTONE_SILENCE_MS = APP_DIALTONE_SILENCE_MS;
 bool is_playing = false;
 bool g_output_mode_handset = false; 
 int g_last_effective_handset = -1;
+static volatile bool g_effective_handset = false;
 bool g_off_hook = false;
 bool g_line_busy = false;
 bool g_persona_playback_active = false;
@@ -431,7 +434,7 @@ static void set_night_mode(bool enable) {
     if (enable) {
         g_night_mode_active = true;
         g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
-            (int64_t)APP_NIGHTMODE_DURATION_HOURS * 60 * 60 * 1000;
+            (int64_t)kNightModeDurationHours * 60 * 60 * 1000;
         g_night_prev_r = g_led_r;
         g_night_prev_g = g_led_g;
         g_night_prev_b = g_led_b;
@@ -912,6 +915,7 @@ void update_audio_output() {
     if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
         effective_handset = false; 
     }
+    g_effective_handset = effective_handset;
 
     bool output_changed = (g_last_effective_handset < 0) || (effective_handset != (g_last_effective_handset != 0));
     if (output_changed) {
@@ -929,17 +933,19 @@ void update_audio_output() {
     nvs_handle_t my_handle;
     uint8_t vol = APP_DEFAULT_BASE_VOLUME; // Default Base Speaker
     
+    uint8_t night_base_vol = kNightBaseVolumeDefault;
     if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
         if (effective_handset) {
             if (nvs_get_u8(my_handle, "volume_handset", &vol) != ESP_OK) vol = APP_DEFAULT_HANDSET_VOLUME;
         } else {
             if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = APP_DEFAULT_BASE_VOLUME;
         }
+        nvs_get_u8(my_handle, "night_base_volume", &night_base_vol);
         nvs_close(my_handle);
     }
     
-    if (g_night_mode_active) {
-        vol = APP_NIGHTMODE_VOLUME_PERCENT;
+    if (g_night_mode_active && !effective_handset) {
+        vol = night_base_vol;
     }
 
     audio_hal_set_volume(board_handle->audio_hal, vol);
@@ -1423,6 +1429,12 @@ void input_task(void *pvParameters) {
         // Calculate Target Gain Base
         float target_left = APP_GAIN_DEFAULT_LEFT;
         float target_right = APP_GAIN_DEFAULT_RIGHT;
+
+        if (g_effective_handset) {
+            target_right = 0.0f;
+        } else {
+            target_left = 0.0f;
+        }
 
         if (APP_PIN_KEY3 >= 0) {
             int level = gpio_get_level((gpio_num_t)APP_PIN_KEY3);

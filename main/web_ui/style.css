@@ -19,6 +19,10 @@ body {
     padding: 20px;
     line-height: 1.5;
 }
+
+.card *:not(input):not(select):not(option):not(textarea) {
+  color: #d4af37 !important;
+}
 h2 {
     font-family: 'AA Triple', serif;
     text-align: center;

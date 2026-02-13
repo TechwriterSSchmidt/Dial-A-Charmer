@@ -48,8 +48,9 @@ const TEXT = {
         base_speaker_timer: "Lautsprecher und Timer",
         handset: "Telefonhörer",
         timer_sound: "Timer-Ton",
-        signal_lamp: "Signallampe",
-        led_enabled: "LED Aktiv",
+        day_night_settings: "Tag- & Nachtmodus",
+        led_enabled: "Signallampe Aktiv",
+        night_base_volume: "Nachtlautstärke (Basis)",
         day_brightness: "Tagmodus Helligkeit",
         night_brightness: "Nachtmodus Helligkeit",
         day_start: "Tagmodus Start",
@@ -102,8 +103,9 @@ const TEXT = {
         base_speaker_timer: "Base Speaker and Timer",
         handset: "Handset",
         timer_sound: "Timer Sound",
-        signal_lamp: "Signal Lamp",
-        led_enabled: "LED Enabled",
+        day_night_settings: "Day & Night Mode",
+        led_enabled: "Signal Lamp Enabled",
+        night_base_volume: "Night Base Volume",
         day_brightness: "Day Brightness",
         night_brightness: "Night Brightness",
         day_start: "Day Start",
@@ -310,6 +312,13 @@ function startLogPolling() {
     };
     fetchLogs();
     state.logTimer = setInterval(fetchLogs, 1500);
+}
+
+function logLampSettings(label, patch) {
+    const parts = Object.keys(patch).map(key => `${key}=${patch[key]}`);
+    const line = `LAMP ${label}: ${parts.join(', ')}`;
+    state.logLines = [...state.logLines.slice(-9), line];
+    updateCrt(state.logLines);
 }
 
 function stopLogPolling() {
@@ -661,6 +670,7 @@ function renderAdvanced() {
     const ledNightPct = (state.settings.led_night_pct === undefined) ? 10 : state.settings.led_night_pct;
     const ledDayStart = (state.settings.led_day_start === undefined) ? 7 : state.settings.led_day_start;
     const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
+    const nightBaseVol = (state.settings.night_base_volume === undefined) ? 50 : state.settings.night_base_volume;
      
      let tzOptions = "";
      TIMEZONES.forEach(tz => {
@@ -763,7 +773,7 @@ function renderAdvanced() {
 
             <!-- SIGNAL LAMP PANEL -->
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('signal_lamp')}</h4>
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('day_night_settings')}</h4>
 
                 <div style="display:flex; align-items:center; gap:10px; margin:6px 0 12px;">
                     <label class="switch" title="${t('led_enabled')}">
@@ -773,7 +783,7 @@ function renderAdvanced() {
                     <span class="alarm-label">${t('led_enabled')}</span>
                 </div>
 
-                <div style="margin-top:6px;">
+                <div style="margin-top:12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('day_brightness')}</label>
                         <span id="led-day-disp" style="color:#d4af37; font-weight:bold;">${ledDayPct}%</span>
@@ -789,6 +799,8 @@ function renderAdvanced() {
                     </div>
                 </div>
 
+                <div style="margin-top:14px; border-top:1px solid #333;"></div>
+
                 <div style="margin-top:12px;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
                         <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('night_brightness')}</label>
@@ -803,6 +815,16 @@ function renderAdvanced() {
                             ${renderHourOptions(ledNightStart)}
                         </select>
                     </div>
+                </div>
+
+                <div style="margin-top:12px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('night_base_volume')}</label>
+                        <span id="night-base-vol-disp" style="color:#d4af37; font-weight:bold;">${nightBaseVol}%</span>
+                    </div>
+                    <input type="range" min="0" max="100" value="${nightBaseVol}"
+                           oninput="document.getElementById('night-base-vol-disp').innerText=this.value+'%'"
+                           onchange="saveLampSettings({night_base_volume: parseInt(this.value)})" style="width:100%"/>
                 </div>
             </div>
 
@@ -844,6 +866,7 @@ window.saveLampSettings = (patch) => {
     if (!patch || typeof patch !== 'object') return;
     Object.assign(state.settings, patch);
     API.saveSettings(patch);
+    logLampSettings('settings', patch);
 };
 
 function renderSetup() {
