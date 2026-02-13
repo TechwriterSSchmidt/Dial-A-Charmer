@@ -36,6 +36,12 @@ extern void safe_reboot();
 static const char *TAG = "WEB_MANAGER";
 WebManager webManager;
 
+#if APP_OTA_DEBUG
+#define OTA_LOGE(...) ESP_LOGE(TAG, __VA_ARGS__)
+#else
+#define OTA_LOGE(...) do { } while (0)
+#endif
+
 static const size_t LOG_LINE_COUNT = 20;
 static const size_t LOG_LINE_MAX = 256;
 
@@ -571,10 +577,19 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
 
+    if ((size_t)req->content_len > update_partition->size) {
+        OTA_LOGE("OTA image too large: %d > %d", req->content_len, update_partition->size);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Firmware too large for OTA slot", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
     esp_ota_handle_t ota_handle = 0;
     esp_err_t err = esp_ota_begin(update_partition, req->content_len, &ota_handle);
     if (err != ESP_OK) {
-        httpd_resp_send_500(req);
+        OTA_LOGE("OTA begin failed: %s", esp_err_to_name(err));
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
         return ESP_FAIL;
     }
 
@@ -587,13 +602,16 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
         }
         if (recv_len <= 0) {
             esp_ota_abort(ota_handle);
-            httpd_resp_send_500(req);
+            httpd_resp_set_status(req, "500 Internal Server Error");
+            httpd_resp_send(req, "OTA receive failed", HTTPD_RESP_USE_STRLEN);
             return ESP_FAIL;
         }
         err = esp_ota_write(ota_handle, buf, recv_len);
         if (err != ESP_OK) {
             esp_ota_abort(ota_handle);
-            httpd_resp_send_500(req);
+            OTA_LOGE("OTA write failed: %s", esp_err_to_name(err));
+            httpd_resp_set_status(req, "500 Internal Server Error");
+            httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
             return ESP_FAIL;
         }
         remaining -= recv_len;
@@ -601,13 +619,17 @@ static esp_err_t api_ota_handler(httpd_req_t *req) {
 
     err = esp_ota_end(ota_handle);
     if (err != ESP_OK) {
-        httpd_resp_send_500(req);
+        OTA_LOGE("OTA end failed: %s", esp_err_to_name(err));
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
         return ESP_FAIL;
     }
 
     err = esp_ota_set_boot_partition(update_partition);
     if (err != ESP_OK) {
-        httpd_resp_send_500(req);
+        OTA_LOGE("OTA set boot failed: %s", esp_err_to_name(err));
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, esp_err_to_name(err), HTTPD_RESP_USE_STRLEN);
         return ESP_FAIL;
     }
 
