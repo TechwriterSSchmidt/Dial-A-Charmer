@@ -1014,12 +1014,24 @@ void play_file(const char* path) {
 
     // Optimized Stop Logic for Fast Switching
     audio_lock();
-    
-    // Always force stop first, skipping fade-out/mute for responsiveness
+
+    // Short soft fade + mute to reduce clicks between WAVs
+    if (is_playing) {
+        fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
+        if (board_handle && board_handle->audio_hal) {
+            audio_hal_set_mute(board_handle->audio_hal, true);
+        }
+        vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
+    }
+
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
     is_playing = false;
     g_last_playback_finished_ms = esp_timer_get_time() / 1000;
+
+    if (APP_WAV_SWITCH_DELAY_MS > 0) {
+        vTaskDelay(pdMS_TO_TICKS(APP_WAV_SWITCH_DELAY_MS));
+    }
 
     // Soft fade-in to reduce clicks
     g_gain_left_cur = 0.0f;
@@ -1037,8 +1049,9 @@ void play_file(const char* path) {
     update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
 
-    // Small delay to ensure hardware buffers clear (reduced from default if needed)
-    vTaskDelay(pdMS_TO_TICKS(10)); 
+    if (board_handle && board_handle->audio_hal) {
+        audio_hal_set_mute(board_handle->audio_hal, false);
+    }
     
     audio_pipeline_reset_ringbuffer(pipeline);
     audio_pipeline_reset_items_state(pipeline);

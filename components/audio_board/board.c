@@ -32,9 +32,9 @@ audio_board_handle_t audio_board_init(void)
     if (PA_ENABLE_GPIO >= 0) {
         gpio_reset_pin((gpio_num_t)PA_ENABLE_GPIO);
         gpio_set_direction((gpio_num_t)PA_ENABLE_GPIO, GPIO_MODE_OUTPUT);
-        // FORCE PA ALWAYS ON (High) to avoid cut-offs and wake-up lag
-        gpio_set_level((gpio_num_t)PA_ENABLE_GPIO, 1);
-        ESP_LOGI(TAG, "PA Enable Pin (GPIO %d) set to HIGH (Always On)", PA_ENABLE_GPIO);
+        // Start muted to avoid pop/noise during boot and reboot
+        gpio_set_level((gpio_num_t)PA_ENABLE_GPIO, 0);
+        ESP_LOGI(TAG, "PA Enable Pin (GPIO %d) set to LOW (Muted on boot)", PA_ENABLE_GPIO);
     }
     
     board_handle->audio_hal = audio_board_codec_init();
