@@ -83,6 +83,7 @@ std::vector<std::string> g_voice_queue;
 bool g_voice_queue_active = false;
 bool g_voice_menu_reannounce = false;
 bool g_night_mode_active = false;
+bool g_night_mode_manual = false;
 int64_t g_night_mode_end_ms = 0;
 uint8_t g_led_r = 50;
 uint8_t g_led_g = 20;
@@ -417,7 +418,7 @@ static void led_task(void *pvParameters) {
     }
 }
 
-static void set_night_mode(bool enable) {
+static void set_night_mode(bool enable, bool manual_override) {
     if (enable) {
         g_night_mode_active = true;
         g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
@@ -430,9 +431,11 @@ static void set_night_mode(bool enable) {
         g_night_mode_active = false;
         apply_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
     }
+    g_night_mode_manual = manual_override;
     nvs_handle_t my_handle;
     if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
         nvs_set_u8(my_handle, "night_mode_active", g_night_mode_active ? 1 : 0);
+        nvs_set_u8(my_handle, "night_mode_manual", g_night_mode_manual ? 1 : 0);
         nvs_commit(my_handle);
         nvs_close(my_handle);
     }
@@ -442,14 +445,33 @@ static void set_night_mode(bool enable) {
 static void load_night_mode_from_nvs() {
     nvs_handle_t my_handle;
     uint8_t active = 0;
+    uint8_t manual = 0;
     if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
         nvs_get_u8(my_handle, "night_mode_active", &active);
+        nvs_get_u8(my_handle, "night_mode_manual", &manual);
         nvs_close(my_handle);
     }
+    g_night_mode_manual = (manual != 0);
     if (active) {
         g_night_mode_active = true;
         g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
             (int64_t)kNightModeDurationHours * 60 * 60 * 1000;
+    }
+}
+
+static void refresh_night_mode_from_schedule() {
+    if (g_night_mode_manual) {
+        struct tm now = TimeManager::getCurrentTime();
+        if (now.tm_year >= 120 && !is_led_night_hour(now.tm_hour)) {
+            set_night_mode(false, false);
+        }
+        return;
+    }
+    struct tm now = TimeManager::getCurrentTime();
+    if (now.tm_year < 120) return;
+    bool should_be_night = is_led_night_hour(now.tm_hour);
+    if (should_be_night != g_night_mode_active) {
+        set_night_mode(should_be_night, false);
     }
 }
 
@@ -549,10 +571,10 @@ static void handle_voice_menu_digit(int digit) {
         start_voice_queue(files);
     } else if (digit == 2) {
         if (g_night_mode_active) {
-            set_night_mode(false);
+            set_night_mode(false, true);
             start_voice_queue({system_path("night_off")});
         } else {
-            set_night_mode(true);
+            set_night_mode(true, true);
             start_voice_queue({system_path("night_on")});
         }
     } else if (digit == 3) {
@@ -1625,24 +1647,32 @@ extern "C" void app_main(void)
     periph_sdcard_cfg_t sdcard_cfg = {
         .card_detect_pin = SD_CARD_INTR_GPIO,
         .root = "/sdcard",
-        .mode = SD_MODE_SPI, 
+        .mode = SD_MODE_SPI,
     };
-    esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
-    esp_periph_start(set, sdcard_handle);
-    
-    int64_t sd_start_ms = esp_timer_get_time() / 1000;
-    const int64_t sd_timeout_ms = 5000;
-    while (!periph_sdcard_is_mounted(sdcard_handle)) {
-        if ((esp_timer_get_time() / 1000) - sd_start_ms > sd_timeout_ms) {
-            ESP_LOGE(TAG, "SD Card mount timeout");
-            g_sd_error = true;
+    const int sd_max_attempts = 3;
+    for (int attempt = 1; attempt <= sd_max_attempts; ++attempt) {
+        esp_periph_handle_t sdcard_handle = periph_sdcard_init(&sdcard_cfg);
+        esp_periph_start(set, sdcard_handle);
+
+        int64_t sd_start_ms = esp_timer_get_time() / 1000;
+        const int64_t sd_timeout_ms = 5000;
+        while (!periph_sdcard_is_mounted(sdcard_handle)) {
+            if ((esp_timer_get_time() / 1000) - sd_start_ms > sd_timeout_ms) {
+                ESP_LOGW(TAG, "SD Card mount timeout (attempt %d/%d)", attempt, sd_max_attempts);
+                g_sd_error = true;
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        if (periph_sdcard_is_mounted(sdcard_handle)) {
+            ESP_LOGI(TAG, "SD Card mounted successfully");
+            g_sd_error = false;
             break;
         }
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-    if (periph_sdcard_is_mounted(sdcard_handle)) {
-        ESP_LOGI(TAG, "SD Card mounted successfully");
-        g_sd_error = false;
+
+        esp_periph_stop(sdcard_handle);
+        esp_periph_destroy(sdcard_handle);
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     if (g_sd_error) {
@@ -1770,6 +1800,7 @@ extern "C" void app_main(void)
     }
 #endif
         // --- Regular Tasks ---
+        refresh_night_mode_from_schedule();
         // Check Daily Alarm
         if (TimeManager::checkAlarm()) {
              ESP_LOGI(TAG, "Daily Alarm Triggered! Starting Ring...");
@@ -1924,10 +1955,10 @@ extern "C" void app_main(void)
         }
 
         // Night mode timeout
-        if (g_night_mode_active) {
+        if (g_night_mode_active && !g_night_mode_manual) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_night_mode_end_ms) {
-                set_night_mode(false);
+                set_night_mode(false, false);
             }
         }
 
