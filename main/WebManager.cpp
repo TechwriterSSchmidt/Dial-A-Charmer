@@ -276,6 +276,24 @@ static void compact_log_line(const char *src, char *dst, size_t dst_size) {
     }
 }
 
+static void strip_ansi(const char *src, char *dst, size_t dst_size) {
+    if (!src || !dst || dst_size == 0) {
+        return;
+    }
+    size_t out = 0;
+    for (size_t i = 0; src[i] != '\0' && out + 1 < dst_size; ++i) {
+        if (src[i] == '\x1b' && src[i + 1] == '[') {
+            i += 2;
+            while (src[i] && src[i] != 'm') {
+                i++;
+            }
+            continue;
+        }
+        dst[out++] = src[i];
+    }
+    dst[out] = '\0';
+}
+
 
 static void log_buffer_add(const char *line) {
     if (!line || !line[0]) {
@@ -531,6 +549,37 @@ static esp_err_t api_logs_handler(httpd_req_t *req) {
     httpd_resp_send(req, json_str, strlen(json_str));
     free((void *)json_str);
     cJSON_Delete(root);
+    return ESP_OK;
+}
+
+static esp_err_t api_logs_download_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=console_log.txt");
+
+    char lines[LOG_LINE_COUNT][LOG_LINE_MAX];
+    size_t count = 0;
+    size_t start = 0;
+
+    portENTER_CRITICAL(&s_log_mux);
+    count = s_log_count;
+    start = (s_log_head + LOG_LINE_COUNT - count) % LOG_LINE_COUNT;
+    for (size_t i = 0; i < count; ++i) {
+        size_t idx = (start + i) % LOG_LINE_COUNT;
+        strncpy(lines[i], s_log_lines[idx], LOG_LINE_MAX - 1);
+        lines[i][LOG_LINE_MAX - 1] = '\0';
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+
+    std::string body;
+    body.reserve(count * 64);
+    for (size_t i = 0; i < count; ++i) {
+        char compacted[LOG_LINE_MAX];
+        compact_log_line(lines[i], compacted, sizeof(compacted));
+        body.append(compacted);
+        body.push_back('\n');
+    }
+
+    httpd_resp_send(req, body.c_str(), body.size());
     return ESP_OK;
 }
 
@@ -1452,6 +1501,14 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &logs_uri);
+
+        httpd_uri_t logs_download_uri = {
+            .uri       = "/api/logs/download",
+            .method    = HTTP_GET,
+            .handler   = api_logs_download_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &logs_download_uri);
 
         httpd_uri_t time_uri = {
             .uri       = "/api/time",

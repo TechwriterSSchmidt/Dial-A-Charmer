@@ -71,6 +71,7 @@ const TEXT = {
         find_device_at: "Gerät erreichbar unter:",
         network_error: "Netzwerkfehler",
         check_console: "Konsole prüfen",
+        download_logs: "Logs herunterladen",
         select_network: "Bitte lokales Netzwerk auswählen:",
         saving_connecting: "Speichern und verbinden...",
         ota_title: "Firmware Update",
@@ -138,6 +139,7 @@ const TEXT = {
         find_device_at: "Please find the device at:",
         network_error: "Network Error",
         check_console: "Check Console",
+        download_logs: "Download Logs",
         select_network: "Select your local network:",
         saving_connecting: "Saving and Connecting...",
         ota_title: "Firmware Update",
@@ -212,6 +214,10 @@ const API = {
     },
     reboot: () => fetch('/api/reboot', { method: 'POST' })
 };
+
+function downloadLogs() {
+    window.location.href = '/api/logs/download';
+}
 
 // Update alarm clock time display
 function updateAlarmTime() {
@@ -762,6 +768,9 @@ function renderAdvanced() {
                 <div class="crt-screen">
                     <div class="crt-text" id="crt-log">READY&gt;_</div>
                 </div>
+            </div>
+            <div style="display:flex; justify-content:flex-end; margin:6px 0 12px;">
+                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
             </div>
 
             <!-- VOLUME PANEL -->

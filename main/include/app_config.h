@@ -125,7 +125,7 @@
 #define APP_TASK_WDT_PANIC 1
 
 // SD log capture (debug)
-#define APP_ENABLE_SD_LOG 0
+#define APP_ENABLE_SD_LOG 1
 #define APP_SD_LOG_PATH "/sdcard/logs/app.log"
 #define APP_SD_LOG_MAX_BYTES (512 * 1024)
 #define APP_SD_LOG_FLUSH_INTERVAL_MS 5000
