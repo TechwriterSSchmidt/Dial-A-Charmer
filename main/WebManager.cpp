@@ -26,6 +26,7 @@
 #include "PhonebookManager.h"
 #include "cJSON.h"
 #include "lwip/sockets.h"
+#include "esp_ota_ops.h"
 
 // External reference to play_file from main.cpp
 extern void play_file(const char* path);
@@ -157,6 +158,28 @@ static void sd_log_flush_task(void *pvParameters) {
     }
 }
 #endif
+
+static const size_t OTA_PASSWORD_MAX = 64;
+
+static void ota_reboot_task(void *pvParameters) {
+    (void)pvParameters;
+    vTaskDelay(pdMS_TO_TICKS(1500));
+    safe_reboot();
+    vTaskDelete(NULL);
+}
+
+static bool ota_password_matches(httpd_req_t *req) {
+    char token_header[OTA_PASSWORD_MAX + 1] = {0};
+    if (httpd_req_get_hdr_value_str(req, "X-OTA-Password", token_header, sizeof(token_header)) != ESP_OK) {
+        return false;
+    }
+
+    if (strlen(APP_OTA_PASSWORD) == 0) {
+        return false;
+    }
+
+    return strncmp(token_header, APP_OTA_PASSWORD, OTA_PASSWORD_MAX) == 0;
+}
 
 static std::string get_first_ringtone_name() {
     const char *dir_path = "/sdcard/ringtones";
@@ -543,6 +566,71 @@ static esp_err_t api_time_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t api_ota_handler(httpd_req_t *req) {
+    if (!ota_password_matches(req)) {
+        httpd_resp_set_status(req, "403 Forbidden");
+        httpd_resp_send(req, "Forbidden", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    if (req->content_len <= 0) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing firmware", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+    if (!update_partition) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    esp_ota_handle_t ota_handle = 0;
+    esp_err_t err = esp_ota_begin(update_partition, req->content_len, &ota_handle);
+    if (err != ESP_OK) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    size_t remaining = req->content_len;
+    uint8_t buf[4096];
+    while (remaining > 0) {
+        int recv_len = httpd_req_recv(req, (char *)buf, remaining > sizeof(buf) ? sizeof(buf) : remaining);
+        if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) {
+            continue;
+        }
+        if (recv_len <= 0) {
+            esp_ota_abort(ota_handle);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        err = esp_ota_write(ota_handle, buf, recv_len);
+        if (err != ESP_OK) {
+            esp_ota_abort(ota_handle);
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        remaining -= recv_len;
+    }
+
+    err = esp_ota_end(ota_handle);
+    if (err != ESP_OK) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    err = esp_ota_set_boot_partition(update_partition);
+    if (err != ESP_OK) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"ok\":true,\"rebooting\":true}", HTTPD_RESP_USE_STRLEN);
+    xTaskCreate(ota_reboot_task, "ota_reboot", 2048, NULL, 5, NULL);
+    return ESP_OK;
+}
+
 static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     cJSON *root = cJSON_CreateObject();
@@ -660,6 +748,7 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     cJSON_AddNumberToObject(root, "led_night_pct", led_night_pct);
     cJSON_AddNumberToObject(root, "led_day_start", led_day_start);
     cJSON_AddNumberToObject(root, "led_night_start", led_night_start);
+
     
     // --- Time & Timezone ---
     struct tm now = TimeManager::getCurrentTime();
@@ -774,6 +863,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             nvs_set_str(my_handle, "timer_ringtone", item->valuestring);
             ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
         }
+
 
         bool led_seen = false;
         bool led_changed = false;
@@ -1284,7 +1374,7 @@ void WebManager::setupMdns() {
 
 void WebManager::setupWebServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 13;
     config.stack_size = 8192; // More stack for file handling
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
 
@@ -1362,6 +1452,14 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &time_uri);
+
+        httpd_uri_t ota_uri = {
+            .uri       = "/api/ota",
+            .method    = HTTP_POST,
+            .handler   = api_ota_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &ota_uri);
 
         // Files (Catch-all)
         // We register this last or use a greedy match

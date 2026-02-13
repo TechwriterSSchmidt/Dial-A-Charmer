@@ -72,7 +72,16 @@ const TEXT = {
         network_error: "Netzwerkfehler",
         check_console: "Konsole prüfen",
         select_network: "Bitte lokales Netzwerk auswählen:",
-        saving_connecting: "Speichern und verbinden..."
+        saving_connecting: "Speichern und verbinden...",
+        ota_title: "Firmware Update",
+        ota_token: "OTA Token",
+        ota_select: "Firmware-Datei auswählen (.bin)",
+        ota_upload: "Update starten",
+        ota_hint: "Das Gerät startet nach erfolgreichem Update neu.",
+        ota_status_idle: "Bereit",
+        ota_status_uploading: "Upload läuft...",
+        ota_status_done: "Update OK, Neustart...",
+        ota_status_failed: "Update fehlgeschlagen"
     },
     en: {
         title: "Dial-A-Charmer",
@@ -127,7 +136,16 @@ const TEXT = {
         network_error: "Network Error",
         check_console: "Check Console",
         select_network: "Select your local network:",
-        saving_connecting: "Saving and Connecting..."
+        saving_connecting: "Saving and Connecting...",
+        ota_title: "Firmware Update",
+        ota_token: "OTA Token",
+        ota_select: "Select firmware file (.bin)",
+        ota_upload: "Start Update",
+        ota_hint: "Device will reboot after a successful update.",
+        ota_status_idle: "Ready",
+        ota_status_uploading: "Uploading...",
+        ota_status_done: "Update OK, rebooting...",
+        ota_status_failed: "Update failed"
     }
 };
 
@@ -160,7 +178,32 @@ const API = {
     getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
     getLogs: () => fetch('/api/logs').then(r => r.json()),
     getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
-    getTime: () => fetch('/api/time').then(r => r.json())
+    getTime: () => fetch('/api/time').then(r => r.json()),
+    uploadOta: (file, token, onProgress) => {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/api/ota');
+            if (token) {
+                xhr.setRequestHeader('X-OTA-Token', token);
+            }
+            xhr.upload.onprogress = (evt) => {
+                if (evt.lengthComputable && typeof onProgress === 'function') {
+                    onProgress(Math.round((evt.loaded / evt.total) * 100));
+                }
+            };
+            xhr.onreadystatechange = () => {
+                if (xhr.readyState === 4) {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve(xhr.responseText);
+                    } else {
+                        reject(new Error(xhr.responseText || 'OTA failed'));
+                    }
+                }
+            };
+            xhr.onerror = () => reject(new Error('OTA failed'));
+            xhr.send(file);
+        });
+    }
 };
 
 // Update alarm clock time display
@@ -671,6 +714,7 @@ function renderAdvanced() {
     const ledDayStart = (state.settings.led_day_start === undefined) ? 7 : state.settings.led_day_start;
     const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
     const nightBaseVol = (state.settings.night_base_volume === undefined) ? 50 : state.settings.night_base_volume;
+    const otaToken = state.settings.ota_token || "";
      
      let tzOptions = "";
      TIMEZONES.forEach(tz => {
@@ -828,6 +872,29 @@ function renderAdvanced() {
                 </div>
             </div>
 
+            <!-- OTA PANEL -->
+            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
+                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('ota_title')}</h4>
+
+                <div style="margin-top:6px;">
+                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_token')}</label>
+                    <input type="password" id="ota-token" value="${otaToken}" placeholder="${t('ota_token')}" style="margin-top:6px;" />
+                </div>
+
+                <div style="margin-top:10px;">
+                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_select')}</label>
+                    <input type="file" id="ota-file" accept=".bin" style="margin-top:6px;" />
+                </div>
+
+                <div style="margin-top:10px;">
+                    <div id="ota-status" style="font-size:0.85rem; letter-spacing:0.5px;">${t('ota_status_idle')}</div>
+                    <div id="ota-progress" style="font-size:0.85rem; color:#d4af37; margin-top:4px;">0%</div>
+                </div>
+
+                <button onclick="startOtaUpload()" style="margin-top:12px;">${t('ota_upload')}</button>
+                <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('ota_hint')}</div>
+            </div>
+
         </div>
     `;
 }
@@ -867,6 +934,37 @@ window.saveLampSettings = (patch) => {
     Object.assign(state.settings, patch);
     API.saveSettings(patch);
     logLampSettings('settings', patch);
+};
+
+window.startOtaUpload = () => {
+    const fileInput = document.getElementById('ota-file');
+    const tokenInput = document.getElementById('ota-token');
+    const statusEl = document.getElementById('ota-status');
+    const progressEl = document.getElementById('ota-progress');
+
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        if (statusEl) statusEl.textContent = t('ota_status_failed');
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const token = tokenInput ? tokenInput.value : '';
+
+    if (statusEl) statusEl.textContent = t('ota_status_uploading');
+    if (progressEl) progressEl.textContent = '0%';
+
+    if (tokenInput) {
+        state.settings.ota_token = token;
+        API.saveSettings({ota_token: token});
+    }
+
+    API.uploadOta(file, token, (pct) => {
+        if (progressEl) progressEl.textContent = `${pct}%`;
+    }).then(() => {
+        if (statusEl) statusEl.textContent = t('ota_status_done');
+    }).catch(() => {
+        if (statusEl) statusEl.textContent = t('ota_status_failed');
+    });
 };
 
 function renderSetup() {

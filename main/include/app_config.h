@@ -96,6 +96,9 @@
 #define APP_LED_DAY_START_HOUR 7
 #define APP_LED_NIGHT_START_HOUR 22
 
+// OTA
+#define APP_OTA_PASSWORD "dialy1935"
+
 // Phonebook default numbers (max 3 digits)
 #define APP_PB_NUM_PERSONA_1 "1"
 #define APP_PB_NUM_PERSONA_2 "2"
