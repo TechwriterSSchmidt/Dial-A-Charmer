@@ -958,67 +958,96 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
 }
 
 static esp_err_t api_settings_post_handler(httpd_req_t *req) {
+    if (req->content_len <= 0) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing body", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
     char *buf = (char *)malloc(req->content_len + 1);
     if (!buf) {
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
-    int ret = httpd_req_recv(req, buf, req->content_len);
-    if (ret <= 0) {
-        free(buf);
-        return ESP_FAIL;
+
+    size_t remaining = (size_t)req->content_len;
+    size_t offset = 0;
+    while (remaining > 0) {
+        int ret = httpd_req_recv(req, buf + offset, remaining);
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+            continue;
+        }
+        if (ret <= 0) {
+            free(buf);
+            httpd_resp_set_status(req, "400 Bad Request");
+            httpd_resp_send(req, "Failed to read body", HTTPD_RESP_USE_STRLEN);
+            return ESP_FAIL;
+        }
+        offset += (size_t)ret;
+        remaining -= (size_t)ret;
     }
-    buf[ret] = '\0';
+    buf[offset] = '\0';
     
     cJSON *root = cJSON_Parse(buf);
     if (root == NULL) {
         free(buf);
-        httpd_resp_send_500(req);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Invalid JSON", HTTPD_RESP_USE_STRLEN);
         return ESP_FAIL;
     }
     
     bool wifi_updated = false;
     bool lang_updated = false;
+    bool nvs_write_failed = false;
+    esp_err_t nvs_first_err = ESP_OK;
     nvs_handle_t my_handle;
-    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
+    esp_err_t nvs_open_err = nvs_open("dialcharm", NVS_READWRITE, &my_handle);
+    if (nvs_open_err == ESP_OK) {
+        auto mark_nvs_write = [&](esp_err_t write_err, const char *key) {
+            if (write_err != ESP_OK && !nvs_write_failed) {
+                nvs_write_failed = true;
+                nvs_first_err = write_err;
+                ESP_LOGE(TAG, "NVS write failed for key '%s': %s", key ? key : "?", esp_err_to_name(write_err));
+            }
+        };
         
         cJSON *item = cJSON_GetObjectItem(root, "lang");
         if (cJSON_IsString(item)) {
-            nvs_set_str(my_handle, "src_lang", item->valuestring);
+            mark_nvs_write(nvs_set_str(my_handle, "src_lang", item->valuestring), "src_lang");
             lang_updated = true;
         }
         
         item = cJSON_GetObjectItem(root, "wifi_ssid");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
-            nvs_set_str(my_handle, "wifi_ssid", item->valuestring);
+            mark_nvs_write(nvs_set_str(my_handle, "wifi_ssid", item->valuestring), "wifi_ssid");
             wifi_updated = true;
         }
         
         item = cJSON_GetObjectItem(root, "wifi_pass");
         if (cJSON_IsString(item)) {
-            nvs_set_str(my_handle, "wifi_pass", item->valuestring);
+            mark_nvs_write(nvs_set_str(my_handle, "wifi_pass", item->valuestring), "wifi_pass");
         }
 
         item = cJSON_GetObjectItem(root, "sd_log_enabled");
         if (cJSON_IsBool(item) || cJSON_IsNumber(item)) {
             bool enabled = cJSON_IsBool(item) ? cJSON_IsTrue(item) : (item->valueint != 0);
-            nvs_set_u8(my_handle, "sd_log_enabled", enabled ? 1 : 0);
+            mark_nvs_write(nvs_set_u8(my_handle, "sd_log_enabled", enabled ? 1 : 0), "sd_log_enabled");
             set_runtime_logging_enabled(enabled);
         }
 
         item = cJSON_GetObjectItem(root, "volume");
         if (cJSON_IsNumber(item)) {
-            nvs_set_u8(my_handle, "volume", (uint8_t)item->valueint);
+            mark_nvs_write(nvs_set_u8(my_handle, "volume", (uint8_t)item->valueint), "volume");
         }
 
         item = cJSON_GetObjectItem(root, "volume_handset");
         if (cJSON_IsNumber(item)) {
-            nvs_set_u8(my_handle, "volume_handset", (uint8_t)item->valueint);
+            mark_nvs_write(nvs_set_u8(my_handle, "volume_handset", (uint8_t)item->valueint), "volume_handset");
         }
 
         item = cJSON_GetObjectItem(root, "vol_alarm");
         if (cJSON_IsNumber(item)) {
-            nvs_set_u8(my_handle, "vol_alarm", (uint8_t)item->valueint);
+            mark_nvs_write(nvs_set_u8(my_handle, "vol_alarm", (uint8_t)item->valueint), "vol_alarm");
         }
 
         item = cJSON_GetObjectItem(root, "night_base_volume");
@@ -1026,18 +1055,18 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             int v = item->valueint;
             if (v < 0) v = 0;
             if (v > 100) v = 100;
-            nvs_set_u8(my_handle, "night_base_volume", (uint8_t)v);
+            mark_nvs_write(nvs_set_u8(my_handle, "night_base_volume", (uint8_t)v), "night_base_volume");
         }
 
         item = cJSON_GetObjectItem(root, "snooze_min");
         if (cJSON_IsNumber(item)) {
-            nvs_set_i32(my_handle, "snooze_min", item->valueint);
+            mark_nvs_write(nvs_set_i32(my_handle, "snooze_min", item->valueint), "snooze_min");
         }
 
         // Timer Ringtone
         item = cJSON_GetObjectItem(root, "timer_ringtone");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
-            nvs_set_str(my_handle, "timer_ringtone", item->valuestring);
+            mark_nvs_write(nvs_set_str(my_handle, "timer_ringtone", item->valuestring), "timer_ringtone");
             ESP_LOGI(TAG, "Timer ringtone set to: %s", item->valuestring);
         }
 
@@ -1100,7 +1129,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         // Timezone configuration
         item = cJSON_GetObjectItem(root, "timezone");
         if (cJSON_IsString(item) && strlen(item->valuestring) > 0) {
-            nvs_set_str(my_handle, "time_zone", item->valuestring);
+            mark_nvs_write(nvs_set_str(my_handle, "time_zone", item->valuestring), "time_zone");
         }
 
         // --- Alarms ---
@@ -1160,9 +1189,27 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         }
         // --------------
 
-
-        nvs_commit(my_handle);
+        if (!nvs_write_failed) {
+            esp_err_t commit_err = nvs_commit(my_handle);
+            if (commit_err != ESP_OK) {
+                nvs_write_failed = true;
+                nvs_first_err = commit_err;
+                ESP_LOGE(TAG, "NVS commit failed: %s", esp_err_to_name(commit_err));
+            }
+        }
         nvs_close(my_handle);
+    } else {
+        nvs_write_failed = true;
+        nvs_first_err = nvs_open_err;
+        ESP_LOGE(TAG, "NVS open failed in settings POST: %s", esp_err_to_name(nvs_open_err));
+    }
+
+    if (nvs_write_failed) {
+        cJSON_Delete(root);
+        free(buf);
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_send(req, esp_err_to_name(nvs_first_err), HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
     }
 
     if (lang_updated) {

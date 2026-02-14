@@ -255,10 +255,18 @@ void TimeManager::setTimezone(const char* tz) {
     if (!tz) return;
     
     nvs_handle_t my_handle;
-    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
-        nvs_set_str(my_handle, "time_zone", tz);
-        nvs_commit(my_handle);
+    esp_err_t err = nvs_open("dialcharm", NVS_READWRITE, &my_handle);
+    if (err == ESP_OK) {
+        err = nvs_set_str(my_handle, "time_zone", tz);
+        if (err == ESP_OK) {
+            err = nvs_commit(my_handle);
+        }
         nvs_close(my_handle);
+
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to persist timezone '%s': %s", tz, esp_err_to_name(err));
+            return;
+        }
         
         setenv("TZ", tz, 1);
         tzset();
@@ -267,6 +275,8 @@ void TimeManager::setTimezone(const char* tz) {
         // Update RTC time just in case (optional, but recalculates local time)
         // struct tm now = getCurrentTime();
         // rtc_write_time(&now); 
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS for timezone update: %s", esp_err_to_name(err));
     }
 }
 
@@ -292,7 +302,8 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
     if (dayIndex < 0 || dayIndex > 6) return;
 
     nvs_handle_t my_handle;
-    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
+    esp_err_t err = nvs_open("dialcharm", NVS_READWRITE, &my_handle);
+    if (err == ESP_OK) {
         char key_h[16], key_m[16], key_en[16], key_rmp[16], key_msg[16], key_snd[16];
         snprintf(key_h, sizeof(key_h), "alm_%d_h", dayIndex);
         snprintf(key_m, sizeof(key_m), "alm_%d_m", dayIndex);
@@ -301,22 +312,34 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
         snprintf(key_msg, sizeof(key_msg), "alm_%d_msg", dayIndex);
         snprintf(key_snd, sizeof(key_snd), "alm_%d_snd", dayIndex);
 
-        nvs_set_i32(my_handle, key_h, hour);
-        nvs_set_i32(my_handle, key_m, minute);
-        nvs_set_u8(my_handle, key_en, active ? 1 : 0);
-        nvs_set_u8(my_handle, key_rmp, volumeRamp ? 1 : 0);
-        nvs_set_u8(my_handle, key_msg, useMsg ? 1 : 0);
+        err = nvs_set_i32(my_handle, key_h, hour);
+        if (err == ESP_OK) err = nvs_set_i32(my_handle, key_m, minute);
+        if (err == ESP_OK) err = nvs_set_u8(my_handle, key_en, active ? 1 : 0);
+        if (err == ESP_OK) err = nvs_set_u8(my_handle, key_rmp, volumeRamp ? 1 : 0);
+        if (err == ESP_OK) err = nvs_set_u8(my_handle, key_msg, useMsg ? 1 : 0);
         
-        if (ringtone && strlen(ringtone) > 0) {
-            nvs_set_str(my_handle, key_snd, ringtone);
-        } else {
-            nvs_set_str(my_handle, key_snd, APP_DEFAULT_TIMER_RINGTONE);
+        if (err == ESP_OK) {
+            if (ringtone && strlen(ringtone) > 0) {
+                err = nvs_set_str(my_handle, key_snd, ringtone);
+            } else {
+                err = nvs_set_str(my_handle, key_snd, APP_DEFAULT_TIMER_RINGTONE);
+            }
         }
         
-        nvs_commit(my_handle);
+        if (err == ESP_OK) {
+            err = nvs_commit(my_handle);
+        }
         nvs_close(my_handle);
+
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to save alarm day %d: %s", dayIndex, esp_err_to_name(err));
+            return;
+        }
+
         int logDay = (dayIndex == 0) ? 7 : dayIndex;
         ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d Msg:%d) Tone: %s", logDay, hour, minute, active, volumeRamp, useMsg, ringtone);
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS for alarm day %d: %s", dayIndex, esp_err_to_name(err));
     }
 }
 
