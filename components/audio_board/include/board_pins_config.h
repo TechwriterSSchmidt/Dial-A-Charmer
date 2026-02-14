@@ -6,7 +6,8 @@
 
 #include "driver/gpio.h"
 #include "driver/i2c.h"
-#include "driver/i2s.h"
+#include "driver/i2s_types.h"
+#include "driver/i2s_types_legacy.h"
 #include "driver/spi_common.h"
 #include "driver/spi_master.h"
 #include "driver/spi_slave.h"

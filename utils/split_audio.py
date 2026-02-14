@@ -64,7 +64,7 @@ def get_silence_splits(ffmpeg_cmd, file_path):
     for i in range(count):
         duration = ends[i] - starts[i]
         # Move cut point closer to the next sound (silence end) to avoid tails of previous sound.
-        # But ensure we keep a small buffer before the next attack.
+        # A small buffer before the next attack is preserved.
         # Logic: Cut at 80% of the silence duration, or at least 0.2s before end.
         
         buffer = min(0.2, duration * 0.25) # Don't go closer than 25% of gap or 0.2s

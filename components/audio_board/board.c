@@ -52,8 +52,8 @@ audio_hal_handle_t audio_board_codec_init(void)
     audio_hal_codec_config_t audio_codec_cfg = AUDIO_CODEC_DEFAULT_CONFIG();
     
     // The Ai-Thinker v2.2 uses ES8388
-    // We need to match the handle creation to the driver being used.
-    // Ensure 'es8388' component is available in ADF or we need to add it.
+    // Handle creation must match the active codec driver.
+    // ADF must provide the 'es8388' component.
     // Standard ADF supports es8388.
     board_handle->audio_hal = audio_hal_init(&audio_codec_cfg, &AUDIO_CODEC_ES8388_DEFAULT_HANDLE);
     
@@ -90,7 +90,7 @@ esp_err_t audio_board_sdcard_init(esp_periph_set_handle_t set, periph_sdcard_mod
 {
     if (mode >= SD_MODE_4_LINE) {
         ESP_LOGE(TAG, "Ai-Thinker v2.2 typically uses 1-line SD mode due to pin conflicts");
-        // We can allow 4-line if user insists, but warn them.
+        // 4-line mode remains available and emits a warning.
     }
     periph_sdcard_cfg_t sdcard_cfg = {
         .root = "/sdcard",

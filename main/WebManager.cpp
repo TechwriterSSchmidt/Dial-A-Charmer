@@ -17,6 +17,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "app_config.h"
+#include "AppSharedUtils.h"
 #include <sys/stat.h>
 #include "esp_netif.h"
 #include "nvs_flash.h"
@@ -67,7 +68,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        if (s_ap_mode_active) return; // Don't retry if we switched to AP
+        if (s_ap_mode_active) return; // Retry is disabled after AP switch
 
         if (s_wifi_retry_count < 3) {
             esp_wifi_connect();
@@ -241,28 +242,7 @@ static bool ota_password_matches(httpd_req_t *req) {
 }
 
 static std::string get_first_ringtone_name() {
-    const char *dir_path = "/sdcard/ringtones";
-    DIR *dir = opendir(dir_path);
-    if (!dir) {
-        return "";
-    }
-
-    struct dirent *ent;
-    while ((ent = readdir(dir)) != NULL) {
-        const char *name = ent->d_name;
-        if (!name || name[0] == '.') {
-            continue;
-        }
-        const char *dot = strrchr(name, '.');
-        if (dot && strcasecmp(dot, ".wav") == 0) {
-            std::string result = name;
-            closedir(dir);
-            return result;
-        }
-    }
-
-    closedir(dir);
-    return "";
+    return app_get_first_wav_name("/sdcard/ringtones");
 }
 
 static void compact_log_line(const char *src, char *dst, size_t dst_size) {
@@ -569,9 +549,9 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
             const char *dot = strrchr(param, '.');
             bool is_wav = dot && strcasecmp(dot, ".wav") == 0;
             if (strstr(param, "..") == NULL && is_wav) {
-                // If the user requests a new preview, we allow it immediately.
+                // New preview requests start immediately.
                 // The previous cooldown logic blocked rapid-fire preview switching.
-                // We trust the frontend (or debounce there) but allow backend to restart playback.
+                // Frontend debounce may be applied independently.
                 
                 char filepath[128];
                 snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
@@ -911,23 +891,15 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(root, "timer_ringtone", ringtone_name.c_str());
 
     // LED signal lamp settings
-    uint8_t led_enabled = APP_LED_DEFAULT_ENABLED ? 1 : 0;
-    uint8_t led_day_pct = APP_LED_DAY_PERCENT;
-    uint8_t led_night_pct = APP_LED_NIGHT_PERCENT;
-    uint8_t led_day_start = APP_LED_DAY_START_HOUR;
-    uint8_t led_night_start = APP_LED_NIGHT_START_HOUR;
+    AppLedSettings led_settings = app_default_led_settings();
     if (err == ESP_OK) {
-        nvs_get_u8(my_handle, "led_enabled", &led_enabled);
-        nvs_get_u8(my_handle, "led_day_pct", &led_day_pct);
-        nvs_get_u8(my_handle, "led_night_pct", &led_night_pct);
-        nvs_get_u8(my_handle, "led_day_start", &led_day_start);
-        nvs_get_u8(my_handle, "led_night_start", &led_night_start);
+        app_load_led_settings_from_handle(my_handle, &led_settings);
     }
-    cJSON_AddBoolToObject(root, "led_enabled", led_enabled != 0);
-    cJSON_AddNumberToObject(root, "led_day_pct", led_day_pct);
-    cJSON_AddNumberToObject(root, "led_night_pct", led_night_pct);
-    cJSON_AddNumberToObject(root, "led_day_start", led_day_start);
-    cJSON_AddNumberToObject(root, "led_night_start", led_night_start);
+    cJSON_AddBoolToObject(root, "led_enabled", led_settings.enabled != 0);
+    cJSON_AddNumberToObject(root, "led_day_pct", led_settings.day_pct);
+    cJSON_AddNumberToObject(root, "led_night_pct", led_settings.night_pct);
+    cJSON_AddNumberToObject(root, "led_day_start", led_settings.day_start);
+    cJSON_AddNumberToObject(root, "led_night_start", led_settings.night_start);
 
     
     // --- Time & Timezone ---
@@ -1055,90 +1027,58 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
 
 
         bool led_seen = false;
-        bool led_changed = false;
-        uint8_t led_enabled_old = APP_LED_DEFAULT_ENABLED ? 1 : 0;
-        uint8_t led_day_pct_old = APP_LED_DAY_PERCENT;
-        uint8_t led_night_pct_old = APP_LED_NIGHT_PERCENT;
-        uint8_t led_day_start_old = APP_LED_DAY_START_HOUR;
-        uint8_t led_night_start_old = APP_LED_NIGHT_START_HOUR;
-
-        nvs_get_u8(my_handle, "led_enabled", &led_enabled_old);
-        nvs_get_u8(my_handle, "led_day_pct", &led_day_pct_old);
-        nvs_get_u8(my_handle, "led_night_pct", &led_night_pct_old);
-        nvs_get_u8(my_handle, "led_day_start", &led_day_start_old);
-        nvs_get_u8(my_handle, "led_night_start", &led_night_start_old);
-
-        uint8_t led_enabled_new = led_enabled_old;
-        uint8_t led_day_pct_new = led_day_pct_old;
-        uint8_t led_night_pct_new = led_night_pct_old;
-        uint8_t led_day_start_new = led_day_start_old;
-        uint8_t led_night_start_new = led_night_start_old;
+        AppLedSettings led_old = app_default_led_settings();
+        app_load_led_settings_from_handle(my_handle, &led_old);
+        AppLedSettings led_new = led_old;
 
         item = cJSON_GetObjectItem(root, "led_enabled");
         if (cJSON_IsBool(item)) {
-            led_enabled_new = cJSON_IsTrue(item) ? 1 : 0;
-            nvs_set_u8(my_handle, "led_enabled", led_enabled_new);
+            led_new.enabled = cJSON_IsTrue(item) ? 1 : 0;
             led_seen = true;
         } else if (cJSON_IsNumber(item)) {
-            led_enabled_new = item->valueint ? 1 : 0;
-            nvs_set_u8(my_handle, "led_enabled", led_enabled_new);
+            led_new.enabled = item->valueint ? 1 : 0;
             led_seen = true;
         }
 
         item = cJSON_GetObjectItem(root, "led_day_pct");
         if (cJSON_IsNumber(item)) {
-            int v = item->valueint;
-            if (v < 0) v = 0;
-            if (v > 100) v = 100;
-            led_day_pct_new = (uint8_t)v;
-            nvs_set_u8(my_handle, "led_day_pct", led_day_pct_new);
+            led_new.day_pct = (uint8_t)item->valueint;
             led_seen = true;
         }
 
         item = cJSON_GetObjectItem(root, "led_night_pct");
         if (cJSON_IsNumber(item)) {
-            int v = item->valueint;
-            if (v < 0) v = 0;
-            if (v > 100) v = 100;
-            led_night_pct_new = (uint8_t)v;
-            nvs_set_u8(my_handle, "led_night_pct", led_night_pct_new);
+            led_new.night_pct = (uint8_t)item->valueint;
             led_seen = true;
         }
 
         item = cJSON_GetObjectItem(root, "led_day_start");
         if (cJSON_IsNumber(item)) {
-            int v = item->valueint;
-            if (v < 0) v = 0;
-            if (v > 23) v = 23;
-            led_day_start_new = (uint8_t)v;
-            nvs_set_u8(my_handle, "led_day_start", led_day_start_new);
+            led_new.day_start = (uint8_t)item->valueint;
             led_seen = true;
         }
 
         item = cJSON_GetObjectItem(root, "led_night_start");
         if (cJSON_IsNumber(item)) {
-            int v = item->valueint;
-            if (v < 0) v = 0;
-            if (v > 23) v = 23;
-            led_night_start_new = (uint8_t)v;
-            nvs_set_u8(my_handle, "led_night_start", led_night_start_new);
+            led_new.night_start = (uint8_t)item->valueint;
             led_seen = true;
         }
 
-        led_changed = (led_enabled_new != led_enabled_old) ||
-                      (led_day_pct_new != led_day_pct_old) ||
-                      (led_night_pct_new != led_night_pct_old) ||
-                      (led_day_start_new != led_day_start_old) ||
-                      (led_night_start_new != led_night_start_old);
+        app_clamp_led_settings(&led_new);
+        bool led_changed = !app_led_settings_equal(led_old, led_new);
+
+        if (led_seen) {
+            app_store_led_settings_to_handle(my_handle, &led_new);
+        }
 
         if (led_seen && led_changed) {
             ESP_LOGI(TAG,
                 "Signallampe settings updated: enabled=%d day=%d%% night=%d%% day_start=%d night_start=%d",
-                (int)led_enabled_new,
-                (int)led_day_pct_new,
-                (int)led_night_pct_new,
-                (int)led_day_start_new,
-                (int)led_night_start_new);
+                (int)led_new.enabled,
+                (int)led_new.day_pct,
+                (int)led_new.night_pct,
+                (int)led_new.day_start,
+                (int)led_new.night_start);
         }
 
         // Timezone configuration
@@ -1384,7 +1324,7 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         return ESP_OK;
     } else {
         // 2. Selective SD Card Serving (Ringtones ONLY)
-        // We do NOT serve arbitrary files from /sdcard/data to keep the system clean.
+        // Arbitrary files from /sdcard/data are not served.
         // Web Interface is fully embedded in Flash.
         
         char filepath[600]; // Increased buffer size to avoid truncation warning
@@ -1435,7 +1375,7 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
 
 static esp_err_t status_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
-    // Simple check: if 192.168.4.1 is our IP, we are likely in AP mode context or just have it enabled
+    // AP mode is detected via active Wi-Fi mode state.
     // Better: use the WebManager instance tracking
     
     wifi_mode_t mode;
@@ -1667,7 +1607,7 @@ void WebManager::setupWebServer() {
         httpd_register_uri_handler(server, &ota_uri);
 
         // Files (Catch-all)
-        // We register this last or use a greedy match
+        // Registration runs last to preserve handler precedence.
         httpd_uri_t file_uri = {
             .uri       = "/*", // Matches anything not handled above
             .method    = HTTP_GET,

@@ -12,6 +12,14 @@
 #define DIAL_MODE_ACTIVE_LOW true
 #define DIAL_PULSE_ACTIVE_LOW true
 
+static bool gpio_supports_internal_pull(gpio_num_t pin) {
+    int pin_num = static_cast<int>(pin);
+    if (pin_num < 0) {
+        return false;
+    }
+    return !(pin_num >= 34 && pin_num <= 39);
+}
+
 // Macros for time
 #define MILLIS() (esp_timer_get_time() / 1000)
 
@@ -85,15 +93,15 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
     
     // Logic: Count only on transition to INACTIVE level?
     // Original: bool pulseInactive = (read == (ACTIVE_LOW ? HIGH : LOW)); -> (read == HIGH)
-    // If pulseInactive is true, we debounce and count.
+    // Debounce and count run only in inactive state.
     
     // Simplified logic: Count Falling Edges if Active Low
-    // OR we can just check if state is "active" (dialing pulse)
+    // Alternative is active-state pulse detection.
     
-    // We already have interrupts for "ANYEDGE" but let's just count pulses 
+    // Interrupt mode is "ANYEDGE" and counting runs on stable state.
     // on the stable state. 
     // Actually, Rotary Dial pulses are ~60ms break / 40ms make. 
-    // We trust the original Arduino logic:
+    // Original Arduino logic is retained:
     // "if (read == HIGH && (now - _last_pulse_time > 50)) count++" (Active Low)
     
     bool pulse_is_inactive_state = (pulse_level == (_instance->_pulse_active_low ? 1 : 0));
@@ -117,27 +125,33 @@ void RotaryDial::begin() {
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
-    
-    // Pulse
-    io_conf.pin_bit_mask = (1ULL << _pulse_pin);
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    gpio_config(&io_conf);
 
-    // Hook
-    io_conf.pin_bit_mask = (1ULL << _hook_pin);
-    gpio_config(&io_conf);
-    
-        // Btn
-        io_conf.pin_bit_mask = (1ULL << _btn_pin);
-        gpio_config(&io_conf);
+    auto configure_input_pin = [&](gpio_num_t pin, const char* label) {
+        io_conf.pin_bit_mask = (1ULL << pin);
+        if (gpio_supports_internal_pull(pin)) {
+            io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+            io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        } else {
+            io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+            io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+            ESP_LOGW("RotaryDial", "%s GPIO %d has no internal pull resistor; using floating input", label, (int)pin);
+        }
+        esp_err_t cfg_err = gpio_config(&io_conf);
+        if (cfg_err != ESP_OK) {
+            ESP_LOGE("RotaryDial", "gpio_config failed for %s GPIO %d: %s", label, (int)pin, esp_err_to_name(cfg_err));
+        }
+    };
+
+    configure_input_pin(_pulse_pin, "Pulse");
+    configure_input_pin(_hook_pin, "Hook");
+    configure_input_pin(_btn_pin, "Button");
 
     if ((int)_mode_pin >= 0) {
-        io_conf.pin_bit_mask = (1ULL << _mode_pin);
-        gpio_config(&io_conf);
+        configure_input_pin(_mode_pin, "Mode");
     }
 
     // Install ISR service
-    // It might be already installed by PERIPH or Audio Board, so we suppress the error log
+    // ISR service may already exist from PERIPH or audio board setup.
     esp_log_level_set("gpio", ESP_LOG_NONE); // Suppress "already installed" error
     esp_err_t err = gpio_install_isr_service(0);
     esp_log_level_set("gpio", ESP_LOG_INFO); // Restore
@@ -178,12 +192,12 @@ void RotaryDial::loop() {
              // if (read != lastRead) debounce = now;
              // if (now - debounce > delay) if (read != state) state = read;
              
-             // My logic above: if (current != stored) checking delta against stored debounce time
-             // We need to continuously update debounce time if it's flickering? No, original:
+             // Current branch compares state delta against stored debounce time.
+             // Continuous debounce updates on flicker are not used in this path.
              // if (read != lastDebounceValue) lastDebounceTime = now;
              
-             // Let's stick to simple logic here:
-             // If different from current state, and enough time passed since last change request
+             // Simple debounce path:
+             // state change is accepted after minimum stable interval.
              _off_hook = current_off_hook;
              if (_hook_callback) _hook_callback(_off_hook);
              _last_hook_debounce = now;

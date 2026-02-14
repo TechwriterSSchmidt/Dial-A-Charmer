@@ -1,5 +1,6 @@
 #include "PhonebookManager.h"
 #include "app_config.h"
+#include "AppSharedUtils.h"
 #include "esp_log.h"
 #include "cJSON.h"
 #include "nvs.h"
@@ -74,23 +75,8 @@ static std::string get_persona_title(int idx) {
     return extract_category_title(wav);
 }
 
-static bool is_lang_en() {
-    nvs_handle_t my_handle;
-    char val[8] = {0};
-    size_t len = sizeof(val);
-    bool is_en = false;
-
-    if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
-        if (nvs_get_str(my_handle, "src_lang", val, &len) == ESP_OK) {
-            is_en = (strncmp(val, "en", 2) == 0);
-        }
-        nvs_close(my_handle);
-    }
-    return is_en;
-}
-
 void PhonebookManager::begin() {
-    bool lang_en = is_lang_en();
+    bool lang_en = app_is_lang_en();
     // Default Entries Logic (in-memory only)
     auto ensure = [&](std::string num, std::string name, std::string type, std::string val, std::string param="") {
         if (!hasEntry(num)) {

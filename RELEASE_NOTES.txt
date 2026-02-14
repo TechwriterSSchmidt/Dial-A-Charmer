@@ -1,5 +1,27 @@
 # Release Notes - Dial-A-Charmer
 
+## v0.8.4-beta (2026-02-14) - "Stability, Cleanup & Documentation Sync"
+- **Stability (Boot/WDT):**
+    - Added configurable watchdog diagnostics (`APP_WDT_DIAG_LOG`, loop warning threshold, heartbeat interval).
+    - Added boot-context, loop-stall, and heartbeat telemetry for `app_main` and input task.
+- **GPIO Robustness:**
+    - Fixed rotary input initialization to avoid invalid internal pull-up configuration on input-only GPIOs.
+    - Added guarded pin configuration with explicit warning/error logging.
+- **Audio Behavior:**
+    - Removed automatic suppression of system sounds during Night Mode.
+    - Night Mode now uses configured base-speaker night volume and LED night profile.
+    - Consolidated audio transition routines (mute / pipeline stop-reset) to reduce duplicate state paths.
+- **Codebase Simplification:**
+    - Added shared utility layer for language lookup, WAV fallback discovery, and LED settings load/store/clamp.
+    - Unified LED settings handling between firmware core and web API.
+    - Migrated timer/alarm runtime flags to structured state containers.
+    - Removed unused constants and stale declarations.
+- **Configuration/Pin Consistency:**
+    - Unified PA pin source to app configuration (`APP_PIN_PA_ENABLE`).
+    - Replaced hardcoded audio timing/fade literals with config macros.
+- **Docs:**
+    - Updated README and quick reference to match current dial codes, Night Mode behavior, AP name, defaults, and file naming.
+
 ## v0.8.3-beta (2026-01-31) - "Performance & UX Update"
 - **Scan-on-Demand (Fast Boot)**:
     - Removed the slow automatic SD card scan on every boot. The device now boots instantly and loads cached playlists.
