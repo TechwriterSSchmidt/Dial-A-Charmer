@@ -7,7 +7,7 @@
    - **Important:** specific content must be dialed within **5 seconds**.
    - *Behavior:* If no number is dialed, a **Busy Signal** plays. Hang up to reset.
    - **Dial 1-5:** Persona Playlists (Configurable).
-   - **Dial 6:** Random Mix (non-repeating until all tracks played).
+   - **Dial 11:** Random Mix.
 
 2. **Set a Kitchen Timer:**
    - Keep receiver **ON** the hook.
@@ -18,7 +18,7 @@
 3. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
    - **Snooze:** Press the **Extra Button** (if installed).
-   - *Snooze duration is configurable in Web Interface (Default: 9 min).*
+   - *Snooze duration is configurable in Web Interface (Default: 5 min).*
 
 4. **Voice Menu & Admin:**
    - **Dial 0:** System Menu Instructions.
@@ -32,13 +32,13 @@ Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` scr
 /
 ├── system/
 │   ├── dial_tone.wav       (Played on pickup)
-│   ├── timer_set.mp3       (Ack sound for timer)
+│   ├── timer_set_de.wav / timer_set_en.wav (Ack sound for timer)
 │   ├── beep.wav, click.wav ...
 ├── time/                   (Voice assets for clock)
 │   ├── de/                 (German assets)
 │   ├── en/                 (English assets)
 ├── ringtones/              
-│   ├── 1.wav ... 5.wav     (Ringtone options)
+│   ├── *.wav               (Ringtone options)
 ├── playlists/              (Auto-generated playlists)
 ├── persona_01/             (Persona 1 - Dial 1)
 ├── persona_02/             (Persona 2 - Dial 2)
@@ -64,13 +64,15 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 - **Repeating Alarm**: Set a daily schedule (Time + Active Days) for your regular wake-up call.
 - **Snooze Duration**: Configurable 0-20 minutes.
 - **Signallampe (LED)**: On/Off, Day/Night brightness, and day/night start hours.
+- **Night Base Volume**: Base-speaker volume used while night mode is active.
 
 **Night Mode Behavior:**
-- When Night Mode is active, selected system prompts (e.g., reboot/ready/hangup) are muted to avoid waking the user.
+
+- When Night Mode is active, base-speaker volume follows the configured night slider.
+- System prompts remain enabled.
 
 **Advanced Settings (/advanced):**
 
 - **WiFi**: Scan and connect logic.
 - **Timezone**: Set offset (e.g. UTC+1 Zurich).
-- **Half-Duplex**: Enhanced echo cancellation for AI features.
 - **Firmware Update**: OTA upload for system updates.

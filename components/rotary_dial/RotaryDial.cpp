@@ -93,15 +93,15 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
     
     // Logic: Count only on transition to INACTIVE level?
     // Original: bool pulseInactive = (read == (ACTIVE_LOW ? HIGH : LOW)); -> (read == HIGH)
-    // If pulseInactive is true, we debounce and count.
+    // Debounce and count run only in inactive state.
     
     // Simplified logic: Count Falling Edges if Active Low
-    // OR we can just check if state is "active" (dialing pulse)
+    // Alternative is active-state pulse detection.
     
-    // We already have interrupts for "ANYEDGE" but let's just count pulses 
+    // Interrupt mode is "ANYEDGE" and counting runs on stable state.
     // on the stable state. 
     // Actually, Rotary Dial pulses are ~60ms break / 40ms make. 
-    // We trust the original Arduino logic:
+    // Original Arduino logic is retained:
     // "if (read == HIGH && (now - _last_pulse_time > 50)) count++" (Active Low)
     
     bool pulse_is_inactive_state = (pulse_level == (_instance->_pulse_active_low ? 1 : 0));
@@ -151,7 +151,7 @@ void RotaryDial::begin() {
     }
 
     // Install ISR service
-    // It might be already installed by PERIPH or Audio Board, so we suppress the error log
+    // ISR service may already exist from PERIPH or audio board setup.
     esp_log_level_set("gpio", ESP_LOG_NONE); // Suppress "already installed" error
     esp_err_t err = gpio_install_isr_service(0);
     esp_log_level_set("gpio", ESP_LOG_INFO); // Restore
@@ -192,12 +192,12 @@ void RotaryDial::loop() {
              // if (read != lastRead) debounce = now;
              // if (now - debounce > delay) if (read != state) state = read;
              
-             // My logic above: if (current != stored) checking delta against stored debounce time
-             // We need to continuously update debounce time if it's flickering? No, original:
+             // Current branch compares state delta against stored debounce time.
+             // Continuous debounce updates on flicker are not used in this path.
              // if (read != lastDebounceValue) lastDebounceTime = now;
              
-             // Let's stick to simple logic here:
-             // If different from current state, and enough time passed since last change request
+             // Simple debounce path:
+             // state change is accepted after minimum stable interval.
              _off_hook = current_off_hook;
              if (_hook_callback) _hook_callback(_off_hook);
              _last_hook_debounce = now;

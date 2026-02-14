@@ -8,7 +8,7 @@ MAPPING_FILE = "../tts_file_mapping.txt"
 DEST_ROOT = "../sd_card_content"
 
 def main():
-    # Ensure we are in the utils directory where audio files are
+    # Script expects execution from the utils directory.
     if not os.path.exists(MAPPING_FILE):
         print(f"Error: {MAPPING_FILE} not found. Please run this script from the 'utils' directory.")
         sys.exit(1)

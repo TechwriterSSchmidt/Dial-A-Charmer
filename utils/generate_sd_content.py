@@ -53,7 +53,7 @@ PERSONA_DEFAULTS = {
 
 # Available Accents (TLDs) for gTTS
 ACCENTS_EN = ['com', 'co.uk', 'com.au', 'ca', 'co.in', 'ie', 'co.za']
-ACCENTS_DE = ['de'] # 'fr', 'us' etc produce strong foreign accents, 'de' is standard
+ACCENTS_DE = ['de'] # 'fr' and 'us' often produce stronger foreign accents; 'de' is standard
 
 # Piper Models (auto-discovered from utils/piper_voices/en, de)
 PIPER_MODELS_EN = []
@@ -306,7 +306,7 @@ def generate_tones(base_dir):
     save(beep, "beep.wav")
 
     # Hook sounds are now provided via external high-quality recording split (process_hooks.py)
-    # We skip synthesizing them here to preserve the manual files.
+    # Synthesis is skipped here to preserve manual files.
     
     save(error_tone, "error_tone.wav")
 
@@ -384,7 +384,7 @@ def generate_time_announcements():
     for m in TIME_CONFIG["minutes"]:
         # German: 0-9 can cover "00"-"09" if needed, but usually just numbers.
         # Format "m_XX.wav" (always 2 digits? or 1? template had m_00)
-        # We will generate m_00 to m_59
+        # Range generated: m_00 to m_59.
         fname = f"m_{m:02d}.wav"
         if "de" in ENABLED_LANGS:
             add_task(f"{inst_de}{m}", "de", base_dir / f"de/{fname}", model_de)
@@ -473,7 +473,7 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
     """Generates audio using Piper (EN) or Google TTS (DE)."""
 
     # Sanitize text to prevent "dot dot dot" pronunciation
-    # We replace "..." with a period to force a pause.
+    # "..." is replaced with a period to force a pause.
     sanitized_text = text.replace(" ... ", ". ").replace("...", ".")
 
     def write_pcm_wav(segment, out_path):
@@ -488,12 +488,12 @@ def generate_speech(text, lang, output_path, model_name=None, force_piper=False)
     # German: Google TTS only
     if lang == 'de' and not force_piper:
         try:
-            # Use 'com' for English (US) and 'de' for German
+            # 'com' is used for English and 'de' for German.
             tld = 'de' if lang == 'de' else 'com'
             safe_print(f"  [gTTS] de -> {output_path.name}: {sanitized_text[:60]}{'...' if len(sanitized_text) > 60 else ''}")
             tts = gTTS(text=sanitized_text, lang=lang, tld=tld, slow=False)
             
-            # gTTS saves MP3. We must convert to WAV if output is WAV.
+            # gTTS writes MP3; conversion to WAV is required for WAV output.
             temp_mp3 = str(output_path) + ".mp3"
             tts.save(temp_mp3)
             
@@ -697,7 +697,7 @@ def generate_audio_cache():
         start_time = time.time()
         completed = 0
         
-        # Adjust max_workers based on your network/CPU comfort.
+        # max_workers is tuned to network and CPU capacity.
         # NOTE: severe rate-limiting by Google if too high (>5). Keeping it low for stability.
         def run_task_batch(batch_tasks, max_workers):
             nonlocal completed
@@ -908,7 +908,7 @@ def generate_sd_card_structure(categories):
                     print(f"     Created Playlist: {pl_filename} ({len(tracks)} tracks)")
                 else:
                     # Clean up old playlist if it exists? 
-                    # Or ensure we don't leave stale ones?
+                    # Stale playlist files are removed when track list is empty.
                     pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
                     pl_path = playlist_dir / pl_filename
                     if pl_path.exists():
@@ -940,7 +940,7 @@ def generate_procedural_tones():
         print(f"  [SYNTH] {filename}")
 
     # 1. Classic Phone (Mix of 440Hz and 480Hz, modulated)
-    # The US Standard ring is 2s ON, 4s OFF. The Tone is ~440+480Hz
+    # US standard ring uses 2s ON, 4s OFF at ~440+480Hz.
     print("  Synthesizing Classic Phone...")
     tone1 = Sine(440).to_audio_segment(duration=2000)
     tone2 = Sine(480).to_audio_segment(duration=2000)
@@ -978,7 +978,7 @@ def generate_procedural_tones():
     save_tone(chime, "soft_chime.wav", -3.0)
 
     # 5. Nuke Warning (Sawtooth Sweep)
-    # Pydub doesn't do frequency sweeps easily, so we step it
+    # Frequency sweep is approximated with stepped segments.
     print("  Synthesizing Warning Siren...")
     siren = AudioSegment.silent(duration=0)
     for f in range(400, 1200, 20):
@@ -1116,7 +1116,7 @@ def generate_procedural_tones():
         freq_start = random.randint(2000, 3000)
         freq_end = random.randint(1500, 2500)
         # Chirp is a sine sweep
-        # Since pydub doesn't have sweeps, we approximate with short segments or just high sine
+        # Sweep behavior is approximated with short high-frequency segments.
         chirp = Sine(freq_start).to_audio_segment(duration=dur).fade_in(10).fade_out(50).apply_gain(-12)
         birds = birds.overlay(chirp, position=start)
     save_tone(birds, "sunrise_birds.wav", -6.0)
@@ -1206,10 +1206,10 @@ def generate_system_sounds():
     print(f"  [GEN] Generating {total_time} time announcements...")
     
     # Process time tasks
-    # We use a simple loop here because there are many small files
+    # Simple loop is used here because the file set is large and granular.
     # Using the pool might be better, but blocking sequential is safer to avoid Piper crashes if any
     
-    # Let's try Parallel again for speed, but catch errors carefully
+    # Parallel execution is retried for speed with explicit error handling.
     
     # Helper for Time
     def process_time_task(task):

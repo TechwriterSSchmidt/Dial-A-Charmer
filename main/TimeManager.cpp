@@ -388,10 +388,10 @@ bool TimeManager::checkAlarm() {
 
     // Check matching time
     if (now.tm_hour == alm.hour && now.tm_min == alm.minute) {
-        // Debounce: ensure we trigger only once per specific day/minute instance
+        // Debounce: trigger only once per specific day/minute instance.
         // Best way: Use tm_yday + hour + minute combined, or just ensure sec is small
-        // A simple check is: don't retrigger same day if we stopped it.
-        // But if we use snoozing later, this needs logic. 
+        // Simple check prevents retrigger on the same day after stop.
+        // Snooze support requires additional logic later.
         // For now: Trigger if seconds < 5 (poll interval usually shorter) AND last_triggered_day != today
         // Actually, better: 
            if (_last_triggered_day != now.tm_yday) {
@@ -402,7 +402,7 @@ bool TimeManager::checkAlarm() {
              return true;
         }
     } else {
-        // Reset trigger flag if we are past the alarm time? 
+        // Trigger flag reset is optional after alarm window.
         // Not strictly necessary if using yday, but useful for testing same day multiple times if needed.
         // For production, yday is robust.
     }

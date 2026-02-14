@@ -72,7 +72,7 @@ esp_err_t i2s_mclk_gpio_select(i2s_port_t i2s_num, gpio_num_t gpio_num)
 {
     // Legacy functionality for direct register access is removed in ESP-IDF v5.x
     // The MCLK should be configured via the I2S driver or esp_driver_i2s.
-    // We return ESP_OK to allow compilation - assuming the I2S driver (std) handles MCLK output.
+    // ESP_OK keeps compatibility while standard I2S handles MCLK routing.
     ESP_LOGW(TAG, "i2s_mclk_gpio_select: Manual MCLK routing skipped (deprecated API)");
     
     // Logic removed to prevent build errors with newer IDF

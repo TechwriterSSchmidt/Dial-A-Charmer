@@ -178,7 +178,7 @@ def main():
     dwyl_quotes = fetch_dwyl_quotes()
 
     # 2. Combine
-    # We want a good mix. 
+    # Balanced source mix is required.
     
     combined = []
     combined.extend(jokes)

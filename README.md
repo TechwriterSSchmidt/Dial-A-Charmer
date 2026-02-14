@@ -3,8 +3,9 @@
 Dial-A-Charmer is a vintage telephone brought back to life with more personality than ever. It announces internet-precise time with the confidence of someone who's never been late, doubles as an alarm and timer, and delivers compliments on demand—because who wouldn't want a phone that cheers them on?
 
 **Easy to Install:**
-1.  **ESP-IDF Build (Recommended):** Build and flash from source with ESP-IDF.
-2.  **Manual Flash:** Download the latest build from [firmware/dial-a-charmer-2026-02-07.bin](firmware/dial-a-charmer-2026-02-07.bin) and upload it manually.
+
+1. **ESP-IDF Build (Recommended):** Build and flash from source with ESP-IDF.
+2. **Manual Flash:** Download the latest build from [firmware/dial-a-charmer-2026-02-14.bin](firmware/dial-a-charmer-2026-02-14.bin) and upload it manually.
 
 ## Support my projects
 
@@ -13,16 +14,17 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/D1D01HVT9A)
 
 ## Table of Contents
-*   [Hardware Support & Pinout](#hardware-support--pinout)
-*   [Project Structure](#project-structure)
-*   [Audio Configuration](#audio-configuration)
-*   [Status Indication](#status-indication)
-*   [Acoustic Signals](#acoustic-signals)
-*   [Getting Started](#getting-started)
-*   [Maintenance](#maintenance)
-*   [Documentation](QUICK_REFERENCE_GUIDE.md)
-*   [Release Notes](RELEASE_NOTES.txt)
-*   [License](#license)
+
+* [Hardware Support & Pinout](#hardware-support--pinout)
+* [Project Structure](#project-structure)
+* [Audio Configuration](#audio-configuration)
+* [Status Indication](#status-indication)
+* [Acoustic Signals](#acoustic-signals)
+* [Getting Started](#getting-started)
+* [Maintenance](#maintenance)
+* [Documentation](QUICK_REFERENCE_GUIDE.md)
+* [Release Notes](RELEASE_NOTES.txt)
+* [License](#license)
 
 ## Functionality Overview
 
@@ -36,7 +38,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Voice Menu** | **Receiver Lifted** → Dial `0` | Plays spoken instructions for system codes. |
 | **Voice Menu Options** | **While menu speaks** → Dial `1`-`4`, or `999` | Executes menu action immediately (Next Alarm, Night Mode, Phonebook, System Status, Reboot). |
 | **Stop Ringing** | **Ringing** → Lift Receiver | Stops the alarm or timer alert. |
-| **Snooze** | **Ringing** → Press Extra Button | Snoozes the alarm for the configured duration (set in Web UI). |
+| **Snooze** | **Ringing** → Press Extra Button | Snoozes the alarm for the configured duration (set in Web UI) and activates a slow breathing Signallampe effect. |
 | **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
 
 ### System Capabilities
@@ -45,7 +47,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | :--- | :--- |
 | **Timekeeping** | Syncs via **NTP** with optional **DS3231 RTC** fallback (invalid RTC data is ignored until SNTP sync). |
 | **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
-| **Night Mode** | Toggles reduced output. System prompts like reboot/ready/hangup are muted while night mode is active. |
+| **Night Mode** | Uses reduced base-speaker volume from Web UI (`night_base_volume`) and LED night profile. System sounds are not auto-muted. |
 
 ## Phonebook Defaults
 
@@ -64,17 +66,19 @@ The phonebook ships with default numbers. You can edit these entries in the Web 
 | `999` | System Reboot | Reboot device |
 
 Voice Menu actions (dial while the menu speaks):
-- `1` Next alarm
-- `2` Night mode toggle
-- `3` Phonebook options (reads numbers)
-- `4` System status (WiFi, IP, NTP, SD)
-- `999` System reboot
+
+* `1` Next alarm
+* `2` Night mode toggle
+* `3` Phonebook options (reads numbers)
+* `4` System status (WiFi, IP, NTP, SD)
+* `999` System reboot
 
 ## Hardware Support & Pinout
 
 Target hardware: **Ai-Thinker Audio Kit v2.2** (ES8388). Most peripherals connect via Header P2.
 
 **Pinout (Header P2):**
+
 | Component | Function | GPIO | Notes |
 | :--- | :--- | :--- | :--- |
 | **Audio** | Codec (I2S/I2C) | *Internal* | ES8388 (Stereo In/Out) |
@@ -85,9 +89,11 @@ Target hardware: **Ai-Thinker Audio Kit v2.2** (ES8388). Most peripherals connec
 | **SD Card** | SPI | *Internal* | On-board Slot |
 
 ### Audio Routing (Ai-Thinker)
+
 The firmware leverages the stereo capabilities of the ES8388 codec to drive two separate audio paths:
-- **Handset Audio** (Ear piece) is routed to the **Left Channel (LOUT)**.
-- **Base Speaker** (Ringing/Speakerphone) is routed to the **Right Channel (ROUT)**.
+
+* **Handset Audio** (Ear piece) is routed to the **Left Channel (LOUT)**.
+* **Base Speaker** (Ringing/Speakerphone) is routed to the **Right Channel (ROUT)**.
 
 The firmware automatically manages muting/unmuting these channels based on the device state (On-Hook/Off-Hook).
 
@@ -95,25 +101,26 @@ The firmware automatically manages muting/unmuting these channels based on the d
 
 Once the device is connected to your WiFi network (or you are connected to its Access Point), you can access the configuration interface by navigating to:
 
-👉 **http://dial-a-charmer.local**
+👉 **[http://dial-a-charmer.local](http://dial-a-charmer.local)**
 
 (Requires a modern browser on Android, iOS, Windows, or macOS. If mDNS fails, use the IP announced via the Voice Menu: Dial `0`, then `4` for Systemstatus.)
 
 ### Signallampe Settings (Web UI)
 
 The Configuration page includes a **Signallampe** card (below **Timer-Ton**) with:
-- LED enable/disable toggle
-- Day and Night brightness sliders (percent)
-- Day/Night start hour selection (0-23)
+
+* LED enable/disable toggle
+* Day and Night brightness sliders (percent)
+* Day/Night start hour selection (0-23)
 
 ## Project Structure
 
-*   **`main/`**: Main firmware C++ source code.
-*   **`main/include/`**: Configuration headers (`app_config.h`).
-*   **`main/web_ui/`**: Embedded web UI assets.
-*   **`components/`**: Custom firmware components.
-*   **`utils/`**: Python helper scripts for audio management.
-*   **`sd_card_content/`**: Generated SD card file structure.
+* **`main/`**: Main firmware C++ source code.
+* **`main/include/`**: Configuration headers (`app_config.h`).
+* **`main/web_ui/`**: Embedded web UI assets.
+* **`components/`**: Custom firmware components.
+* **`utils/`**: Python helper scripts for audio management.
+* **`sd_card_content/`**: Generated SD card file structure.
 
 ## Audio Configuration
 
@@ -139,21 +146,20 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 **`generate_sd_content.py`** (Recommended)
 This all-in-one script prepares a complete `sd_card_content` folder for you. It ensures your device works immediately without hunting for MP3 files.
 
-*   **Usage:** `python utils/generate_sd_content.py`
-*   **Features:**
-    *   **Structure:** Creates all required folders (`persona_XX`, `system`, `time` etc.).
-    *   **TTS Integration:** Automatically downloads high-quality Google TTS speech files for Numbers, Dates, and System Messages in both **German & English**.
-    *   **Tone Synthesis:** Generates clean `wav` files for Dial Tone, Busy Signal, and Beeps using Python's audio libraries (no recording needed).
-    *   **Voice Prompts:** Builds voice menu prompts, phonebook options (with numbers), and hook pickup/hangup SFX.
-    *   **Telephony Tones:** Uses classic US dial tone and busy signal, and outputs them at a lower level for better balance.
-    *   **Offline Fonts:** Copies `AATriple.otf` and `3620-plaisir-app.otf` into `/fonts/` so the Web UI looks correct offline. License texts are included alongside the fonts in `/fonts/` and on the SD card. Thanks to the font creators. Sources: https://fontesk.com/triple-font/ and https://fontesk.com/plaisir-font/
-*   **Output:** Populates `sd_card_content/` which you just copy to your SD card.
+* **Usage:** `python utils/generate_sd_content.py`
+* **Feature (Structure):** Creates all required folders (`persona_XX`, `system`, `time` etc.).
+* **Feature (TTS Integration):** Automatically downloads high-quality Google TTS speech files for Numbers, Dates, and System Messages in both **German & English**.
+* **Feature (Tone Synthesis):** Generates clean `wav` files for Dial Tone, Busy Signal, and Beeps using Python's audio libraries (no recording needed).
+* **Feature (Voice Prompts):** Builds voice menu prompts, phonebook options (with numbers), and hook pickup/hangup SFX.
+* **Feature (Telephony Tones):** Uses classic US dial tone and busy signal, and outputs them at a lower level for better balance.
+* **Feature (Offline Fonts):** Copies `AATriple.otf` and `3620-plaisir-app.otf` into `/fonts/` so the Web UI looks correct offline. License texts are included alongside the fonts in `/fonts/` and on the SD card. Thanks to the font creators. Sources: [https://fontesk.com/triple-font/](https://fontesk.com/triple-font/) and [https://fontesk.com/plaisir-font/](https://fontesk.com/plaisir-font/)
+* **Output:** Populates `sd_card_content/` which you just copy to your SD card.
 
 **`split_audio.py`**
 This tool splits large, long audio files (e.g. combined recordings) into individual MP3 files based on silence.
 
-*   **Usage:** `python utils/split_audio.py -o my_output_folder (input_files)`
-*   **Function:** Detects silence gaps >1000ms and chops the file. Resulting files (`001.mp3`, `002.mp3`...) are ready for `persona_XX` folders.
+* **Usage:** `python utils/split_audio.py -o my_output_folder (input_files)`
+* **Function:** Detects silence gaps >1000ms and chops the file. Resulting files (`001.mp3`, `002.mp3`...) are ready for `persona_XX` folders.
 
 ## Status Indication
 
@@ -167,7 +173,7 @@ Brightness and schedule are configurable in the **Signallampe** card (Web UI).
 | **Idle** | 🟠 Vintage Orange Glow | Ready, Filament-style flickering |
 | **Alarm Ringing** | ⚪ Warm White Pulsing | Alarm is active (Wake up!) |
 | **Timer Alert** | 🔴 Fast Red Pulsing | Timer finished (Panic Mode) |
-| **Snooze** | ⚪ Warm White Solid | Snooze active (configured duration) |
+| **Snooze** | ⚪ Slow Warm White Breathing | Snooze active (configured duration) |
 | **Error / No SD** | 🔴 Red SOS Pattern | Hardware fault or Missing SD Card |
 
 ## Acoustic Signals
@@ -176,72 +182,74 @@ The system uses specific WAV files in `/system/` for feedback:
 
 | File | Context |
 | :--- | :--- |
-| `dialtone_1.wav` | Played when handset is lifted. |
+| `dial_tone.wav` | Played when handset is lifted. |
 | `beep.wav` | Keypress confirmation or mode change. |
 | `busy_tone.wav` | Call ended or invalid state. |
 | `hook_pickup.wav` | Short pickup click before persona playback. |
 | `hook_hangup.wav` | Short hangup click after persona playback. |
 
-Note: During **Night Mode**, selected system sounds (e.g., reboot/ready/hangup prompts) are suppressed to avoid waking the user.
+Note: During **Night Mode**, base speaker level follows the configured night slider value. System sounds remain enabled.
 
 ## Getting Started
 
-1.  **Prepare Hardware:** Assemble the ESP32, Audio Module, and Rotary Phone mechanics according to the pinout.
-2.  **Prepare SD Card:**
-    *   **Run Generator:** Execute `python utils/generate_sd_content.py` to create the essential system files, voice prompts, and fonts.
-    *   **Format:** Format your MicroSD card to **FAT32**.
-    *   **Copy:** Copy the *contents* of the generated `sd_card_content` folder to the root of the SD card.
-    *   **Personalize:** Add your own tracks to the `persona_XX` folders.
-3.  **Flash Firmware (ESP-IDF):**
-    *   Open project in VS Code with ESP-IDF.
-    *   Connect your ESP32 board via USB.
-    *   **Build/Flash**: Run `idf.py build flash`.
-4.  **Configure:**
-    *   On first boot, connect to WiFi AP `DialACharmer`.
-    *   Go to `192.168.4.1` to set your Timezone and Credentials.
+1. **Prepare Hardware:** Assemble the ESP32, Audio Module, and Rotary Phone mechanics according to the pinout.
+2. **Prepare SD Card:**
+    * **Run Generator:** Execute `python utils/generate_sd_content.py` to create the essential system files, voice prompts, and fonts.
+    * **Format:** Format your MicroSD card to **FAT32**.
+    * **Copy:** Copy the *contents* of the generated `sd_card_content` folder to the root of the SD card.
+    * **Personalize:** Add your own tracks to the `persona_XX` folders.
+3. **Flash Firmware (ESP-IDF):**
+    * Open project in VS Code with ESP-IDF.
+    * Connect your ESP32 board via USB.
+    * **Build/Flash**: Run `idf.py build flash`.
+4. **Configure:**
+    * On first boot, connect to WiFi AP `Dial-A-Charmer`.
+    * Go to `192.168.4.1` to set your Timezone and Credentials.
 
 ## Maintenance
 
-*   **Time:** Time is maintained via NTP. Ensure the device connects to Wi-Fi at least once on boot to sync the clock.
+* **Time:** Time is maintained via NTP. Ensure the device connects to Wi-Fi at least once on boot to sync the clock.
 
 ## Debug Logging (SD Card)
 
 You can enable buffered SD logging during testing (see `app_config.h`). Logs are written to:
 
-*   `/sdcard/logs/app.log`
+* `/sdcard/logs/app.log`
 
 Logging is buffered and flushed periodically to reduce interference with audio playback.
 
 ## Planned Improvements
+
 * Loud noise on reboot > need to ensure that amps are not powered during reboot?
 * Alarm-off text output is currently played over handset > should be switched to base speaker + instead of using a specific announcement, we should play random messages and make this feature switchable for each daily alarm
 * WIFI-bug ... system seems to hang when not connected to WIFI while using captive portal on iPhone to make settings
 * IP-Address should be displayed in Captive Portal and on Configuration page of the web-ui
-* 
 
 ## License
 
 This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 
-- **Noncommercial Use**: You may use this software for personal, educational, or evaluation purposes.
-- **Commercial Use Restricted**: You may NOT use this software for commercial purposes (selling, paid services, business use) without prior written consent.
-
-<details>
-<summary>View Full License Text</summary>
+* **Noncommercial Use**: You may use this software for personal, educational, or evaluation purposes.
+* **Commercial Use Restricted**: You may NOT use this software for commercial purposes (selling, paid services, business use) without prior written consent.
 
 ### PolyForm Noncommercial License 1.0.0
 
 #### 1. Purpose
+
 This license allows you to use the software for noncommercial purposes.
 
 #### 2. Agreement
+
 In order to receive this license, you must agree to its rules. The rules of this license are both obligations (like a contract) and conditions to your license. You must not do anything with this software that triggers a rule that you cannot or will not follow.
 
 #### 3. License Grant
+
 The licensor grants you a copyright license for the software to do everything you might do with the software that would otherwise infringe the licensor's copyright in it for any permitted purpose. However, you may only do so to the extent that such use does not violate the rules.
 
 #### 4. Permitted Purpose
+
 A purpose is a permitted purpose if it consists of:
+
 1. Personal use
 2. Evaluation of the software
 3. Development of software using the software as a dependency or evaluation tool
@@ -252,17 +260,17 @@ A purpose is a permitted purpose if it consists of:
 #### 5. Rules
 
 ##### 5.1. Noncommercial Use
+
 You must not use the software for any commercial purpose. A commercial purpose includes, but is not limited to:
+
 1. Using the software to provide a service to third parties for a fee.
 2. Selling the software or a derivative work.
 3. Using the software in a commercial environment or business workflow.
 
 ##### 5.2. Notices
+
 You must ensure that anyone who gets a copy of any part of the software from you also gets a copy of these terms or the URL for them above, as well as copies of any copyright notice or other rights notice in the software.
 
 #### 6. Disclaimer
+
 **THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.**
-
-</details>
-
-

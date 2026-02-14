@@ -33,18 +33,17 @@ def process_hooks():
     if len(chunks) >= 2:
         # Assuming Chunk 0 = Pickup, Chunk 1 (+ others?) = Hangup
         # Often recordings might have a small noise at start, but let's assume biggest chunks.
-        # Or just take first and last if multiple?
-        # Let's try simpler: take the first two chunks.
+        # Multiple chunks are reduced to the first two segments.
         
         pickup = chunks[0]
         hangup = chunks[1]
         
-        # If there are more chunks (e.g. echoes), maybe append them or ignore?
+        # Additional chunks (e.g. echoes) are ignored in the first pass.
         # "Pick up" is usually short. "Hang up" might be "Klack-Klack".
         if len(chunks) > 2:
             print("Warning: More than 2 sounds detected. Using first two.")
-            # If the hangup is 'clack-clack' and split_on_silence split them, we might need to join
-            # But let's start with 0 and 1.
+            # Hangup "clack-clack" may require later join logic.
+            # Current implementation keeps chunks 0 and 1.
 
         os.makedirs(TARGET_DIR, exist_ok=True)
         

@@ -249,7 +249,7 @@ async function init() {
     try {
         console.log("Fetching Settings...");
 
-        // Check Status First (to see if we are in AP mode)
+        // Status is checked first to detect AP mode.
         const statusResp = await fetch('/api/status');
         const status = await statusResp.json();
         
@@ -264,7 +264,7 @@ async function init() {
         
         // Logic: Force Setup if AP mode OR no SSID config
         // Also check hostname (Captive Portal usually uses IP or .local)
-        // If we connect to 192.168.4.1, we are definitely in AP provisioning mode.
+        // Host 192.168.4.1 indicates AP provisioning mode.
         
         const isApMode = (status.mode === 'ap');
         const isCaptiveIP = (window.location.hostname === '192.168.4.1');
