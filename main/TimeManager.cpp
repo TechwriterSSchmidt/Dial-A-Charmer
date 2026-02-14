@@ -14,7 +14,7 @@
 
 static const char *TAG = "TIME_MANAGER";
 static bool _alarm_ringing = false;
-static int _last_triggered_day = -1; // Ensure trigger only once per day
+static int64_t _last_triggered_key = -1; // Ensure trigger only once per minute slot
 static TaskHandle_t s_sntp_task = NULL;
 static bool s_sntp_synced = false;
 static time_t s_last_ntp_sync = 0;
@@ -255,10 +255,18 @@ void TimeManager::setTimezone(const char* tz) {
     if (!tz) return;
     
     nvs_handle_t my_handle;
-    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
-        nvs_set_str(my_handle, "time_zone", tz);
-        nvs_commit(my_handle);
+    esp_err_t err = nvs_open("dialcharm", NVS_READWRITE, &my_handle);
+    if (err == ESP_OK) {
+        err = nvs_set_str(my_handle, "time_zone", tz);
+        if (err == ESP_OK) {
+            err = nvs_commit(my_handle);
+        }
         nvs_close(my_handle);
+
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to persist timezone '%s': %s", tz, esp_err_to_name(err));
+            return;
+        }
         
         setenv("TZ", tz, 1);
         tzset();
@@ -267,6 +275,8 @@ void TimeManager::setTimezone(const char* tz) {
         // Update RTC time just in case (optional, but recalculates local time)
         // struct tm now = getCurrentTime();
         // rtc_write_time(&now); 
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS for timezone update: %s", esp_err_to_name(err));
     }
 }
 
@@ -292,7 +302,8 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
     if (dayIndex < 0 || dayIndex > 6) return;
 
     nvs_handle_t my_handle;
-    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
+    esp_err_t err = nvs_open("dialcharm", NVS_READWRITE, &my_handle);
+    if (err == ESP_OK) {
         char key_h[16], key_m[16], key_en[16], key_rmp[16], key_msg[16], key_snd[16];
         snprintf(key_h, sizeof(key_h), "alm_%d_h", dayIndex);
         snprintf(key_m, sizeof(key_m), "alm_%d_m", dayIndex);
@@ -301,22 +312,34 @@ void TimeManager::setAlarm(int dayIndex, int hour, int minute, bool active, bool
         snprintf(key_msg, sizeof(key_msg), "alm_%d_msg", dayIndex);
         snprintf(key_snd, sizeof(key_snd), "alm_%d_snd", dayIndex);
 
-        nvs_set_i32(my_handle, key_h, hour);
-        nvs_set_i32(my_handle, key_m, minute);
-        nvs_set_u8(my_handle, key_en, active ? 1 : 0);
-        nvs_set_u8(my_handle, key_rmp, volumeRamp ? 1 : 0);
-        nvs_set_u8(my_handle, key_msg, useMsg ? 1 : 0);
+        err = nvs_set_i32(my_handle, key_h, hour);
+        if (err == ESP_OK) err = nvs_set_i32(my_handle, key_m, minute);
+        if (err == ESP_OK) err = nvs_set_u8(my_handle, key_en, active ? 1 : 0);
+        if (err == ESP_OK) err = nvs_set_u8(my_handle, key_rmp, volumeRamp ? 1 : 0);
+        if (err == ESP_OK) err = nvs_set_u8(my_handle, key_msg, useMsg ? 1 : 0);
         
-        if (ringtone && strlen(ringtone) > 0) {
-            nvs_set_str(my_handle, key_snd, ringtone);
-        } else {
-            nvs_set_str(my_handle, key_snd, APP_DEFAULT_TIMER_RINGTONE);
+        if (err == ESP_OK) {
+            if (ringtone && strlen(ringtone) > 0) {
+                err = nvs_set_str(my_handle, key_snd, ringtone);
+            } else {
+                err = nvs_set_str(my_handle, key_snd, APP_DEFAULT_TIMER_RINGTONE);
+            }
         }
         
-        nvs_commit(my_handle);
+        if (err == ESP_OK) {
+            err = nvs_commit(my_handle);
+        }
         nvs_close(my_handle);
+
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to save alarm day %d: %s", dayIndex, esp_err_to_name(err));
+            return;
+        }
+
         int logDay = (dayIndex == 0) ? 7 : dayIndex;
         ESP_LOGI(TAG, "Saved Alarm Day %d: %02d:%02d (Act:%d Rmp:%d Msg:%d) Tone: %s", logDay, hour, minute, active, volumeRamp, useMsg, ringtone);
+    } else {
+        ESP_LOGE(TAG, "Failed to open NVS for alarm day %d: %s", dayIndex, esp_err_to_name(err));
     }
 }
 
@@ -388,23 +411,16 @@ bool TimeManager::checkAlarm() {
 
     // Check matching time
     if (now.tm_hour == alm.hour && now.tm_min == alm.minute) {
-        // Debounce: trigger only once per specific day/minute instance.
-        // Best way: Use tm_yday + hour + minute combined, or just ensure sec is small
-        // Simple check prevents retrigger on the same day after stop.
-        // Snooze support requires additional logic later.
-        // For now: Trigger if seconds < 5 (poll interval usually shorter) AND last_triggered_day != today
-        // Actually, better: 
-           if (_last_triggered_day != now.tm_yday) {
-               int logDay = (today == 0) ? 7 : today;
-               ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", logDay, now.tm_hour, now.tm_min);
-             _alarm_ringing = true;
-             _last_triggered_day = now.tm_yday;
-             return true;
+        // Debounce per exact minute slot (year/day/hour/minute), not per full day.
+        // This allows changing alarms during the same day without requiring reboot.
+        int64_t trigger_key = (((int64_t)now.tm_year * 366 + now.tm_yday) * 1440) + (now.tm_hour * 60 + now.tm_min);
+        if (_last_triggered_key != trigger_key) {
+            int logDay = (today == 0) ? 7 : today;
+            ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", logDay, now.tm_hour, now.tm_min);
+            _alarm_ringing = true;
+            _last_triggered_key = trigger_key;
+            return true;
         }
-    } else {
-        // Trigger flag reset is optional after alarm window.
-        // Not strictly necessary if using yday, but useful for testing same day multiple times if needed.
-        // For production, yday is robust.
     }
     return false;
 }

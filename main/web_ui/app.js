@@ -63,6 +63,7 @@ const TEXT = {
         connect_to: "Verbinde mit",
         password: "Passwort",
         connect: "Verbinden",
+        ok: "OK",
         cancel: "Abbrechen",
         saved: "Gespeichert!",
         connecting_to: "Das Gerät verbindet sich mit",
@@ -77,7 +78,7 @@ const TEXT = {
         select_network: "Bitte lokales Netzwerk auswählen:",
         saving_connecting: "Speichern und verbinden...",
         ota_title: "Firmware Update",
-        ota_password: "OTA Passwort",
+        ota_password: "OTA Passwort (nur Firmware-Update)",
         ota_select: "Firmware-Datei auswählen (.bin)",
         ota_upload: "Update starten",
         ota_hint: "Das Gerät startet nach erfolgreichem Update neu.",
@@ -136,6 +137,7 @@ const TEXT = {
         connect_to: "Connect to",
         password: "Password",
         connect: "Connect",
+        ok: "OK",
         cancel: "Cancel",
         saved: "Saved!",
         connecting_to: "The device is now connecting to",
@@ -150,7 +152,7 @@ const TEXT = {
         select_network: "Select your local network:",
         saving_connecting: "Saving and Connecting...",
         ota_title: "Firmware Update",
-        ota_password: "OTA Password",
+        ota_password: "OTA Password (firmware update only)",
         ota_select: "Select firmware file (.bin)",
         ota_upload: "Start Update",
         ota_hint: "Device will reboot after a successful update.",
@@ -224,6 +226,92 @@ const API = {
     },
     reboot: () => fetch('/api/reboot', { method: 'POST' })
 };
+
+function requestOtaPassword() {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.inset = '0';
+        overlay.style.background = 'rgba(0,0,0,0.65)';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.zIndex = '9999';
+
+        const dialog = document.createElement('div');
+        dialog.style.background = '#222';
+        dialog.style.border = '1px solid #444';
+        dialog.style.borderRadius = '8px';
+        dialog.style.padding = '16px';
+        dialog.style.width = 'min(360px, 92vw)';
+        dialog.style.boxSizing = 'border-box';
+
+        const title = document.createElement('h4');
+        title.textContent = t('ota_password');
+        title.style.margin = '0 0 10px 0';
+        title.style.color = '#d4af37';
+        title.style.fontSize = '0.9rem';
+        title.style.textTransform = 'uppercase';
+
+        const input = document.createElement('input');
+        input.type = 'password';
+        input.placeholder = t('ota_password');
+        input.style.width = '100%';
+        input.style.padding = '9px';
+        input.style.boxSizing = 'border-box';
+        input.style.borderRadius = '4px';
+        input.style.border = '1px solid #555';
+        input.style.background = '#111';
+        input.style.color = '#fff';
+
+        const btnRow = document.createElement('div');
+        btnRow.style.display = 'flex';
+        btnRow.style.gap = '8px';
+        btnRow.style.justifyContent = 'flex-end';
+        btnRow.style.marginTop = '12px';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = t('cancel');
+        cancelBtn.style.background = '#444';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = t('ok');
+
+        let settled = false;
+        const close = (value) => {
+            if (settled) return;
+            settled = true;
+            document.removeEventListener('keydown', onKey);
+            overlay.remove();
+            resolve(value || '');
+        };
+
+        const onKey = (evt) => {
+            if (evt.key === 'Escape') {
+                close('');
+            } else if (evt.key === 'Enter') {
+                close(input.value.trim());
+            }
+        };
+
+        document.addEventListener('keydown', onKey);
+
+        cancelBtn.onclick = () => close('');
+        okBtn.onclick = () => close(input.value.trim());
+        overlay.onclick = (evt) => {
+            if (evt.target === overlay) close('');
+        };
+
+        btnRow.appendChild(cancelBtn);
+        btnRow.appendChild(okBtn);
+        dialog.appendChild(title);
+        dialog.appendChild(input);
+        dialog.appendChild(btnRow);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+        setTimeout(() => input.focus(), 0);
+    });
+}
 
 function downloadLogs() {
     window.location.href = '/api/logs/download';
@@ -737,7 +825,6 @@ function renderAdvanced() {
     const ledDayStart = (state.settings.led_day_start === undefined) ? 7 : state.settings.led_day_start;
     const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
     const nightBaseVol = (state.settings.night_base_volume === undefined) ? 50 : state.settings.night_base_volume;
-    const otaPassword = "";
     const sdLogEnabled = (state.settings.sd_log_enabled === undefined) ? true : !!state.settings.sd_log_enabled;
      
      let tzOptions = "";
@@ -909,11 +996,6 @@ function renderAdvanced() {
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('ota_title')}</h4>
 
-                <div style="margin-top:6px;">
-                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_password')}</label>
-                    <input type="password" id="ota-password" value="${otaPassword}" placeholder="${t('ota_password')}" style="margin-top:6px;" />
-                </div>
-
                 <div style="margin-top:10px;">
                     <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_select')}</label>
                     <input type="file" id="ota-file" accept=".bin" style="margin-top:6px;" />
@@ -982,9 +1064,8 @@ window.saveSdLogEnabled = (enabled) => {
     API.saveSettings({sd_log_enabled: value});
 };
 
-window.startOtaUpload = () => {
+window.startOtaUpload = async () => {
     const fileInput = document.getElementById('ota-file');
-    const passwordInput = document.getElementById('ota-password');
     const statusEl = document.getElementById('ota-status');
     const progressEl = document.getElementById('ota-progress');
 
@@ -994,7 +1075,11 @@ window.startOtaUpload = () => {
     }
 
     const file = fileInput.files[0];
-    const password = passwordInput ? passwordInput.value : '';
+    const password = await requestOtaPassword();
+    if (!password) {
+        if (statusEl) statusEl.textContent = t('ota_status_failed');
+        return;
+    }
 
     if (statusEl) statusEl.textContent = t('ota_status_uploading');
     if (progressEl) progressEl.textContent = '0%';
