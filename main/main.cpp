@@ -79,7 +79,7 @@ struct TimerState {
 
 static TimerState g_timer_state;
 
-bool g_startup_silence_playing = false;
+int g_startup_sequence_step = 0;
 bool g_voice_menu_active = false;
 std::vector<std::string> g_voice_queue;
 bool g_voice_queue_active = false;
@@ -136,6 +136,8 @@ static AlarmState g_alarm_state;
 static bool g_persona_hangup_pending = false;
 
 static int64_t g_fade_in_end_time = 0;
+static bool g_audio_unmute_pending = false;
+static int64_t g_audio_unmute_deadline_ms = 0;
 
 RTC_DATA_ATTR static uint32_t g_boot_count = 0;
 
@@ -150,6 +152,93 @@ static int64_t g_wdt_diag_last_input_warn_ms = 0;
 static int64_t g_wdt_diag_last_main_heartbeat_ms = 0;
 static int64_t g_wdt_diag_last_input_heartbeat_ms = 0;
 #endif
+#endif
+
+#if APP_AUDIO_DIAG_LOG
+struct AudioDiagState {
+    uint32_t play_seq = 0;
+    int64_t play_request_ms = 0;
+    bool awaiting_music_info = false;
+    bool awaiting_resume = false;
+};
+
+static AudioDiagState g_audio_diag;
+
+static inline int64_t audio_diag_now_ms() {
+    return esp_timer_get_time() / 1000;
+}
+
+static void audio_diag_mark_play_request(const char *path) {
+    g_audio_diag.play_seq++;
+    g_audio_diag.play_request_ms = audio_diag_now_ms();
+    g_audio_diag.awaiting_music_info = true;
+    g_audio_diag.awaiting_resume = true;
+    ESP_LOGI(TAG, "AUDIO-DIAG #%u play_request path=%s", (unsigned)g_audio_diag.play_seq, path ? path : "<null>");
+}
+
+static void audio_diag_mark_music_info(int rate, int bits, int in_channels, int out_channels) {
+    int64_t now_ms = audio_diag_now_ms();
+    int64_t dt_ms = (g_audio_diag.play_request_ms > 0) ? (now_ms - g_audio_diag.play_request_ms) : -1;
+    if (g_audio_diag.awaiting_music_info) {
+        ESP_LOGI(TAG,
+                 "AUDIO-DIAG #%u music_info dt=%lldms rate=%d bits=%d ch_in=%d ch_out=%d",
+                 (unsigned)g_audio_diag.play_seq,
+                 dt_ms,
+                 rate,
+                 bits,
+                 in_channels,
+                 out_channels);
+        g_audio_diag.awaiting_music_info = false;
+    }
+}
+
+static void audio_diag_mark_resume() {
+    int64_t now_ms = audio_diag_now_ms();
+    int64_t dt_ms = (g_audio_diag.play_request_ms > 0) ? (now_ms - g_audio_diag.play_request_ms) : -1;
+    if (g_audio_diag.awaiting_resume) {
+        ESP_LOGI(TAG,
+                 "AUDIO-DIAG #%u stream_resume dt=%lldms",
+                 (unsigned)g_audio_diag.play_seq,
+                 dt_ms);
+        g_audio_diag.awaiting_resume = false;
+    }
+}
+
+static void audio_diag_mark_mute(bool mute) {
+    static int s_last_mute = -1;
+    int new_mute = mute ? 1 : 0;
+    if (new_mute == s_last_mute) {
+        return;
+    }
+    s_last_mute = new_mute;
+    int64_t now_ms = audio_diag_now_ms();
+    int64_t dt_ms = (g_audio_diag.play_request_ms > 0) ? (now_ms - g_audio_diag.play_request_ms) : -1;
+    ESP_LOGI(TAG,
+             "AUDIO-DIAG #%u codec_mute=%d dt=%lldms",
+             (unsigned)g_audio_diag.play_seq,
+             new_mute,
+             dt_ms);
+}
+
+static void audio_diag_mark_pa(bool enabled) {
+    int64_t now_ms = audio_diag_now_ms();
+    int64_t dt_ms = (g_audio_diag.play_request_ms > 0) ? (now_ms - g_audio_diag.play_request_ms) : -1;
+    ESP_LOGI(TAG,
+             "AUDIO-DIAG #%u pa_enable=%d dt=%lldms",
+             (unsigned)g_audio_diag.play_seq,
+             enabled ? 1 : 0,
+             dt_ms);
+}
+
+static void audio_diag_mark_unmute_source(const char *source) {
+    int64_t now_ms = audio_diag_now_ms();
+    int64_t dt_ms = (g_audio_diag.play_request_ms > 0) ? (now_ms - g_audio_diag.play_request_ms) : -1;
+    ESP_LOGI(TAG,
+             "AUDIO-DIAG #%u unmute_source=%s dt=%lldms",
+             (unsigned)g_audio_diag.play_seq,
+             source ? source : "unknown",
+             dt_ms);
+}
 #endif
 
 // Helper Forward Declarations
@@ -352,6 +441,9 @@ static void set_pa_enable(bool enable) {
             ESP_LOGI(TAG, "PA Disabled");
         }
         s_pa_enabled = enable;
+    #if APP_AUDIO_DIAG_LOG
+        audio_diag_mark_pa(enable);
+    #endif
     }
 #endif
 }
@@ -359,6 +451,9 @@ static void set_pa_enable(bool enable) {
 static inline void set_codec_mute(bool mute) {
     if (board_handle && board_handle->audio_hal) {
         audio_hal_set_mute(board_handle->audio_hal, mute);
+#if APP_AUDIO_DIAG_LOG
+        audio_diag_mark_mute(mute);
+#endif
     }
 }
 
@@ -374,6 +469,8 @@ static void pipeline_stop_and_reset(bool reset_items_state, bool take_audio_lock
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
     is_playing = false;
+    g_audio_unmute_pending = false;
+    g_audio_unmute_deadline_ms = 0;
     g_last_playback_finished_ms = esp_timer_get_time() / 1000;
 
     if (reset_items_state) {
@@ -1136,6 +1233,31 @@ std::string get_random_file(std::string folderPath) {
     return files[idx];
 }
 
+static bool should_prefix_system_prompt(const char *path) {
+    if (!path) {
+        return false;
+    }
+    if (strncmp(path, "/sdcard/system/", 15) != 0) {
+        return false;
+    }
+
+    const char *name = strrchr(path, '/');
+    name = name ? (name + 1) : path;
+
+    if (strncmp(name, "silence_", 8) == 0) {
+        return false;
+    }
+    if (strcmp(name, "dial_tone.wav") == 0 ||
+        strcmp(name, "busy_tone.wav") == 0 ||
+        strcmp(name, "hook_pickup.wav") == 0 ||
+        strcmp(name, "hook_hangup.wav") == 0 ||
+        strcmp(name, "startup.wav") == 0) {
+        return false;
+    }
+
+    return true;
+}
+
 void play_file(const char* path) {
     if (path == NULL || strlen(path) == 0) {
         ESP_LOGE(TAG, "Invalid file path to play");
@@ -1146,6 +1268,26 @@ void play_file(const char* path) {
         ESP_LOGE(TAG, "Audio Pipeline not initialized yet, cannot play: %s", path);
         return;
     }
+
+#if APP_SYSTEM_PROMPT_PREFIX_ENABLE
+    bool prefix_candidate = should_prefix_system_prompt(path) && !g_voice_queue_active;
+    if (prefix_candidate) {
+        g_voice_queue.clear();
+        g_voice_queue.push_back(std::string(path));
+        g_voice_queue_active = true;
+#if APP_AUDIO_DIAG_LOG
+        audio_diag_mark_unmute_source("prefix_silence_enqueue");
+#endif
+        play_file(APP_SYSTEM_PROMPT_PREFIX_FILE);
+        return;
+    }
+#endif
+
+    bool is_system_prompt = (strncmp(path, "/sdcard/system/", 15) == 0);
+
+#if APP_AUDIO_DIAG_LOG
+    audio_diag_mark_play_request(path);
+#endif
 
     set_codec_mute(true);
 
@@ -1170,8 +1312,8 @@ void play_file(const char* path) {
     g_gain_right_cur = 0.0f;
     
     // Apply initial fade-in ramp
-    g_gain_ramp_ms = APP_WAV_FADE_IN_MS;
-    g_fade_in_end_time = (esp_timer_get_time() / 1000) + APP_WAV_FADE_IN_MS + 100;
+    g_gain_ramp_ms = is_system_prompt ? APP_SYSTEM_WAV_FADE_IN_MS : APP_WAV_FADE_IN_MS;
+    g_fade_in_end_time = (esp_timer_get_time() / 1000) + g_gain_ramp_ms + 100;
 
 
     // Track last playback type
@@ -1191,7 +1333,12 @@ void play_file(const char* path) {
     } else {
         is_playing = true;
         set_pa_enable(true);
+#if APP_AUDIO_UNMUTE_ON_RESUME
+        g_audio_unmute_pending = true;
+        g_audio_unmute_deadline_ms = (esp_timer_get_time() / 1000) + APP_AUDIO_UNMUTE_FALLBACK_MS;
+#else
         set_codec_mute(false);
+#endif
     }
     
     audio_unlock();
@@ -1447,9 +1594,9 @@ void on_hook_change(bool off_hook) {
         update_audio_output();
 
         // Boot Bug Fix: Prevent "System Ready" from overriding Dial Tone if picked up during startup
-        if (g_startup_silence_playing) {
+        if (g_startup_sequence_step != 0) {
             ESP_LOGI(TAG, "Pickup during startup -> Cancelling startup sequence");
-            g_startup_silence_playing = false;
+            g_startup_sequence_step = 0;
         }
 
         // Receiver Picked Up
@@ -1862,6 +2009,19 @@ extern "C" void app_main(void)
     i2s_cfg.type = AUDIO_STREAM_WRITER;
     i2s_cfg.stack_in_ext = false; // Use internal RAM
     i2s_cfg.std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO; // Duplicate Mono to Stereo
+#if APP_I2S_USE_APLL
+#ifdef I2S_CLK_SRC_APLL
+    i2s_cfg.std_cfg.clk_cfg.clk_src = I2S_CLK_SRC_APLL;
+#endif
+#ifdef I2S_MCLK_MULTIPLE_256
+    i2s_cfg.std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
+#endif
+#endif
+#if APP_AUDIO_DIAG_LOG
+    ESP_LOGI(TAG,
+             "AUDIO-DIAG i2s_clk_cfg: apll=%d",
+             APP_I2S_USE_APLL ? 1 : 0);
+#endif
     i2s_cfg.out_rb_size = 16 * 1024;
     i2s_cfg.buffer_len = 7200;
     i2s_writer = i2s_stream_init(&i2s_cfg);
@@ -1887,7 +2047,7 @@ extern "C" void app_main(void)
 
     // Play Startup Sound
     ESP_LOGI(TAG, "Playing Startup Sound...");
-    g_startup_silence_playing = true;
+    g_startup_sequence_step = 1;
     audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_300ms.wav");
     audio_pipeline_run(pipeline);
 
@@ -1976,7 +2136,7 @@ extern "C" void app_main(void)
         audio_event_iface_msg_t msg;
         
         // Listen with 100ms timeout to allow polling logic
-        esp_err_t ret = audio_event_iface_listen(evt, &msg, 100 / portTICK_PERIOD_MS);
+        esp_err_t ret = audio_event_iface_listen(evt, &msg, APP_AUDIO_EVENT_LISTEN_MS / portTICK_PERIOD_MS);
 
         // --- Logic: Check Dial Timeout ---
         if (!dial_buffer.empty()) {
@@ -2095,6 +2255,21 @@ extern "C" void app_main(void)
             }
         }
 
+#if APP_AUDIO_UNMUTE_ON_RESUME
+        if (g_audio_unmute_pending && is_playing) {
+            int64_t now_ms = esp_timer_get_time() / 1000;
+            if (g_audio_unmute_deadline_ms > 0 && now_ms >= g_audio_unmute_deadline_ms) {
+                ESP_LOGW(TAG, "Audio unmute fallback timeout reached");
+#if APP_AUDIO_DIAG_LOG
+                audio_diag_mark_unmute_source("fallback");
+#endif
+                set_codec_mute(false);
+                g_audio_unmute_pending = false;
+                g_audio_unmute_deadline_ms = 0;
+            }
+        }
+#endif
+
         if (ret != ESP_OK) {
             continue;
         }
@@ -2121,6 +2296,22 @@ extern "C" void app_main(void)
                 ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d (out_ch=%d)", 
                     music_info.sample_rates, music_info.channels, music_info.bits, out_channels);
                 i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, out_channels);
+#if APP_AUDIO_DIAG_LOG
+                audio_diag_mark_music_info(music_info.sample_rates,
+                                           music_info.bits,
+                                           music_info.channels,
+                                           out_channels);
+#endif
+#if APP_AUDIO_UNMUTE_ON_RESUME
+                if (g_audio_unmute_pending) {
+#if APP_AUDIO_DIAG_LOG
+                    audio_diag_mark_unmute_source("music_info");
+#endif
+                    set_codec_mute(false);
+                    g_audio_unmute_pending = false;
+                    g_audio_unmute_deadline_ms = 0;
+                }
+#endif
                 
                 // Enforce output selection
                 update_audio_output();
@@ -2128,6 +2319,19 @@ extern "C" void app_main(void)
             
             // Handle Playback State Changes
             if (msg.cmd == AEL_MSG_CMD_RESUME) {
+    #if APP_AUDIO_DIAG_LOG
+                  audio_diag_mark_resume();
+    #endif
+#if APP_AUDIO_UNMUTE_ON_RESUME
+                if (g_audio_unmute_pending) {
+#if APP_AUDIO_DIAG_LOG
+                    audio_diag_mark_unmute_source("resume");
+#endif
+                    set_codec_mute(false);
+                    g_audio_unmute_pending = false;
+                    g_audio_unmute_deadline_ms = 0;
+                }
+#endif
                  // Playback started/resumed -> Enforce output
                  update_audio_output();
             }
@@ -2140,9 +2344,14 @@ extern "C" void app_main(void)
                     if (play_next_in_queue()) {
                         continue;
                     }
-                    if (g_startup_silence_playing) {
-                        g_startup_silence_playing = false;
-                        play_file("/sdcard/system/system_ready_en.wav");
+                    if (g_startup_sequence_step == 1) {
+                        g_startup_sequence_step = 2;
+                        play_file("/sdcard/system/silence_300ms.wav");
+                        continue;
+                    }
+                    if (g_startup_sequence_step == 2) {
+                        g_startup_sequence_step = 0;
+                        play_file("/sdcard/system/startup.wav");
                         continue;
                     }
                     if (g_timer_state.intro_playing && g_timer_state.announce_pending) {

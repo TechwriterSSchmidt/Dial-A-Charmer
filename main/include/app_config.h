@@ -2,6 +2,9 @@
 
 // Dial-A-Charmer ESP-IDF Configuration
 
+// Global logging master switch (set to 0 to disable all app logging features)
+#define APP_LOGGING_MASTER 1
+
 // Rotary Dial & Inputs
 #define APP_PIN_DIAL_PULSE 5   
 #define APP_PIN_DIAL_MODE  -1 // Disabled to free GPIO 23
@@ -55,11 +58,21 @@
 #define APP_DIAL_DIGIT_GAP_MS 500
 #define APP_DIALTONE_SILENCE_MS 1000
 #define APP_BUSY_TIMEOUT_MS 5000
-#define APP_WAV_SWITCH_DELAY_MS 30
+#define APP_WAV_SWITCH_DELAY_MS 35
+#define APP_AUDIO_EVENT_LISTEN_MS 15
 #define APP_OUTPUT_MUTE_DELAY_MS 25
-#define APP_WAV_FADE_OUT_EXTRA_MS 20
+#define APP_WAV_FADE_OUT_EXTRA_MS 30
 #define APP_WAV_FADE_IN_MS 55
+#define APP_SYSTEM_WAV_FADE_IN_MS 10
+#define APP_SYSTEM_PROMPT_PREFIX_ENABLE 1
+#define APP_SYSTEM_PROMPT_PREFIX_FILE "/sdcard/system/silence_300ms.wav"
 #define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
+
+// Audio clock quality
+#define APP_I2S_USE_APLL 1
+#define APP_AUDIO_DIAG_LOG (APP_LOGGING_MASTER && 1)
+#define APP_AUDIO_UNMUTE_ON_RESUME 1
+#define APP_AUDIO_UNMUTE_FALLBACK_MS 50
 
 // Extra button (Key 5) long-press handling
 #define APP_EXTRA_BTN_DEEPSLEEP_MS 10000
@@ -113,21 +126,21 @@
 
 
 // Debug / Monitor
-#define ENABLE_SYSTEM_MONITOR 0
+#define ENABLE_SYSTEM_MONITOR (APP_LOGGING_MASTER && 0)
 #define SYSTEM_MONITOR_INTERVAL_MS 30000
-#define APP_DIAL_DEBUG_SERIAL 0
-#define APP_OTA_DEBUG 0
+#define APP_DIAL_DEBUG_SERIAL (APP_LOGGING_MASTER && 0)
+#define APP_OTA_DEBUG (APP_LOGGING_MASTER && 0)
 
 // Task watchdog
 #define APP_ENABLE_TASK_WDT 1
 #define APP_TASK_WDT_TIMEOUT_SEC 10
 #define APP_TASK_WDT_PANIC 1
-#define APP_WDT_DIAG_LOG 1
+#define APP_WDT_DIAG_LOG (APP_LOGGING_MASTER && 1)
 #define APP_WDT_LOOP_WARN_MS 1500
 #define APP_WDT_HEARTBEAT_MS 30000
 
 // SD log capture (debug)
-#define APP_ENABLE_SD_LOG 1
+#define APP_ENABLE_SD_LOG (APP_LOGGING_MASTER && 1)
 #define APP_SD_LOG_PATH "/sdcard/logs/app.log"
 #define APP_SD_LOG_MAX_BYTES (2 * 1024 * 1024)
 #define APP_SD_LOG_FLUSH_INTERVAL_MS 5000
