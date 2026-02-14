@@ -41,6 +41,7 @@
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 static const uint8_t kNightBaseVolumeDefault = 50;
+static const uint8_t kLedMinEffectivePercent = 8;
 
 // Global Objects
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
@@ -415,7 +416,13 @@ static uint8_t get_led_active_percent() {
     if (g_night_mode_active) {
         pct = g_led_night_percent;
     }
-    return (pct > 100) ? 100 : pct;
+    if (pct > 100) {
+        pct = 100;
+    }
+    if (pct < kLedMinEffectivePercent) {
+        pct = kLedMinEffectivePercent;
+    }
+    return pct;
 }
 
 enum LedState {
@@ -570,12 +577,12 @@ static void led_task(void *pvParameters) {
             apply_led_color(r, 0, 0);
             step += 5;
         } else if (state == LED_SNOOZE) {
-            // Slow warm white breathing
+            // Slow pink breathing
             int phase = step % 160;
             int t = (phase <= 80) ? phase : (160 - phase);
             uint8_t intensity = (uint8_t)(18 + ((52 * t) / 80)); // 18%..70%
             uint8_t r = (uint8_t)((255 * intensity) / 100);
-            uint8_t g = (uint8_t)((220 * intensity) / 100);
+            uint8_t g = (uint8_t)((40 * intensity) / 100);
             uint8_t b = (uint8_t)((180 * intensity) / 100);
             apply_led_color(r, g, b);
             step++;
@@ -1177,6 +1184,7 @@ void update_audio_output() {
     // Update Volume based on EFFECTIVE mode
     nvs_handle_t my_handle;
     uint8_t vol = APP_DEFAULT_BASE_VOLUME; // Default Base Speaker
+    uint8_t alarm_vol = APP_ALARM_DEFAULT_VOLUME;
     
     uint8_t night_base_vol = kNightBaseVolumeDefault;
     if (nvs_open("dialcharm", NVS_READONLY, &my_handle) == ESP_OK) {
@@ -1185,11 +1193,18 @@ void update_audio_output() {
         } else {
             if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = APP_DEFAULT_BASE_VOLUME;
         }
+        nvs_get_u8(my_handle, "vol_alarm", &alarm_vol);
         nvs_get_u8(my_handle, "night_base_volume", &night_base_vol);
         nvs_close(my_handle);
     }
-    
-    if (g_night_mode_active && !effective_handset) {
+
+    if (alarm_vol < APP_ALARM_MIN_VOLUME) {
+        alarm_vol = APP_ALARM_MIN_VOLUME;
+    }
+
+    if (g_alarm_state.active) {
+        vol = alarm_vol;
+    } else if (g_night_mode_active && !effective_handset) {
         vol = night_base_vol;
     }
 
@@ -1388,11 +1403,11 @@ void play_busy_tone() {
     play_file("/sdcard/system/busy_tone.wav");
 }
 
-void play_timer_alarm() {
+void play_timer_alarm(AlarmSource source = ALARM_TIMER, int loop_minutes = APP_TIMER_ALARM_LOOP_MINUTES) {
     g_alarm_state.active = true;
-    g_alarm_state.source = ALARM_TIMER;
+    g_alarm_state.source = source;
     g_snooze_active = false;
-    g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_TIMER_ALARM_LOOP_MINUTES * 60 * 1000;
+    g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)loop_minutes * 60 * 1000;
     g_alarm_state.fade_active = false;
     g_alarm_state.fade_factor = 1.0f;
     g_alarm_state.retry_last_ms = 0;
@@ -1636,13 +1651,14 @@ void on_hook_change(bool off_hook) {
                 play_file(system_path("timer_deleted").c_str());
                 skip_dialtone = true;
             } else {
+                bool play_random_msg = g_alarm_state.msg_active;
                 reset_alarm_state(true);
                 g_snooze_active = false;
-                g_force_base_output = true;
+                g_force_base_output = false;
                 update_audio_output(); 
                 
                 // Play specific message if enabled for this alarm
-                if (g_alarm_state.msg_active) {
+                if (play_random_msg) {
                     // Logic from "11" (COMPLIMENT_MIX)
                     int persona = (esp_random() % 5) + 1;
                     std::string folder = "/sdcard/persona_0" + std::to_string(persona) + "/" + lang_code();
@@ -2267,10 +2283,16 @@ extern "C" void app_main(void)
         if (g_timer_state.active && !g_alarm_state.active) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_timer_state.end_ms) {
+                bool snooze_expired = g_snooze_active;
                 ESP_LOGI(TAG, "Timer expired -> alarm");
                 g_timer_state.active = false;
                 g_snooze_active = false;
-                play_timer_alarm();
+                if (snooze_expired) {
+                    ESP_LOGI(TAG, "Snooze expired -> resuming daily alarm behavior");
+                    play_timer_alarm(ALARM_DAILY, APP_DAILY_ALARM_LOOP_MINUTES);
+                } else {
+                    play_timer_alarm();
+                }
             }
         }
 

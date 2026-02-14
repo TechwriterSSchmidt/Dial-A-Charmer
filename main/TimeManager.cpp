@@ -14,7 +14,7 @@
 
 static const char *TAG = "TIME_MANAGER";
 static bool _alarm_ringing = false;
-static int _last_triggered_day = -1; // Ensure trigger only once per day
+static int64_t _last_triggered_key = -1; // Ensure trigger only once per minute slot
 static TaskHandle_t s_sntp_task = NULL;
 static bool s_sntp_synced = false;
 static time_t s_last_ntp_sync = 0;
@@ -388,23 +388,16 @@ bool TimeManager::checkAlarm() {
 
     // Check matching time
     if (now.tm_hour == alm.hour && now.tm_min == alm.minute) {
-        // Debounce: trigger only once per specific day/minute instance.
-        // Best way: Use tm_yday + hour + minute combined, or just ensure sec is small
-        // Simple check prevents retrigger on the same day after stop.
-        // Snooze support requires additional logic later.
-        // For now: Trigger if seconds < 5 (poll interval usually shorter) AND last_triggered_day != today
-        // Actually, better: 
-           if (_last_triggered_day != now.tm_yday) {
-               int logDay = (today == 0) ? 7 : today;
-               ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", logDay, now.tm_hour, now.tm_min);
-             _alarm_ringing = true;
-             _last_triggered_day = now.tm_yday;
-             return true;
+        // Debounce per exact minute slot (year/day/hour/minute), not per full day.
+        // This allows changing alarms during the same day without requiring reboot.
+        int64_t trigger_key = (((int64_t)now.tm_year * 366 + now.tm_yday) * 1440) + (now.tm_hour * 60 + now.tm_min);
+        if (_last_triggered_key != trigger_key) {
+            int logDay = (today == 0) ? 7 : today;
+            ESP_LOGI(TAG, "ALARM TRIGGERED for Day %d at %02d:%02d", logDay, now.tm_hour, now.tm_min);
+            _alarm_ringing = true;
+            _last_triggered_key = trigger_key;
+            return true;
         }
-    } else {
-        // Trigger flag reset is optional after alarm window.
-        // Not strictly necessary if using yday, but useful for testing same day multiple times if needed.
-        // For production, yday is robust.
     }
     return false;
 }
