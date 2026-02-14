@@ -72,8 +72,8 @@ const TEXT = {
         network_error: "Netzwerkfehler",
         check_console: "Konsole prüfen",
         download_logs: "Logs herunterladen",
-        sd_log: "SD-Log",
-        sd_log_enabled: "SD-Log aktiv",
+        sd_log: "Logging",
+        sd_log_enabled: "Logging aktiv",
         select_network: "Bitte lokales Netzwerk auswählen:",
         saving_connecting: "Speichern und verbinden...",
         ota_title: "Firmware Update",
@@ -145,8 +145,8 @@ const TEXT = {
         network_error: "Network Error",
         check_console: "Check Console",
         download_logs: "Download Logs",
-        sd_log: "SD Log",
-        sd_log_enabled: "SD log enabled",
+        sd_log: "Logging",
+        sd_log_enabled: "Logging enabled",
         select_network: "Select your local network:",
         saving_connecting: "Saving and Connecting...",
         ota_title: "Firmware Update",
@@ -783,27 +783,24 @@ function renderAdvanced() {
                     <div class="crt-text" id="crt-log">READY&gt;_</div>
                 </div>
             </div>
-            <div style="display:flex; justify-content:flex-end; margin:6px 0 12px;">
-                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
-            </div>
-
-            <!-- RESET STATUS PANEL -->
-            <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('last_reset')}</h4>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
-                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('reset_reason')}</div>
-                    <div style="color:#d4af37; font-weight:bold;">${resetReason} (${resetCode})</div>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
-                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('boot_count')}</div>
-                    <div style="color:#d4af37; font-weight:bold;">${bootCount}</div>
-                </div>
-                <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px;">
                     <label class="switch" title="${t('sd_log')}">
                         <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
                         <span class="slider"></span>
                     </label>
                     <span class="alarm-label">${t('sd_log_enabled')}</span>
+                </div>
+                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
+            </div>
+            <div style="background:#222; padding:10px 12px; border-radius:8px; margin:0 0 15px; border:1px solid #444;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('last_reset')}</div>
+                    <div style="color:#d4af37; font-weight:bold;">${resetReason} (${resetCode})</div>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('boot_count')}</div>
+                    <div style="color:#d4af37; font-weight:bold;">${bootCount}</div>
                 </div>
             </div>
 

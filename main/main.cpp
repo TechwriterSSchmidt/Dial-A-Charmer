@@ -1258,6 +1258,10 @@ static bool should_prefix_system_prompt(const char *path) {
     return true;
 }
 
+static bool is_startup_wav(const char *path) {
+    return path && (strcmp(path, "/sdcard/system/startup.wav") == 0);
+}
+
 void play_file(const char* path) {
     if (path == NULL || strlen(path) == 0) {
         ESP_LOGE(TAG, "Invalid file path to play");
@@ -1284,6 +1288,7 @@ void play_file(const char* path) {
 #endif
 
     bool is_system_prompt = (strncmp(path, "/sdcard/system/", 15) == 0);
+    bool is_startup_sound = is_startup_wav(path);
 
 #if APP_AUDIO_DIAG_LOG
     audio_diag_mark_play_request(path);
@@ -1334,8 +1339,22 @@ void play_file(const char* path) {
         is_playing = true;
         set_pa_enable(true);
 #if APP_AUDIO_UNMUTE_ON_RESUME
+    #if APP_STARTUP_UNMUTE_IMMEDIATE
+        if (is_startup_sound) {
+    #if APP_AUDIO_DIAG_LOG
+            audio_diag_mark_unmute_source("startup_immediate");
+    #endif
+            set_codec_mute(false);
+            g_audio_unmute_pending = false;
+            g_audio_unmute_deadline_ms = 0;
+        } else {
+            g_audio_unmute_pending = true;
+            g_audio_unmute_deadline_ms = (esp_timer_get_time() / 1000) + APP_AUDIO_UNMUTE_FALLBACK_MS;
+        }
+    #else
         g_audio_unmute_pending = true;
         g_audio_unmute_deadline_ms = (esp_timer_get_time() / 1000) + APP_AUDIO_UNMUTE_FALLBACK_MS;
+    #endif
 #else
         set_codec_mute(false);
 #endif
@@ -2351,6 +2370,9 @@ extern "C" void app_main(void)
                     }
                     if (g_startup_sequence_step == 2) {
                         g_startup_sequence_step = 0;
+#if APP_STARTUP_POST_SILENCE_DELAY_MS > 0
+                        vTaskDelay(pdMS_TO_TICKS(APP_STARTUP_POST_SILENCE_DELAY_MS));
+#endif
                         play_file("/sdcard/system/startup.wav");
                         continue;
                     }
