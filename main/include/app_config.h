@@ -123,6 +123,9 @@
 #define APP_ENABLE_TASK_WDT 1
 #define APP_TASK_WDT_TIMEOUT_SEC 10
 #define APP_TASK_WDT_PANIC 1
+#define APP_WDT_DIAG_LOG 1
+#define APP_WDT_LOOP_WARN_MS 1500
+#define APP_WDT_HEARTBEAT_MS 30000
 
 // SD log capture (debug)
 #define APP_ENABLE_SD_LOG 1

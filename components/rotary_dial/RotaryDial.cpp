@@ -12,6 +12,14 @@
 #define DIAL_MODE_ACTIVE_LOW true
 #define DIAL_PULSE_ACTIVE_LOW true
 
+static bool gpio_supports_internal_pull(gpio_num_t pin) {
+    int pin_num = static_cast<int>(pin);
+    if (pin_num < 0) {
+        return false;
+    }
+    return !(pin_num >= 34 && pin_num <= 39);
+}
+
 // Macros for time
 #define MILLIS() (esp_timer_get_time() / 1000)
 
@@ -117,23 +125,29 @@ void RotaryDial::begin() {
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_INPUT;
-    
-    // Pulse
-    io_conf.pin_bit_mask = (1ULL << _pulse_pin);
-    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
-    gpio_config(&io_conf);
 
-    // Hook
-    io_conf.pin_bit_mask = (1ULL << _hook_pin);
-    gpio_config(&io_conf);
-    
-        // Btn
-        io_conf.pin_bit_mask = (1ULL << _btn_pin);
-        gpio_config(&io_conf);
+    auto configure_input_pin = [&](gpio_num_t pin, const char* label) {
+        io_conf.pin_bit_mask = (1ULL << pin);
+        if (gpio_supports_internal_pull(pin)) {
+            io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+            io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        } else {
+            io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+            io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+            ESP_LOGW("RotaryDial", "%s GPIO %d has no internal pull resistor; using floating input", label, (int)pin);
+        }
+        esp_err_t cfg_err = gpio_config(&io_conf);
+        if (cfg_err != ESP_OK) {
+            ESP_LOGE("RotaryDial", "gpio_config failed for %s GPIO %d: %s", label, (int)pin, esp_err_to_name(cfg_err));
+        }
+    };
+
+    configure_input_pin(_pulse_pin, "Pulse");
+    configure_input_pin(_hook_pin, "Hook");
+    configure_input_pin(_btn_pin, "Button");
 
     if ((int)_mode_pin >= 0) {
-        io_conf.pin_bit_mask = (1ULL << _mode_pin);
-        gpio_config(&io_conf);
+        configure_input_pin(_mode_pin, "Mode");
     }
 
     // Install ISR service

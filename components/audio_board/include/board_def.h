@@ -4,13 +4,15 @@
 #ifndef _AUDIO_BOARD_DEFINITION_H_
 #define _AUDIO_BOARD_DEFINITION_H_
 
+#include "app_config.h"
+
 /* SD card related */
 #define SD_CARD_INTR_GPIO GPIO_NUM_NC ///< Disable Card Detect for stability
 #define SD_CARD_INTR_SEL GPIO_SEL_NC
 #define SD_CARD_OPEN_FILE_NUM_MAX 5
 
 #define HEADPHONE_DETECT GPIO_NUM_39
-#define PA_ENABLE_GPIO GPIO_NUM_21
+#define PA_ENABLE_GPIO ((gpio_num_t)APP_PIN_PA_ENABLE)
 
 // Added definitions for Ai-Thinker v2.2
 #define BOARD_PA_GAIN (10)

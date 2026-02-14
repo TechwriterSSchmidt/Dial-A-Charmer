@@ -136,6 +136,14 @@ RTC_DATA_ATTR static uint32_t g_boot_count = 0;
 #if APP_ENABLE_TASK_WDT
 static bool g_wdt_main_registered = false;
 static bool g_wdt_input_registered = false;
+#if APP_WDT_DIAG_LOG
+static int64_t g_wdt_diag_last_main_loop_ms = 0;
+static int64_t g_wdt_diag_last_input_loop_ms = 0;
+static int64_t g_wdt_diag_last_main_warn_ms = 0;
+static int64_t g_wdt_diag_last_input_warn_ms = 0;
+static int64_t g_wdt_diag_last_main_heartbeat_ms = 0;
+static int64_t g_wdt_diag_last_input_heartbeat_ms = 0;
+#endif
 #endif
 
 // Helper Forward Declarations
@@ -156,6 +164,64 @@ static const char *reset_reason_to_str(esp_reset_reason_t reason) {
         default: return "unknown";
     }
 }
+
+#if APP_ENABLE_TASK_WDT && APP_WDT_DIAG_LOG
+static void wdt_diag_log_boot_context(esp_reset_reason_t reason) {
+    bool watchdog_related = (reason == ESP_RST_INT_WDT) ||
+                            (reason == ESP_RST_TASK_WDT) ||
+                            (reason == ESP_RST_WDT) ||
+                            (reason == ESP_RST_PANIC);
+    if (!watchdog_related) {
+        return;
+    }
+
+    ESP_LOGW(TAG,
+             "WDT-DIAG boot context: reason=%s(%d) timeout_ms=%d panic=%d free_heap=%u min_heap=%u",
+             reset_reason_to_str(reason),
+             (int)reason,
+             APP_TASK_WDT_TIMEOUT_SEC * 1000,
+             (int)APP_TASK_WDT_PANIC,
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size());
+}
+
+static inline void wdt_diag_check_loop_stall(const char *loop_name,
+                                             int64_t *last_loop_ms,
+                                             int64_t *last_warn_ms,
+                                             int64_t warn_threshold_ms) {
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    if (*last_loop_ms > 0) {
+        int64_t dt_ms = now_ms - *last_loop_ms;
+        if (dt_ms > warn_threshold_ms && (now_ms - *last_warn_ms) > warn_threshold_ms) {
+            ESP_LOGW(TAG,
+                     "WDT-DIAG loop stall: %s dt=%lldms (threshold=%lldms) heap=%u min_heap=%u",
+                     loop_name,
+                     dt_ms,
+                     warn_threshold_ms,
+                     (unsigned)esp_get_free_heap_size(),
+                     (unsigned)esp_get_minimum_free_heap_size());
+            *last_warn_ms = now_ms;
+        }
+    }
+    *last_loop_ms = now_ms;
+}
+
+static inline void wdt_diag_heartbeat(const char *loop_name, int64_t *last_heartbeat_ms) {
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    if ((now_ms - *last_heartbeat_ms) < APP_WDT_HEARTBEAT_MS) {
+        return;
+    }
+
+    ESP_LOGI(TAG,
+             "WDT-DIAG heartbeat: %s stack_hwm=%u free_heap=%u min_heap=%u",
+             loop_name,
+             (unsigned)uxTaskGetStackHighWaterMark(NULL),
+             (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size());
+    *last_heartbeat_ms = now_ms;
+}
+#endif
+
 void play_file(const char* path);
 void update_audio_output();
 void safe_reboot();
@@ -183,22 +249,6 @@ static const char *lang_code() {
 
 static std::string system_path(const char *base) {
     return std::string("/sdcard/system/") + base + "_" + lang_code() + ".wav";
-}
-
-static bool is_night_quiet_system_sound(const char *path) {
-    if (!g_night_mode_active || !path) return false;
-
-    bool effective_handset = g_output_mode_handset;
-    if (g_alarm_active || g_timer_announce_pending || g_force_base_output) {
-        effective_handset = false;
-    }
-    if (effective_handset) return false;
-
-    const char *prefix = "/sdcard/system/";
-    size_t prefix_len = strlen(prefix);
-    if (strncmp(path, prefix, prefix_len) != 0) return false;
-
-    return true;
 }
 
 static std::string time_path(const char *name) {
@@ -310,10 +360,10 @@ static void set_pa_enable(bool enable) {
     if (enable != s_pa_enabled) {
         if (enable) {
             gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 1);
-            vTaskDelay(pdMS_TO_TICKS(50)); // Anti-pop startup delay
+            vTaskDelay(pdMS_TO_TICKS(APP_PA_ENABLE_DELAY_MS));
             ESP_LOGI(TAG, "PA Enabled");
         } else {
-            vTaskDelay(pdMS_TO_TICKS(50)); // Wait for mute to settle
+            vTaskDelay(pdMS_TO_TICKS(APP_PA_DISABLE_DELAY_MS));
             gpio_set_level((gpio_num_t)APP_PIN_PA_ENABLE, 0);
             ESP_LOGI(TAG, "PA Disabled");
         }
@@ -1043,11 +1093,6 @@ void play_file(const char* path) {
         return;
     }
 
-    if (is_night_quiet_system_sound(path)) {
-        ESP_LOGI(TAG, "Night mode active: suppressing system sound %s", path);
-        return;
-    }
-
     if (pipeline == NULL) {
         ESP_LOGE(TAG, "Audio Pipeline not initialized yet, cannot play: %s", path);
         return;
@@ -1454,6 +1499,10 @@ void input_task(void *pvParameters) {
     }
 #endif
     while(1) {
+#if APP_ENABLE_TASK_WDT && APP_WDT_DIAG_LOG
+        wdt_diag_check_loop_stall("input_task", &g_wdt_diag_last_input_loop_ms, &g_wdt_diag_last_input_warn_ms, APP_WDT_LOOP_WARN_MS);
+        wdt_diag_heartbeat("input_task", &g_wdt_diag_last_input_heartbeat_ms);
+#endif
         // Reset ramp duration if fade-in finished
         if (g_gain_ramp_ms != APP_GAIN_RAMP_MS) {
             int64_t now_check = esp_timer_get_time() / 1000;
@@ -1569,6 +1618,9 @@ extern "C" void app_main(void)
              (unsigned)g_boot_count,
              reset_reason_to_str(reset_reason),
              (int)reset_reason);
+#if APP_ENABLE_TASK_WDT && APP_WDT_DIAG_LOG
+    wdt_diag_log_boot_context(reset_reason);
+#endif
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
 
     load_night_mode_from_nvs();
@@ -1825,6 +1877,10 @@ extern "C" void app_main(void)
     // --- 5. Main Event Loop ---
     g_led_booting = false;
     while (1) {
+#if APP_ENABLE_TASK_WDT && APP_WDT_DIAG_LOG
+        wdt_diag_check_loop_stall("app_main", &g_wdt_diag_last_main_loop_ms, &g_wdt_diag_last_main_warn_ms, APP_WDT_LOOP_WARN_MS);
+        wdt_diag_heartbeat("app_main", &g_wdt_diag_last_main_heartbeat_ms);
+#endif
 #if APP_ENABLE_TASK_WDT
     if (g_wdt_main_registered) {
         esp_task_wdt_reset();
@@ -1864,7 +1920,7 @@ extern "C" void app_main(void)
                  g_alarm_fade_active = today.volumeRamp;
                  if (g_alarm_fade_active) {
                      g_alarm_fade_start_time = esp_timer_get_time() / 1000;
-                     g_alarm_fade_factor = 0.05f;
+                     g_alarm_fade_factor = APP_ALARM_FADE_MIN_FACTOR;
                  } else {
                      g_alarm_fade_factor = 1.0f;
                  }
