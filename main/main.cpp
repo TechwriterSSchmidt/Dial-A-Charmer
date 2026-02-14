@@ -102,6 +102,7 @@ uint8_t g_night_prev_g = 20;
 uint8_t g_night_prev_b = 0;
 bool g_led_booting = true;
 bool g_snooze_active = false;
+bool g_snooze_msg_active = false;
 bool g_sd_error = false;
 bool g_force_base_output = false;
 bool g_pending_handset_restore = false;
@@ -1407,6 +1408,7 @@ void play_timer_alarm(AlarmSource source = ALARM_TIMER, int loop_minutes = APP_T
     g_alarm_state.active = true;
     g_alarm_state.source = source;
     g_snooze_active = false;
+    g_snooze_msg_active = false;
     g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)loop_minutes * 60 * 1000;
     g_alarm_state.fade_active = false;
     g_alarm_state.fade_factor = 1.0f;
@@ -1571,6 +1573,7 @@ static void handle_extra_button_short_press() {
         }
 
         ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
+        g_snooze_msg_active = g_alarm_state.msg_active;
         reset_alarm_state(true);
         g_snooze_active = true;
         update_audio_output(); // Restore audio routing
@@ -2115,6 +2118,7 @@ extern "C" void app_main(void)
                  g_alarm_state.active = true;
                  g_alarm_state.source = ALARM_DAILY;
                  g_snooze_active = false;
+                 g_snooze_msg_active = false;
                  g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  g_alarm_state.retry_last_ms = 0;
                  
@@ -2284,12 +2288,15 @@ extern "C" void app_main(void)
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_timer_state.end_ms) {
                 bool snooze_expired = g_snooze_active;
+                bool snooze_msg_active = g_snooze_msg_active;
                 ESP_LOGI(TAG, "Timer expired -> alarm");
                 g_timer_state.active = false;
                 g_snooze_active = false;
+                g_snooze_msg_active = false;
                 if (snooze_expired) {
                     ESP_LOGI(TAG, "Snooze expired -> resuming daily alarm behavior");
                     play_timer_alarm(ALARM_DAILY, APP_DAILY_ALARM_LOOP_MINUTES);
+                    g_alarm_state.msg_active = snooze_msg_active;
                 } else {
                     play_timer_alarm();
                 }

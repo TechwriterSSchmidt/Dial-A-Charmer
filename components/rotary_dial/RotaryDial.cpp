@@ -90,6 +90,13 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
 
     // Check Pulse Pin
     int pulse_level = gpio_get_level(_instance->_pulse_pin);
+
+    // Count only on the expected edge level to avoid double counts from ANYEDGE noise.
+    if (_instance->_pulse_active_low) {
+        if (pulse_level != 1) return; // Rising edge (idle low -> pulse high)
+    } else {
+        if (pulse_level != 0) return; // Falling edge (idle high -> pulse low)
+    }
     
     // Logic: Count only on transition to INACTIVE level?
     // Original: bool pulseInactive = (read == (ACTIVE_LOW ? HIGH : LOW)); -> (read == HIGH)
@@ -104,9 +111,6 @@ void IRAM_ATTR RotaryDial::isr_handler(void* arg) {
     // Original Arduino logic is retained:
     // "if (read == HIGH && (now - _last_pulse_time > 50)) count++" (Active Low)
     
-    bool pulse_is_inactive_state = (pulse_level == (_instance->_pulse_active_low ? 1 : 0));
-    if (!pulse_is_inactive_state) return;
-
     int64_t now_ms = MILLIS();
     if (now_ms - _instance->_last_pulse_time > DIAL_DEBOUNCE_PULSE_MS) {
         int32_t delta_ms = 0;
@@ -162,8 +166,9 @@ void RotaryDial::begin() {
     }
     
     // Attach to Pulse
-    // Original: attachInterrupt(CHANGE) -> isrPulse
-    gpio_set_intr_type(_pulse_pin, GPIO_INTR_ANYEDGE);
+    // Count on a single edge only to reduce false double counts on contact bounce.
+    gpio_int_type_t pulse_intr = _pulse_active_low ? GPIO_INTR_POSEDGE : GPIO_INTR_NEGEDGE;
+    gpio_set_intr_type(_pulse_pin, pulse_intr);
     gpio_isr_handler_add(_pulse_pin, isr_handler, NULL);
 }
 
