@@ -176,6 +176,7 @@ button:hover {
   transition: .4s;
   border-radius: 34px;
   border: 1px solid #555;
+  overflow: hidden;
 }
 .slider:before {
   position: absolute;
@@ -196,7 +197,7 @@ input:focus + .slider {
   box-shadow: 0 0 1px #d4af37;
 }
 input:checked + .slider:before {
-  transform: translateX(22px);
+  transform: translateX(21px);
   background-color: #fff;
 }
 output {

@@ -72,8 +72,8 @@ const TEXT = {
         network_error: "Netzwerkfehler",
         check_console: "Konsole prüfen",
         download_logs: "Logs herunterladen",
-        sd_log: "SD-Log",
-        sd_log_enabled: "SD-Log aktiv",
+        sd_log: "Logging",
+        sd_log_enabled: "Logging aktiv",
         select_network: "Bitte lokales Netzwerk auswählen:",
         saving_connecting: "Speichern und verbinden...",
         ota_title: "Firmware Update",
@@ -145,8 +145,8 @@ const TEXT = {
         network_error: "Network Error",
         check_console: "Check Console",
         download_logs: "Download Logs",
-        sd_log: "SD Log",
-        sd_log_enabled: "SD log enabled",
+        sd_log: "Logging",
+        sd_log_enabled: "Logging enabled",
         select_network: "Select your local network:",
         saving_connecting: "Saving and Connecting...",
         ota_title: "Firmware Update",
@@ -738,9 +738,6 @@ function renderAdvanced() {
     const ledNightStart = (state.settings.led_night_start === undefined) ? 22 : state.settings.led_night_start;
     const nightBaseVol = (state.settings.night_base_volume === undefined) ? 50 : state.settings.night_base_volume;
     const otaPassword = "";
-    const resetReason = state.settings.reset_reason || "--";
-    const resetCode = (state.settings.reset_reason_code === undefined) ? "--" : state.settings.reset_reason_code;
-    const bootCount = (state.settings.boot_count === undefined) ? "--" : state.settings.boot_count;
     const sdLogEnabled = (state.settings.sd_log_enabled === undefined) ? true : !!state.settings.sd_log_enabled;
      
      let tzOptions = "";
@@ -783,30 +780,16 @@ function renderAdvanced() {
                     <div class="crt-text" id="crt-log">READY&gt;_</div>
                 </div>
             </div>
-            <div style="display:flex; justify-content:flex-end; margin:6px 0 12px;">
-                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
-            </div>
-
-            <!-- RESET STATUS PANEL -->
-            <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('last_reset')}</h4>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
-                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('reset_reason')}</div>
-                    <div style="color:#d4af37; font-weight:bold;">${resetReason} (${resetCode})</div>
-                </div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
-                    <div style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('boot_count')}</div>
-                    <div style="color:#d4af37; font-weight:bold;">${bootCount}</div>
-                </div>
-                <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; gap:10px;">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:78px;">
                     <label class="switch" title="${t('sd_log')}">
                         <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
                         <span class="slider"></span>
                     </label>
-                    <span class="alarm-label">${t('sd_log_enabled')}</span>
+                    <span class="alarm-label" style="margin-left:0; text-align:center; line-height:1.1;">${t('sd_log_enabled')}</span>
                 </div>
+                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
             </div>
-
             <!-- VOLUME PANEL -->
             <div style="background:#222; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('volume')}</h4>
@@ -941,14 +924,14 @@ function renderAdvanced() {
                     <div id="ota-progress" style="font-size:0.85rem; color:#d4af37; margin-top:4px;">0%</div>
                 </div>
 
-                <button onclick="startOtaUpload()" style="margin-top:12px;">${t('ota_upload')}</button>
+                <button onclick="startOtaUpload()" style="margin-top:12px; font-size:1.05rem;">${t('ota_upload')}</button>
                 <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('ota_hint')}</div>
             </div>
 
             <!-- REBOOT PANEL -->
             <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('reboot_title')}</h4>
-                <button onclick="requestReboot()" style="margin-top:10px;">${t('reboot_button')}</button>
+                <button onclick="requestReboot()" style="margin-top:10px; font-size:1.05rem;">${t('reboot_button')}</button>
                 <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('reboot_hint')}</div>
             </div>
 

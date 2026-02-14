@@ -56,6 +56,7 @@ static size_t s_log_head = 0;
 static size_t s_log_count = 0;
 static portMUX_TYPE s_log_mux = portMUX_INITIALIZER_UNLOCKED;
 static vprintf_like_t s_prev_vprintf = nullptr;
+static bool s_runtime_logging_enabled = true;
 
 // WiFi / AP Logic
 static esp_event_handler_instance_t s_wifi_event_instance = NULL;
@@ -219,6 +220,20 @@ static void sd_log_set_enabled(bool enabled) {
 }
 #endif
 
+static void set_runtime_logging_enabled(bool enabled) {
+    s_runtime_logging_enabled = enabled;
+
+    portENTER_CRITICAL(&s_log_mux);
+    s_log_head = 0;
+    s_log_count = 0;
+    portEXIT_CRITICAL(&s_log_mux);
+
+#if APP_ENABLE_SD_LOG
+    s_sd_log_enabled = enabled;
+    sd_log_set_enabled(enabled);
+#endif
+}
+
 static const size_t OTA_PASSWORD_MAX = 64;
 
 static void ota_reboot_task(void *pvParameters) {
@@ -354,6 +369,11 @@ static int log_vprintf(const char *fmt, va_list args) {
         buf[len - 1] = '\0';
         len--;
     }
+
+    if (!s_runtime_logging_enabled) {
+        return (int)len;
+    }
+
     log_buffer_add(buf);
 
 #if APP_ENABLE_SD_LOG
@@ -377,7 +397,7 @@ static void init_log_capture() {
         s_prev_vprintf = esp_log_set_vprintf(log_vprintf);
     }
 #if APP_ENABLE_SD_LOG
-    if (s_sd_log_enabled && !s_sd_log_task) {
+    if (s_runtime_logging_enabled && s_sd_log_enabled && !s_sd_log_task) {
         xTaskCreate(sd_log_flush_task, "sd_log_flush", 4096, NULL, 2, &s_sd_log_task);
     }
 #endif
@@ -391,9 +411,7 @@ static void load_sd_log_setting() {
     }
     uint8_t enabled = APP_ENABLE_SD_LOG ? 1 : 0;
     if (nvs_get_u8(my_handle, "sd_log_enabled", &enabled) == ESP_OK) {
-#if APP_ENABLE_SD_LOG
-        sd_log_set_enabled(enabled != 0);
-#endif
+        set_runtime_logging_enabled(enabled != 0);
     }
     nvs_close(my_handle);
 }
@@ -830,7 +848,7 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     if (err == ESP_OK) {
         nvs_get_u8(my_handle, "sd_log_enabled", &sd_log_enabled);
     }
-    cJSON_AddBoolToObject(root, "sd_log_enabled", sd_log_enabled != 0);
+    cJSON_AddBoolToObject(root, "sd_log_enabled", s_runtime_logging_enabled && (sd_log_enabled != 0));
 
     // WiFi Pass (Always return empty or placeholder)
     cJSON_AddStringToObject(root, "wifi_pass", "");
@@ -985,9 +1003,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         if (cJSON_IsBool(item) || cJSON_IsNumber(item)) {
             bool enabled = cJSON_IsBool(item) ? cJSON_IsTrue(item) : (item->valueint != 0);
             nvs_set_u8(my_handle, "sd_log_enabled", enabled ? 1 : 0);
-#if APP_ENABLE_SD_LOG
-            sd_log_set_enabled(enabled);
-#endif
+            set_runtime_logging_enabled(enabled);
         }
 
         item = cJSON_GetObjectItem(root, "volume");
