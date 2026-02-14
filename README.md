@@ -47,7 +47,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | :--- | :--- |
 | **Timekeeping** | Syncs via **NTP** with optional **DS3231 RTC** fallback (invalid RTC data is ignored until SNTP sync). |
 | **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
-| **Night Mode** | Uses reduced base-speaker volume from Web UI (`night_base_volume`) and LED night profile. System sounds are not auto-muted. |
+| **Night Mode** | Uses reduced base-speaker volume from Web UI (`night_base_volume`) and LED night profile. System sounds are not auto-muted. Manual toggle via voice menu stays active until next configured day-start hour. |
 
 ## Phonebook Defaults
 
@@ -188,7 +188,15 @@ The system uses specific WAV files in `/system/` for feedback:
 | `hook_pickup.wav` | Short pickup click before persona playback. |
 | `hook_hangup.wav` | Short hangup click after persona playback. |
 
-Note: During **Night Mode**, base speaker level follows the configured night slider value. System sounds remain enabled.
+Note: During **Night Mode**, base speaker level follows the configured night slider value. System sounds remain enabled. Manual activation via voice menu (`0` → `2`) remains active until the next configured day-start hour from Web UI.
+
+### Night Mode Test Plan (Hardware)
+
+1. Set `Day Start Hour` in Web UI to a known near-future value (for example current hour + 1).
+2. Lift receiver, dial `0`, then dial `2` while voice menu is active.
+3. Verify `night_on` announcement, reduced base-speaker volume, and night LED profile.
+4. Wait until configured `Day Start Hour` is reached and verify automatic return to day mode.
+5. Repeat `0` → `2` to disable manually and verify `night_off` announcement and immediate return to day settings.
 
 ## Getting Started
 

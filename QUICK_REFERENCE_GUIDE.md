@@ -18,6 +18,7 @@
 3. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
    - **Snooze:** Press the **Extra Button** (if installed).
+   - **Signallampe:** Slow warm-white breathing while snooze is active.
    - *Snooze duration is configurable in Web Interface (Default: 5 min).*
 
 4. **Voice Menu & Admin:**
@@ -69,7 +70,16 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 **Night Mode Behavior:**
 
 - When Night Mode is active, base-speaker volume follows the configured night slider.
+- Manual activation via voice menu (`0` → `2`) remains active until the next configured day-start hour.
 - System prompts remain enabled.
+
+**Night Mode Test (Hardware):**
+
+1. Set `Day Start Hour` in Web UI to a near-future value.
+2. Dial `0`, then `2` while the menu speaks.
+3. Verify `night_on` announcement and active night settings.
+4. Verify automatic return to day mode at configured `Day Start Hour`.
+5. Repeat `0` → `2` to disable manually and verify `night_off` announcement.
 
 **Advanced Settings (/advanced):**
 

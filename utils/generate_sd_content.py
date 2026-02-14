@@ -180,7 +180,7 @@ SYSTEM_PROMPTS = {
     "system/timer_deleted_en.wav": ("Timer deleted.", "en", None),
     "system/next_alarm_en.wav": ("Next alarm.", "en", None),
     "system/next_alarm_none_en.wav": ("No alarms scheduled.", "en", None),
-    "system/night_on_en.wav": ("Night mode active. Signal lamp dimmed and volume reduced for 6 hours.", "en", None),
+    "system/night_on_en.wav": ("Night mode active. Signal lamp dimmed and base volume reduced until next day mode start.", "en", None),
     "system/night_off_en.wav": ("Night mode deactivated.", "en", None),
     "system/pb_persona1_en.wav": ("Persona one.", "en", None),
     "system/pb_persona2_en.wav": ("Persona two.", "en", None),
@@ -205,7 +205,7 @@ SYSTEM_PROMPTS = {
     
     # German System Messages (Google TTS, female voice)
     "system/snooze_active_de.wav": ("Schlummermodus aktiv.", "de", None),
-    "system/system_ready_de.wav": ("System ready.", "en", None),
+    "system/system_ready_de.wav": ("System bereit.", "de", None),
     "system/time_unavailable_de.wav": ("Zeit-Synchronisation fehlgeschlagen.", "de", None),
     "system/error_msg_de.wav": ("Ein Fehler ist aufgetreten.", "de", None),
     "system/number_invalid_de.wav": ("Kein Anschluss unter dieser Nummer.", "de", None),
@@ -228,7 +228,7 @@ SYSTEM_PROMPTS = {
     "system/timer_set_de.wav": ("Timer gesetzt für", "de", None),
     "system/next_alarm_de.wav": ("Nächster Wecker.", "de", None),
     "system/next_alarm_none_de.wav": ("Kein Wecker aktiv.", "de", None),
-    "system/night_on_de.wav": ("Nachtmodus aktiv. Signallampe gedimmt und Lautstärke reduziert für 6 Stunden.", "de", None),
+    "system/night_on_de.wav": ("Nachtmodus aktiv. Signallampe gedimmt und Basislautstärke reduziert bis zum nächsten Tagmodus-Start.", "de", None),
     "system/night_off_de.wav": ("Nachtmodus deaktiviert.", "de", None),
     "system/pb_persona1_de.wav": ("Persona eins.", "de", None),
     "system/pb_persona2_de.wav": ("Persona zwei.", "de", None),

@@ -40,7 +40,6 @@
 #include "driver/rtc_io.h"
 
 static const char *TAG = "DIAL_A_CHARMER_ESP";
-static const int kNightModeDurationHours = 6;
 static const uint8_t kNightBaseVolumeDefault = 50;
 
 // Global Objects
@@ -510,17 +509,40 @@ static void led_task(void *pvParameters) {
 static void set_night_mode(bool enable, bool manual_override) {
     if (enable) {
         g_night_mode_active = true;
-        g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
-            (int64_t)kNightModeDurationHours * 60 * 60 * 1000;
         g_night_prev_r = g_led_r;
         g_night_prev_g = g_led_g;
         g_night_prev_b = g_led_b;
         apply_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
     } else {
         g_night_mode_active = false;
+        g_night_mode_end_ms = 0;
         apply_led_color(g_night_prev_r, g_night_prev_g, g_night_prev_b);
     }
     g_night_mode_manual = manual_override;
+
+    if (g_night_mode_active && g_night_mode_manual) {
+        struct tm now_tm = TimeManager::getCurrentTime();
+        if (now_tm.tm_year >= 120) {
+            struct tm target_tm = now_tm;
+            target_tm.tm_hour = g_led_day_start_hour;
+            target_tm.tm_min = 0;
+            target_tm.tm_sec = 0;
+
+            time_t now_epoch = mktime(&now_tm);
+            time_t target_epoch = mktime(&target_tm);
+            if (target_epoch <= now_epoch) {
+                target_epoch += (24 * 60 * 60);
+            }
+
+            int64_t delta_ms = (int64_t)(target_epoch - now_epoch) * 1000;
+            g_night_mode_end_ms = (esp_timer_get_time() / 1000) + delta_ms;
+        } else {
+            g_night_mode_end_ms = 0;
+        }
+    } else if (!g_night_mode_active || !g_night_mode_manual) {
+        g_night_mode_end_ms = 0;
+    }
+
     nvs_handle_t my_handle;
     if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) == ESP_OK) {
         nvs_set_u8(my_handle, "night_mode_active", g_night_mode_active ? 1 : 0);
@@ -543,15 +565,40 @@ static void load_night_mode_from_nvs() {
     g_night_mode_manual = (manual != 0);
     if (active) {
         g_night_mode_active = true;
-        g_night_mode_end_ms = (esp_timer_get_time() / 1000) +
-            (int64_t)kNightModeDurationHours * 60 * 60 * 1000;
+        if (g_night_mode_manual) {
+            struct tm now_tm = TimeManager::getCurrentTime();
+            if (now_tm.tm_year >= 120) {
+                struct tm target_tm = now_tm;
+                target_tm.tm_hour = g_led_day_start_hour;
+                target_tm.tm_min = 0;
+                target_tm.tm_sec = 0;
+
+                time_t now_epoch = mktime(&now_tm);
+                time_t target_epoch = mktime(&target_tm);
+                if (target_epoch <= now_epoch) {
+                    target_epoch += (24 * 60 * 60);
+                }
+
+                int64_t delta_ms = (int64_t)(target_epoch - now_epoch) * 1000;
+                g_night_mode_end_ms = (esp_timer_get_time() / 1000) + delta_ms;
+            } else {
+                g_night_mode_end_ms = 0;
+            }
+        } else {
+            g_night_mode_end_ms = 0;
+        }
+    } else {
+        g_night_mode_end_ms = 0;
     }
 }
 
 static void refresh_night_mode_from_schedule() {
     if (g_night_mode_manual) {
-        struct tm now = TimeManager::getCurrentTime();
-        if (now.tm_year >= 120 && !is_led_night_hour(now.tm_hour)) {
+        if (g_night_mode_active && g_night_mode_end_ms <= 0) {
+            set_night_mode(true, true);
+        }
+        int64_t now_ms = esp_timer_get_time() / 1000;
+        if (g_night_mode_active && g_night_mode_end_ms > 0 && now_ms >= g_night_mode_end_ms) {
             set_night_mode(false, false);
         }
         return;
@@ -660,7 +707,7 @@ static void handle_voice_menu_digit(int digit) {
         start_voice_queue(files);
     } else if (digit == 2) {
         if (g_night_mode_active) {
-            set_night_mode(false, true);
+            set_night_mode(false, false);
             start_voice_queue({system_path("night_off")});
         } else {
             set_night_mode(true, true);
@@ -2009,14 +2056,6 @@ extern "C" void app_main(void)
                 }
 
                 dial_buffer = ""; // Reset buffer
-            }
-        }
-
-        // Night mode timeout
-        if (g_night_mode_active && !g_night_mode_manual) {
-            int64_t now = esp_timer_get_time() / 1000;
-            if (now >= g_night_mode_end_ms) {
-                set_night_mode(false, false);
             }
         }
 
