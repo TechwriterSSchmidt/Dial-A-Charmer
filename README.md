@@ -38,7 +38,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Voice Menu** | **Receiver Lifted** → Dial `0` | Plays spoken instructions for system codes. |
 | **Voice Menu Options** | **While menu speaks** → Dial `1`-`4`, or `999` | Executes menu action immediately (Next Alarm, Night Mode, Phonebook, System Status, Reboot). |
 | **Stop Ringing** | **Ringing** → Lift Receiver | Stops the alarm or timer alert. |
-| **Snooze** | **Ringing** → Press Extra Button | Snoozes the alarm for the configured duration (set in Web UI) and activates a slow breathing Signallampe effect. |
+| **Snooze** | **Ringing** → Press Extra Button | Snoozes the daily alarm for the configured duration (set in Web UI), keeps an active kitchen timer untouched, and activates a slow breathing Signallampe effect. |
 | **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
 
 ### System Capabilities
@@ -48,6 +48,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Timekeeping** | Syncs via **NTP** with optional **DS3231 RTC** fallback (invalid RTC data is ignored until SNTP sync). |
 | **Persistence** | Alarms and settings are saved to NVS and survive reboots. |
 | **Night Mode** | Uses reduced base-speaker volume from Web UI (`night_base_volume`) and LED night profile. System sounds are not auto-muted. Manual toggle via voice menu stays active until next configured day-start hour. |
+| **Trigger Priority** | If daily alarm and kitchen timer are due in the same loop cycle, daily alarm starts first; timer alert is processed right after alarm state is free. |
 
 ## Phonebook Defaults
 
@@ -225,6 +226,11 @@ You can enable buffered SD logging during testing (see `app_config.h`). Logs are
 * `/sdcard/logs/app.log`
 
 Logging is buffered and flushed periodically to reduce interference with audio playback.
+
+Runtime state tags are available to diagnose alarm/timer interactions quickly:
+
+* `TIMER_STATE` (set/cancel/expired/cleared)
+* `SNOOZE_STATE` (set/expired/cleared)
 
 ## Planned Improvements
 

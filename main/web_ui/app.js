@@ -397,7 +397,7 @@ function render() {
     // Header / Title (Dynamic + Version)
     let html = `
         <div style="text-align:center;">
-        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v1.9 RSA-Edition</span></h2>
+        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v2.1 RSA-Edition</span></h2>
         </div>
     `;
 
