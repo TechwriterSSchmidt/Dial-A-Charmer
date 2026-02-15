@@ -18,8 +18,13 @@
 3. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
    - **Snooze:** Press the **Extra Button** (if installed).
+   - **Important:** Snooze affects the daily alarm flow only; an active kitchen timer continues and is not deleted.
    - **Signallampe:** Slow warm-white breathing while snooze is active.
-   - *Snooze duration is configurable in Web Interface (Default: 5 min).*
+   - *Snooze duration is configurable in Web Interface (Default: 5 min, range: 1-60 min).*
+
+5. **If Timer and Daily Alarm Are Due Together:**
+   - Daily alarm has priority and starts first.
+   - Kitchen timer alert is triggered immediately after alarm state is free.
 
 4. **Voice Menu & Admin:**
    - **Dial 0:** System Menu Instructions.
@@ -63,7 +68,7 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 - **Volume**: Separate sliders for Handset (Voice) and Ringer (Alarm).
 - **Ringtones**: Select and Preview from 5 distinct styles.
 - **Repeating Alarm**: Set a daily schedule (Time + Active Days) for your regular wake-up call.
-- **Snooze Duration**: Configurable 0-20 minutes.
+- **Snooze Duration**: Configurable 1-60 minutes (default 5).
 - **Signallampe (LED)**: On/Off, Day/Night brightness, and day/night start hours.
 - **Night Base Volume**: Base-speaker volume used while night mode is active.
 
@@ -86,3 +91,11 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 - **WiFi**: Scan and connect logic.
 - **Timezone**: Set offset (e.g. UTC+1 Zurich).
 - **Firmware Update**: OTA upload for system updates.
+   - OTA password popup has enlarged text/buttons for better readability.
+
+## 🧪 Runtime Debug Tags
+
+For field diagnostics in logs, watch these tags:
+
+- `TIMER_STATE` → timer state transitions (`set`, `cancel`, `expired`, `cleared_*`)
+- `SNOOZE_STATE` → snooze state transitions (`set`, `expired`, `cleared_*`)

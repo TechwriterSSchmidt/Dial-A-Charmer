@@ -53,22 +53,22 @@
 #define APP_ALARM_RETRY_INTERVAL_MS 2000
 
 // Timing settings (ms)
-#define APP_DIAL_TIMEOUT_MS 2000
-#define APP_DIAL_PULSE_DEBOUNCE_MS 60
-#define APP_DIAL_DIGIT_GAP_MS 500
-#define APP_DIALTONE_SILENCE_MS 1000
-#define APP_BUSY_TIMEOUT_MS 5000
-#define APP_WAV_SWITCH_DELAY_MS 35
-#define APP_AUDIO_EVENT_LISTEN_MS 15
-#define APP_OUTPUT_MUTE_DELAY_MS 25
-#define APP_WAV_FADE_OUT_EXTRA_MS 40
-#define APP_WAV_FADE_IN_MS 75
-#define APP_SYSTEM_WAV_FADE_IN_MS 15
-#define APP_SYSTEM_PROMPT_PREFIX_ENABLE 1
-#define APP_SYSTEM_PROMPT_PREFIX_FILE "/sdcard/system/silence_300ms.wav"
-#define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 200
-#define APP_STARTUP_POST_SILENCE_DELAY_MS 180
-#define APP_STARTUP_UNMUTE_IMMEDIATE 1
+#define APP_DIAL_TIMEOUT_MS 2000               // Timeout bis gewählte Ziffernfolge verarbeitet wird
+#define APP_DIAL_PULSE_DEBOUNCE_MS 60          // Entprellzeit pro Wählimpuls
+#define APP_DIAL_DIGIT_GAP_MS 500              // Mindestlücke zwischen zwei Ziffern
+#define APP_DIALTONE_SILENCE_MS 1000           // Stille nach Dialtone, bevor neue Wiedergabe startet
+#define APP_BUSY_TIMEOUT_MS 5000               // Leerlaufzeit am Hörer bis Besetztton
+#define APP_WAV_SWITCH_DELAY_MS 35             // Kurze Wartezeit beim Umschalten zwischen WAV-Dateien
+#define APP_AUDIO_EVENT_LISTEN_MS 15           // Poll-Intervall für Audio-Event-Loop
+#define APP_OUTPUT_MUTE_DELAY_MS 25            // Mute-Haltezeit beim Stoppen/Umschalten
+#define APP_WAV_FADE_OUT_EXTRA_MS 50           // Zusatzdauer für sanfteres Fade-Out
+#define APP_WAV_FADE_IN_MS 75                  // Standard Fade-In für normale WAV-Wiedergabe
+#define APP_SYSTEM_WAV_FADE_IN_MS 15           // Kürzeres Fade-In für Systemansagen
+#define APP_SYSTEM_PROMPT_PREFIX_ENABLE 1      // Vorspann-Datei vor Systemprompts aktivieren
+#define APP_SYSTEM_PROMPT_PREFIX_FILE "/sdcard/system/silence_300ms.wav" // Datei als Prompt-Vorspann
+#define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 250 // Pause bis Voice-Menu erneut angesagt wird
+#define APP_STARTUP_POST_SILENCE_DELAY_MS 180  // Wartezeit nach Boot-Stille vor Startup-Sound
+#define APP_STARTUP_UNMUTE_IMMEDIATE 1         // Audio sofort beim Start-Resume entmuten
 
 // Audio clock quality
 #define APP_I2S_USE_APLL 1
