@@ -25,8 +25,8 @@ const TEXT = {
         subtitle: "Hörer abheben und Wählen",
         alarms: "Wecker",
         pb: "Telefonbuch",
-        config: "Konfiguration",
-        help: "Hilfe / Manual",
+        config: "Konfig.",
+        help: "Hilfe",
         home: "Home",
         save: "Speichern",
         active: "Aktiv", // New
@@ -99,8 +99,8 @@ const TEXT = {
         subtitle: "Lift receiver and dial",
         alarms: "Alarms",
         pb: "Phonebook",
-        config: "Configuration",
-        help: "Help / Manual",
+        config: "Config.",
+        help: "Manual",
         home: "Home",
         save: "Save",
         active: "Active", // New
@@ -229,7 +229,7 @@ const API = {
 
 function requestOtaPassword() {
     return new Promise((resolve) => {
-        const otaPopupFontSize = '0.60rem';
+        const otaPopupFontSize = '0.75rem';
         const overlay = document.createElement('div');
         overlay.style.position = 'fixed';
         overlay.style.inset = '0';
@@ -392,6 +392,7 @@ function render() {
     if (path === '/alarm') pageTitle = t('alarm_title');
     else if (path === '/configuration') pageTitle = t('config');
     else if (path === '/phonebook') pageTitle = t('pb');
+    else if (path === '/help') pageTitle = t('help');
     else if (path === '/setup') pageTitle = t('setup');
 
     // Header / Title (Dynamic + Version)
@@ -410,6 +411,8 @@ function render() {
         html += renderSettings();
     } else if (path === '/configuration') {
         html += renderAdvanced();
+    } else if (path === '/help') {
+        html += renderHelp();
     } else if (path === '/setup') {
         html += renderSetup();
         // Trigger scan automatically if not done
@@ -507,14 +510,15 @@ function renderHome() {
         ${renderBtn(t('alarms'), '/alarm')}
         ${renderBtn(t('pb'), '/phonebook')}
         ${renderBtn(t('config'), '/configuration')}
+        ${renderBtn(t('help'), '/help')}
         
     </div>
     `;
 }
 
 function renderBtn(label, href) {
-    const style = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
-    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.borderColor='#d4af37'" onmouseout="this.style.borderColor='#444'">${label}</button>`;
+    const style = "background-color:#db1515; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #b72525; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
+    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#e03a3a'; this.style.borderColor='#c43131'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#d12c2c'; this.style.borderColor='#b72525'; this.style.color='#f0e6d2'">${label}</button>`;
 }
 
 function renderFooter(activePage) {
@@ -522,11 +526,12 @@ function renderFooter(activePage) {
         {k: 'home', h: '/'},
         {k: 'alarms', h: '/alarm'},
         {k: 'pb', h: '/phonebook'},
-        {k: 'config', h: '/configuration'}
+        {k: 'config', h: '/configuration'},
+        {k: 'help', h: '/help'}
     ];
-    
-    const style = "color:#ffc107; text-decoration:underline; margin:0 6px; font-size:0.9rem; letter-spacing:0.5px; font-weight:normal; font-family: 'Plaisir', serif, sans-serif;";
-    
+
+    const style = "color:#ffc107; text-decoration:underline; margin:0 6px; font-size:0.8rem; letter-spacing:0.5px; font-weight:normal; font-family: 'Plaisir', serif, sans-serif;";
+
     let html = "<div style='text-align:center; padding-bottom: 20px; margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;'>";
     links.forEach(l => {
         if (l.h !== activePage) {
@@ -568,6 +573,7 @@ function renderPhonebook() {
         { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)', defNum: '3' },
         { id: 'p4', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '4', defName: 'Persona 4 (Captain)', defNum: '4' },
         { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5', defNum: '5' },
+        { id: 'p8', type: 'FUNCTION', val: 'ANNOUNCE_TIMER_REMAINING', param: '', defName: isDe ? 'Timer Restzeit' : 'Timer Remaining', defNum: '8' },
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
@@ -740,7 +746,7 @@ function renderSettings() {
         // Snooze Selection
         const currentSnooze = state.settings.snooze_min || 5;
         let snoozeOpts = "";
-        for (let i=1; i<=20; i++) {
+        for (let i=1; i<=60; i++) {
             const sel = (i === currentSnooze) ? "selected" : "";
             snoozeOpts += `<option value="${i}" ${sel}>${i} ${t('minutes_short')}</option>`;
         }
@@ -762,6 +768,82 @@ function renderSettings() {
                 <div class="alarm-current-time" id="alarm-current-time">--:--:--</div>
             </div>
             ${rows}
+        </div>
+    `;
+}
+
+function renderHelp() {
+    const isDe = state.lang === 'de';
+    const usageItems = isDe
+        ? [
+            'Hörer abheben + 1-5 wählen, spielt Persona-Inhalte ab.',
+            'Aufgelegt + 1-500 wählen, setzt den Küchentimer in Minuten.',
+            'Wenn Timer gestellt ist, Taste drücken um Timer zurückzusetzen.',
+            'Hörer abheben + 8 wählen, sagt die Restzeit des aktiven Timers an.',
+            'Schlummern bei Wecker - Taste drücken.',
+            'Hörer abheben + 0 wählen, startet das Sprachmenü.',
+            'Wenn dial-a-charmer.local nicht gefunden wird, nutze die angesagte IP-Adresse (0 + 4).'
+        ]
+        : [
+            'Lift receiver + dial 1-5 to play persona content.',
+            'Receiver on hook + dial 1-500 to set kitchen timer in minutes.',
+            'If a timer is active, press the extra button to reset/delete it.',
+            'Lift receiver + dial 8 to announce remaining active timer minutes.',
+            'Snooze while alarm rings by pressing the extra button.',
+            'Lift receiver + dial 0 to start the voice menu.',
+            'If dial-a-charmer.local is not found, use the announced IP address (0 + 4).'
+        ];
+
+    const lampRows = isDe
+        ? [
+            ['Blau/Gold pulsierend', 'Booting / WLAN-Verbindung'],
+            ['Vintage Orange', 'Bereit / Idle'],
+            ['Warmweiss pulsierend', 'Wecker aktiv'],
+            ['Rot schnell pulsierend', 'Timer abgelaufen'],
+            ['Warmweiss langsam atmend', 'Schlummern aktiv'],
+            ['Rot SOS', 'Fehler / SD fehlt']
+        ]
+        : [
+            ['Blue/Gold pulse', 'Booting / WiFi connection'],
+            ['Vintage orange', 'Ready / idle'],
+            ['Warm white pulse', 'Alarm active'],
+            ['Fast red pulse', 'Timer expired'],
+            ['Slow warm white breathing', 'Snooze active'],
+            ['Red SOS', 'Error / SD missing']
+        ];
+
+    return `
+        <div class="card" style="padding: 16px;">
+            <div style="font-size:1.05rem; margin-bottom:8px; color:#d4af37;">
+                ${isDe ? 'Funktionsbeschreibung' : 'Function Overview'}
+            </div>
+            <div style="border:1px solid #444; border-radius:8px; padding:10px; background:#161616;">
+                <ul style="margin:0; padding-left:20px; color:#bda66a; font-size:0.84rem; line-height:1.45;">
+                    ${usageItems.map((item) => `<li style="margin-bottom:6px;">${item}</li>`).join('')}
+                </ul>
+            </div>
+        </div>
+
+        <div class="card" style="padding: 16px; margin-top: 12px;">
+            <div style="font-size:1.05rem; margin-bottom:8px; color:#d4af37;">
+                ${isDe ? 'Signallampe' : 'Signal Lamp'}
+            </div>
+            <table style="width:100%; border-collapse:collapse; font-size:0.84rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">${isDe ? 'Farbe' : 'Color'}</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">${isDe ? 'Bedeutung' : 'Meaning'}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${lampRows.map(([color, meaning]) => `
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #333; color:#bda66a;">${color}</td>
+                            <td style="padding:8px; border-bottom:1px solid #333; color:#bda66a;">${meaning}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
         </div>
     `;
 }
@@ -858,32 +940,6 @@ function renderAdvanced() {
                 </div>
             </div>
 
-            <!-- WIFI PANEL -->
-              <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
-
-                        <div style="display:flex; flex-direction:column; gap:6px;">
-                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
-                            <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
-                        </div>
-            </div>
-
-            <!-- CONSOLE PANEL -->
-            <div class="crt-panel">
-                <div class="crt-screen">
-                    <div class="crt-text" id="crt-log">READY&gt;_</div>
-                </div>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; gap:10px;">
-                <div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:78px;">
-                    <label class="switch" title="${t('sd_log')}">
-                        <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    <span class="alarm-label" style="margin-left:0; text-align:center; line-height:1.1;">${t('sd_log_enabled')}</span>
-                </div>
-                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
-            </div>
             <!-- VOLUME PANEL -->
             <div style="background:#222; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('volume')}</h4>
@@ -997,6 +1053,33 @@ function renderAdvanced() {
                            oninput="document.getElementById('night-base-vol-disp').innerText=this.value+'%'"
                            onchange="saveLampSettings({night_base_volume: parseInt(this.value)})" style="width:100%"/>
                 </div>
+            </div>
+
+            <!-- WIFI PANEL -->
+              <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
+                            <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
+                        </div>
+            </div>
+
+            <!-- CONSOLE PANEL -->
+            <div class="crt-panel">
+                <div class="crt-screen">
+                    <div class="crt-text" id="crt-log">READY&gt;_</div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; gap:10px;">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:78px;">
+                    <label class="switch" title="${t('sd_log')}">
+                        <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="alarm-label" style="margin-left:0; text-align:center; line-height:1.1;">${t('sd_log_enabled')}</span>
+                </div>
+                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
             </div>
 
             <!-- OTA PANEL -->
