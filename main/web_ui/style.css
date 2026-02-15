@@ -135,9 +135,9 @@ button {
     width: 100%;
     padding: 18px;
     margin-top: 30px;
-    background-color: #8b0000; /* Deep Red */
+  background-color: #aa0000;
     color: #f0e6d2;
-    border: 1px solid #a00000;
+  border: 1px solid #880000;
     text-transform: uppercase;
     letter-spacing: 4px;
     font-size: 1.5rem;
@@ -147,10 +147,10 @@ button {
     border-radius: 12px; /* Rounded Button */
 }
 button:hover {
-    background-color: #b22222;
+  background-color: #bb0000;
     color: #fff;
-    border-color: #f00;
-    box-shadow: 0 0 15px rgba(178, 34, 34, 0.4);
+  border-color: #990000;
+  box-shadow: 0 0 10px rgba(170, 0, 0, 0.25);
 }
 /* Toggle Switch Style (Radio-look replacement) */
 .switch {
@@ -461,17 +461,17 @@ select.alarm-sound-select {
   line-height: 38px;
   border-radius: 6px;
   box-sizing: border-box;
-  background-color: #8b0000;
+  background-color: #aa0000;
   color: #f0e6d2;
-  border: 1px solid #a00000;
+  border: 1px solid #880000;
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 2px;
 }
 .wifi-scan-btn:hover {
-  background-color: #b22222;
+  background-color: #bb0000;
   color: #fff;
-  border-color: #f00;
+  border-color: #990000;
 }
 .wifi-ssid-wrap {
   display: flex;

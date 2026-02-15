@@ -517,8 +517,8 @@ function renderHome() {
 }
 
 function renderBtn(label, href) {
-    const style = "background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #a00000; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
-    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#b22222'; this.style.borderColor='#f00'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#8b0000'; this.style.borderColor='#a00000'; this.style.color='#f0e6d2'">${label}</button>`;
+    const style = "background-color:#aa0000; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #880000; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
+    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#bb0000'; this.style.borderColor='#990000'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#aa0000'; this.style.borderColor='#880000'; this.style.color='#f0e6d2'">${label}</button>`;
 }
 
 function renderFooter(activePage) {
@@ -746,7 +746,7 @@ function renderSettings() {
         // Snooze Selection
         const currentSnooze = state.settings.snooze_min || 5;
         let snoozeOpts = "";
-        for (let i=1; i<=20; i++) {
+        for (let i=1; i<=60; i++) {
             const sel = (i === currentSnooze) ? "selected" : "";
             snoozeOpts += `<option value="${i}" ${sel}>${i} ${t('minutes_short')}</option>`;
         }

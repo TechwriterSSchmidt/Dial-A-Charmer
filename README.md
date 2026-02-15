@@ -237,7 +237,6 @@ Runtime state tags are available to diagnose alarm/timer interactions quickly:
 ## Planned Improvements
 
 * Loud noise on reboot > need to ensure that amps are not powered during reboot?
-* Alarm-off text output is currently played over handset > should be switched to base speaker + instead of using a specific announcement, we should play random messages and make this feature switchable for each daily alarm
 * WIFI-bug ... system seems to hang when not connected to WIFI while using captive portal on iPhone to make settings
 * IP-Address should be displayed in Captive Portal and on Configuration page of the web-ui
 

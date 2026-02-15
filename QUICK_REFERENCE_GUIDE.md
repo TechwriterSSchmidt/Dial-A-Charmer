@@ -97,8 +97,7 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 
 - **WiFi**: Scan and connect logic.
 - **Timezone**: Set offset (e.g. UTC+1 Zurich).
-- **Firmware Update**: OTA upload for system updates.
-   - OTA password popup has enlarged text/buttons for better readability.
+- **Firmware Update**: OTA upload for system updates. OTA password popup has enlarged text/buttons for better readability.
 
 ## 🧪 Runtime Debug Tags
 

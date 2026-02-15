@@ -29,6 +29,8 @@
 #include "cJSON.h"
 #include "lwip/sockets.h"
 #include "esp_ota_ops.h"
+#include "esp_system.h"
+#include "mbedtls/sha256.h"
 
 // External reference to play_file from main.cpp
 extern void play_file(const char* path);
@@ -235,6 +237,7 @@ static void set_runtime_logging_enabled(bool enabled) {
 }
 
 static const size_t OTA_PASSWORD_MAX = 64;
+static const char *WIFI_PASS_SALT = "Dial-A-Charmer::wifi_pass::v1";
 
 static void ota_reboot_task(void *pvParameters) {
     (void)pvParameters;
@@ -254,6 +257,90 @@ static bool ota_password_matches(httpd_req_t *req) {
     }
 
     return strncmp(token_header, APP_OTA_PASSWORD, OTA_PASSWORD_MAX) == 0;
+}
+
+static bool hex_to_nibble(char c, uint8_t *out) {
+    if (!out) return false;
+    if (c >= '0' && c <= '9') {
+        *out = (uint8_t)(c - '0');
+        return true;
+    }
+    if (c >= 'a' && c <= 'f') {
+        *out = (uint8_t)(10 + (c - 'a'));
+        return true;
+    }
+    if (c >= 'A' && c <= 'F') {
+        *out = (uint8_t)(10 + (c - 'A'));
+        return true;
+    }
+    return false;
+}
+
+static void derive_wifi_pass_key(uint8_t key[32]) {
+    uint8_t mac[6] = {0};
+    esp_efuse_mac_get_default(mac);
+
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+    mbedtls_sha256_starts_ret(&ctx, 0);
+    mbedtls_sha256_update_ret(&ctx, mac, sizeof(mac));
+    mbedtls_sha256_update_ret(&ctx, (const unsigned char *)WIFI_PASS_SALT, strlen(WIFI_PASS_SALT));
+    mbedtls_sha256_finish_ret(&ctx, key);
+    mbedtls_sha256_free(&ctx);
+}
+
+static std::string encrypt_wifi_pass(const char *plain) {
+    if (!plain) return std::string();
+
+    size_t n = strlen(plain);
+    if (n == 0) return std::string();
+
+    uint8_t key[32] = {0};
+    derive_wifi_pass_key(key);
+
+    static const char HEX[] = "0123456789abcdef";
+    std::string out;
+    out.reserve(n * 2);
+
+    for (size_t i = 0; i < n; ++i) {
+        uint8_t stream = (uint8_t)(key[i % sizeof(key)] ^ ((i * 31U) & 0xFF));
+        uint8_t enc = (uint8_t)(((uint8_t)plain[i]) ^ stream);
+        out.push_back(HEX[(enc >> 4) & 0x0F]);
+        out.push_back(HEX[enc & 0x0F]);
+    }
+    return out;
+}
+
+static bool decrypt_wifi_pass(const char *cipher_hex, std::string *plain_out) {
+    if (!cipher_hex || !plain_out) return false;
+
+    size_t n = strlen(cipher_hex);
+    if (n == 0) {
+        plain_out->clear();
+        return true;
+    }
+    if ((n % 2) != 0) return false;
+
+    uint8_t key[32] = {0};
+    derive_wifi_pass_key(key);
+
+    std::string plain;
+    plain.reserve(n / 2);
+
+    for (size_t i = 0; i < n; i += 2) {
+        uint8_t hi = 0, lo = 0;
+        if (!hex_to_nibble(cipher_hex[i], &hi) || !hex_to_nibble(cipher_hex[i + 1], &lo)) {
+            return false;
+        }
+        uint8_t enc = (uint8_t)((hi << 4) | lo);
+        size_t byte_index = i / 2;
+        uint8_t stream = (uint8_t)(key[byte_index % sizeof(key)] ^ ((byte_index * 31U) & 0xFF));
+        char ch = (char)(enc ^ stream);
+        plain.push_back(ch);
+    }
+
+    *plain_out = plain;
+    return true;
 }
 
 static std::string get_first_ringtone_name() {
@@ -1025,7 +1112,9 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         
         item = cJSON_GetObjectItem(root, "wifi_pass");
         if (cJSON_IsString(item)) {
-            mark_nvs_write(nvs_set_str(my_handle, "wifi_pass", item->valuestring), "wifi_pass");
+            std::string enc = encrypt_wifi_pass(item->valuestring);
+            mark_nvs_write(nvs_set_str(my_handle, "wifi_pass_enc", enc.c_str()), "wifi_pass_enc");
+            mark_nvs_write(nvs_erase_key(my_handle, "wifi_pass"), "wifi_pass");
         }
 
         item = cJSON_GetObjectItem(root, "sd_log_enabled");
@@ -1060,7 +1149,10 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
 
         item = cJSON_GetObjectItem(root, "snooze_min");
         if (cJSON_IsNumber(item)) {
-            mark_nvs_write(nvs_set_i32(my_handle, "snooze_min", item->valueint), "snooze_min");
+            int snooze = item->valueint;
+            if (snooze < APP_SNOOZE_MIN_MINUTES) snooze = APP_SNOOZE_MIN_MINUTES;
+            if (snooze > APP_SNOOZE_MAX_MINUTES) snooze = APP_SNOOZE_MAX_MINUTES;
+            mark_nvs_write(nvs_set_i32(my_handle, "snooze_min", snooze), "snooze_min");
         }
 
         // Timer Ringtone
@@ -1526,8 +1618,31 @@ void WebManager::setupWifi() {
     
     if (err == ESP_OK) {
         nvs_get_str(my_handle, "wifi_ssid", ssid, &len);
-        len = sizeof(pass);
-        nvs_get_str(my_handle, "wifi_pass", pass, &len);
+
+        char pass_enc[193] = {0};
+        size_t len_enc = sizeof(pass_enc);
+        bool pass_loaded = false;
+
+        if (nvs_get_str(my_handle, "wifi_pass_enc", pass_enc, &len_enc) == ESP_OK && pass_enc[0] != '\0') {
+            std::string plain;
+            if (decrypt_wifi_pass(pass_enc, &plain)) {
+                strncpy(pass, plain.c_str(), sizeof(pass) - 1);
+                pass[sizeof(pass) - 1] = '\0';
+                pass_loaded = true;
+            }
+        }
+
+        if (!pass_loaded) {
+            len = sizeof(pass);
+            if (nvs_get_str(my_handle, "wifi_pass", pass, &len) == ESP_OK) {
+                std::string enc = encrypt_wifi_pass(pass);
+                if (!enc.empty()) {
+                    nvs_set_str(my_handle, "wifi_pass_enc", enc.c_str());
+                    nvs_erase_key(my_handle, "wifi_pass");
+                    nvs_commit(my_handle);
+                }
+            }
+        }
         nvs_close(my_handle);
     }
 
