@@ -26,7 +26,7 @@ const TEXT = {
         alarms: "Wecker",
         pb: "Telefonbuch",
         config: "Konfiguration",
-        help: "Hilfe / Manual",
+        help: "Hilfe",
         home: "Home",
         save: "Speichern",
         active: "Aktiv", // New
@@ -100,7 +100,7 @@ const TEXT = {
         alarms: "Alarms",
         pb: "Phonebook",
         config: "Configuration",
-        help: "Help / Manual",
+        help: "Manual",
         home: "Home",
         save: "Save",
         active: "Active", // New
@@ -529,9 +529,9 @@ function renderFooter(activePage) {
         {k: 'config', h: '/configuration'},
         {k: 'help', h: '/help'}
     ];
-    
+
     const style = "color:#ffc107; text-decoration:underline; margin:0 6px; font-size:0.9rem; letter-spacing:0.5px; font-weight:normal; font-family: 'Plaisir', serif, sans-serif;";
-    
+
     let html = "<div style='text-align:center; padding-bottom: 20px; margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;'>";
     links.forEach(l => {
         if (l.h !== activePage) {
@@ -774,58 +774,76 @@ function renderSettings() {
 
 function renderHelp() {
     const isDe = state.lang === 'de';
-    const rows = isDe
+    const usageItems = isDe
         ? [
-            ['Hörer abheben + 1-5', 'Spielt Persona-Inhalte ab.'],
-            ['Hörer abheben + 8', 'Sagt die Restzeit des aktiven Timers an.'],
-            ['Hörer abheben + 11', 'Startet den Zufallsmix.'],
-            ['Aufgelegt + 1-500 wählen', 'Setzt den Küchentimer in Minuten.'],
-            ['Während Klingeln: Extra-Taste', 'Aktiviert Schlummern (konfigurierbare Dauer).'],
-            ['Hörer abheben + 0', 'Startet Sprachmenü (1-4 und 999).']
+            'Hörer abheben + 1-5 wählen, spielt Persona-Inhalte ab.',
+            'Aufgelegt + 1-500 wählen, setzt den Küchentimer in Minuten.',
+            'Wenn Timer gestellt ist, Taste drücken um Timer zurückzusetzen.',
+            'Hörer abheben + 8 wählen, sagt die Restzeit des aktiven Timers an.',
+            'Schlummern bei Wecker - Taste drücken.',
+            'Hörer abheben + 0 wählen, startet das Sprachmenü.',
+            'Wenn dial-a-charmer.local nicht gefunden wird, nutze die angesagte IP-Adresse (0 + 4).'
         ]
         : [
-            ['Lift receiver + 1-5', 'Plays persona content.'],
-            ['Lift receiver + 8', 'Announces remaining active timer minutes.'],
-            ['Lift receiver + 11', 'Starts random mix.'],
-            ['Receiver on hook + dial 1-500', 'Sets kitchen timer in minutes.'],
-            ['While ringing: Extra button', 'Activates snooze (configurable duration).'],
-            ['Lift receiver + 0', 'Starts voice menu (1-4 and 999).']
+            'Lift receiver + dial 1-5 to play persona content.',
+            'Receiver on hook + dial 1-500 to set kitchen timer in minutes.',
+            'If a timer is active, press the extra button to reset/delete it.',
+            'Lift receiver + dial 8 to announce remaining active timer minutes.',
+            'Snooze while alarm rings by pressing the extra button.',
+            'Lift receiver + dial 0 to start the voice menu.',
+            'If dial-a-charmer.local is not found, use the announced IP address (0 + 4).'
         ];
 
-    const tips = isDe
+    const lampRows = isDe
         ? [
-            'Bei gleichzeitiger Fälligkeit hat der Tageswecker Vorrang, der Timer folgt danach.',
-            'Wenn kein Timer aktiv ist, meldet die 8-Funktion das direkt.',
-            'Bei mDNS-Problemen nutze die angesagte IP (0 → 4).'
+            ['Blau/Gold pulsierend', 'Booting / WLAN-Verbindung'],
+            ['Vintage Orange', 'Bereit / Idle'],
+            ['Warmweiss pulsierend', 'Wecker aktiv'],
+            ['Rot schnell pulsierend', 'Timer abgelaufen'],
+            ['Warmweiss langsam atmend', 'Schlummern aktiv'],
+            ['Rot SOS', 'Fehler / SD fehlt']
         ]
         : [
-            'If daily alarm and timer are due together, daily alarm runs first.',
-            'If no timer is active, dialing 8 reports that immediately.',
-            'If mDNS fails, use announced IP (0 → 4).'
+            ['Blue/Gold pulse', 'Booting / WiFi connection'],
+            ['Vintage orange', 'Ready / idle'],
+            ['Warm white pulse', 'Alarm active'],
+            ['Fast red pulse', 'Timer expired'],
+            ['Slow warm white breathing', 'Snooze active'],
+            ['Red SOS', 'Error / SD missing']
         ];
 
     return `
         <div class="card" style="padding: 16px;">
-            <div style="font-size:1.05rem; margin-bottom:10px; color:#d4af37;">
-                ${isDe ? 'Wichtige Funktionen' : 'Essential Functions'}
+            <div style="font-size:1.05rem; margin-bottom:8px; color:#d4af37;">
+                ${isDe ? 'Funktionsbeschreibung' : 'Function Overview'}
             </div>
-            <div style="display:grid; gap:10px;">
-                ${rows.map(([title, desc]) => `
-                    <div style="border:1px solid #444; border-radius:8px; padding:10px; background:#161616;">
-                        <div style="font-size:0.95rem; color:#d4af37; margin-bottom:3px;">${title}</div>
-                        <div style="font-size:0.82rem; color:#bda66a;">${desc}</div>
-                    </div>
-                `).join('')}
-            </div>
-
-            <div style="margin-top:14px; padding-top:10px; border-top:1px solid #333;">
-                <div style="font-size:0.95rem; color:#d4af37; margin-bottom:6px;">
-                    ${isDe ? 'Hinweise' : 'Notes'}
-                </div>
-                <ul style="margin:0; padding-left:20px; color:#bda66a; font-size:0.8rem; line-height:1.4;">
-                    ${tips.map((tip) => `<li>${tip}</li>`).join('')}
+            <div style="border:1px solid #444; border-radius:8px; padding:10px; background:#161616;">
+                <ul style="margin:0; padding-left:20px; color:#bda66a; font-size:0.84rem; line-height:1.45;">
+                    ${usageItems.map((item) => `<li style="margin-bottom:6px;">${item}</li>`).join('')}
                 </ul>
             </div>
+        </div>
+
+        <div class="card" style="padding: 16px; margin-top: 12px;">
+            <div style="font-size:1.05rem; margin-bottom:8px; color:#d4af37;">
+                ${isDe ? 'Signallampe' : 'Signal Lamp'}
+            </div>
+            <table style="width:100%; border-collapse:collapse; font-size:0.84rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">${isDe ? 'Farbe' : 'Color'}</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">${isDe ? 'Bedeutung' : 'Meaning'}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${lampRows.map(([color, meaning]) => `
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #333; color:#bda66a;">${color}</td>
+                            <td style="padding:8px; border-bottom:1px solid #333; color:#bda66a;">${meaning}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
         </div>
     `;
 }
