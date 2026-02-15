@@ -247,6 +247,9 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 * **Noncommercial Use**: You may use this software for personal, educational, or evaluation purposes.
 * **Commercial Use Restricted**: You may NOT use this software for commercial purposes (selling, paid services, business use) without prior written consent.
 
+<details>
+<summary><strong>PolyForm Noncommercial License 1.0.0 (vollständiger Text)</strong></summary>
+
 ### PolyForm Noncommercial License 1.0.0
 
 #### 1. Purpose
@@ -289,3 +292,5 @@ You must ensure that anyone who gets a copy of any part of the software from you
 #### 6. Disclaimer
 
 **THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.**
+
+</details>
