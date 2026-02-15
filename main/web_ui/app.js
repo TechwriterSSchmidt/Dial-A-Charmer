@@ -25,7 +25,7 @@ const TEXT = {
         subtitle: "Hörer abheben und Wählen",
         alarms: "Wecker",
         pb: "Telefonbuch",
-        config: "Konfiguration",
+        config: "Konfig.",
         help: "Hilfe",
         home: "Home",
         save: "Speichern",
@@ -99,7 +99,7 @@ const TEXT = {
         subtitle: "Lift receiver and dial",
         alarms: "Alarms",
         pb: "Phonebook",
-        config: "Configuration",
+        config: "Config.",
         help: "Manual",
         home: "Home",
         save: "Save",
@@ -517,8 +517,8 @@ function renderHome() {
 }
 
 function renderBtn(label, href) {
-    const style = "background-color:#1a1a1a; color:#d4af37; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #444; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
-    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.borderColor='#d4af37'" onmouseout="this.style.borderColor='#444'">${label}</button>`;
+    const style = "background-color:#8b0000; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #a00000; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
+    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#b22222'; this.style.borderColor='#f00'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#8b0000'; this.style.borderColor='#a00000'; this.style.color='#f0e6d2'">${label}</button>`;
 }
 
 function renderFooter(activePage) {
@@ -530,7 +530,7 @@ function renderFooter(activePage) {
         {k: 'help', h: '/help'}
     ];
 
-    const style = "color:#ffc107; text-decoration:underline; margin:0 6px; font-size:0.9rem; letter-spacing:0.5px; font-weight:normal; font-family: 'Plaisir', serif, sans-serif;";
+    const style = "color:#ffc107; text-decoration:underline; margin:0 6px; font-size:0.8rem; letter-spacing:0.5px; font-weight:normal; font-family: 'Plaisir', serif, sans-serif;";
 
     let html = "<div style='text-align:center; padding-bottom: 20px; margin-top: 20px; border-top: 1px solid #333; padding-top: 20px;'>";
     links.forEach(l => {

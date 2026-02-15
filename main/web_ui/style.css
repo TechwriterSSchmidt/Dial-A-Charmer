@@ -461,12 +461,17 @@ select.alarm-sound-select {
   line-height: 38px;
   border-radius: 6px;
   box-sizing: border-box;
-  background-color: #a52a2a;
-  color: #fff;
-  border: 1px solid #a52a2a;
+  background-color: #8b0000;
+  color: #f0e6d2;
+  border: 1px solid #a00000;
   cursor: pointer;
   text-transform: uppercase;
   letter-spacing: 2px;
+}
+.wifi-scan-btn:hover {
+  background-color: #b22222;
+  color: #fff;
+  border-color: #f00;
 }
 .wifi-ssid-wrap {
   display: flex;
