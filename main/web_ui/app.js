@@ -517,8 +517,8 @@ function renderHome() {
 }
 
 function renderBtn(label, href) {
-    const style = "background-color:#aa0000; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #880000; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
-    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#bb0000'; this.style.borderColor='#990000'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#aa0000'; this.style.borderColor='#880000'; this.style.color='#f0e6d2'">${label}</button>`;
+    const style = "background-color:#db1515; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #b72525; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
+    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#e03a3a'; this.style.borderColor='#c43131'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#d12c2c'; this.style.borderColor='#b72525'; this.style.color='#f0e6d2'">${label}</button>`;
 }
 
 function renderFooter(activePage) {

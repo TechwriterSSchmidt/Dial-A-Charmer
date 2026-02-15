@@ -30,6 +30,7 @@
 #include "lwip/sockets.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
+#include "esp_mac.h"
 #include "mbedtls/sha256.h"
 
 // External reference to play_file from main.cpp
@@ -278,14 +279,14 @@ static bool hex_to_nibble(char c, uint8_t *out) {
 
 static void derive_wifi_pass_key(uint8_t key[32]) {
     uint8_t mac[6] = {0};
-    esp_efuse_mac_get_default(mac);
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
 
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
-    mbedtls_sha256_starts_ret(&ctx, 0);
-    mbedtls_sha256_update_ret(&ctx, mac, sizeof(mac));
-    mbedtls_sha256_update_ret(&ctx, (const unsigned char *)WIFI_PASS_SALT, strlen(WIFI_PASS_SALT));
-    mbedtls_sha256_finish_ret(&ctx, key);
+    mbedtls_sha256_starts(&ctx, 0);
+    mbedtls_sha256_update(&ctx, mac, sizeof(mac));
+    mbedtls_sha256_update(&ctx, (const unsigned char *)WIFI_PASS_SALT, strlen(WIFI_PASS_SALT));
+    mbedtls_sha256_finish(&ctx, key);
     mbedtls_sha256_free(&ctx);
 }
 
