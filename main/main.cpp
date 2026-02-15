@@ -80,6 +80,14 @@ struct TimerState {
 
 static TimerState g_timer_state;
 
+struct SnoozeState {
+    bool active = false;
+    int64_t end_ms = 0;
+    bool msg_active = false;
+};
+
+static SnoozeState g_snooze_state;
+
 int g_startup_sequence_step = 0;
 bool g_voice_menu_active = false;
 std::vector<std::string> g_voice_queue;
@@ -950,6 +958,33 @@ static void force_alarm_volume() {
     }
 }
 
+static void log_timer_state(const char *event) {
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    int64_t remaining_ms = g_timer_state.end_ms - now_ms;
+    ESP_LOGI("TIMER_STATE",
+             "event=%s active=%d minutes=%d announce_pending=%d intro_playing=%d announce_minutes=%d remaining_ms=%lld",
+             event ? event : "unknown",
+             g_timer_state.active ? 1 : 0,
+             g_timer_state.minutes,
+             g_timer_state.announce_pending ? 1 : 0,
+             g_timer_state.intro_playing ? 1 : 0,
+             g_timer_state.announce_minutes,
+             remaining_ms);
+}
+
+static void log_snooze_state(const char *event) {
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    int64_t remaining_ms = g_snooze_state.end_ms - now_ms;
+    ESP_LOGI("SNOOZE_STATE",
+             "event=%s active=%d msg_active=%d legacy_active=%d legacy_msg=%d remaining_ms=%lld",
+             event ? event : "unknown",
+             g_snooze_state.active ? 1 : 0,
+             g_snooze_state.msg_active ? 1 : 0,
+             g_snooze_active ? 1 : 0,
+             g_snooze_msg_active ? 1 : 0,
+             remaining_ms);
+}
+
 static void start_timer_minutes(int minutes) {
     // Override any existing timer or pending timer announcements
     g_timer_state.active = true;
@@ -957,6 +992,7 @@ static void start_timer_minutes(int minutes) {
     g_timer_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)minutes * 60 * 1000;
     g_timer_state.announce_pending = false;
     g_timer_state.intro_playing = false;
+    log_timer_state("set");
 }
 
 
@@ -970,7 +1006,7 @@ static bool cancel_timer_with_feedback(const char *reason) {
     g_timer_state.announce_pending = false;
     g_timer_state.intro_playing = false;
     g_timer_state.announce_minutes = 0;
-    g_snooze_active = false;
+    log_timer_state("cancel");
 
     stop_playback();
     g_pending_handset_restore = true;
@@ -1409,6 +1445,10 @@ void play_timer_alarm(AlarmSource source = ALARM_TIMER, int loop_minutes = APP_T
     g_alarm_state.source = source;
     g_snooze_active = false;
     g_snooze_msg_active = false;
+    g_snooze_state.active = false;
+    g_snooze_state.end_ms = 0;
+    g_snooze_state.msg_active = false;
+    log_snooze_state("cleared_start_alarm");
     g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)loop_minutes * 60 * 1000;
     g_alarm_state.fade_active = false;
     g_alarm_state.fade_factor = 1.0f;
@@ -1576,20 +1616,22 @@ static void handle_extra_button_short_press() {
         g_snooze_msg_active = g_alarm_state.msg_active;
         reset_alarm_state(true);
         g_snooze_active = true;
-        update_audio_output(); // Restore audio routing
+
+        g_pending_handset_restore = true;
+        g_pending_handset_state = g_output_mode_handset;
+        g_force_base_output = true;
+        update_audio_output(); // Force Base Speaker for snooze prompt
+
         play_file(system_path("snooze_active").c_str());
+
         int snooze = get_snooze_minutes();
         ESP_LOGI(TAG, "Snoozing for %d minutes", snooze);
 
-        // Start Timer (Silent, no announcement)
-        start_timer_minutes(snooze);
-        // Important: start_timer_minutes keeps timer announcement flags disabled by default
-        // The main loop may override flags after a dial flow.
-        // This path must not trigger the "Timer Set" voice.
-        // The helper "start_timer_minutes" sets:
-        // g_timer_state.announce_pending = false;
-        // g_timer_state.intro_playing = false;
-        // This keeps snooze start silent.
+        g_snooze_state.active = true;
+        g_snooze_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)snooze * 60 * 1000;
+        g_snooze_state.msg_active = g_snooze_msg_active;
+        log_snooze_state("set_key5");
+        log_timer_state("snooze_started_timer_unchanged");
     }
 }
 
@@ -1649,6 +1691,11 @@ void on_hook_change(bool off_hook) {
                 ESP_LOGI(TAG, "Timer expired -> deleted via pickup");
                 reset_alarm_state(false);
                 g_snooze_active = false;
+                g_snooze_msg_active = false;
+                g_snooze_state.active = false;
+                g_snooze_state.end_ms = 0;
+                g_snooze_state.msg_active = false;
+                log_snooze_state("cleared_pickup_timer_alarm");
                 g_force_base_output = true;
                 update_audio_output();
                 play_file(system_path("timer_deleted").c_str());
@@ -1657,6 +1704,11 @@ void on_hook_change(bool off_hook) {
                 bool play_random_msg = g_alarm_state.msg_active;
                 reset_alarm_state(true);
                 g_snooze_active = false;
+                g_snooze_msg_active = false;
+                g_snooze_state.active = false;
+                g_snooze_state.end_ms = 0;
+                g_snooze_state.msg_active = false;
+                log_snooze_state("cleared_pickup_daily_alarm");
                 g_force_base_output = false;
                 update_audio_output(); 
                 
@@ -2119,6 +2171,10 @@ extern "C" void app_main(void)
                  g_alarm_state.source = ALARM_DAILY;
                  g_snooze_active = false;
                  g_snooze_msg_active = false;
+                 g_snooze_state.active = false;
+                 g_snooze_state.end_ms = 0;
+                 g_snooze_state.msg_active = false;
+                 log_snooze_state("cleared_daily_alarm_trigger");
                  g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  g_alarm_state.retry_last_ms = 0;
                  
@@ -2210,12 +2266,13 @@ extern "C" void app_main(void)
                             g_timer_state.announce_minutes = minutes;
                             g_timer_state.announce_pending = true;
                             g_timer_state.intro_playing = true;
+                            log_timer_state("set_dial_announce_pending");
 
                             // Force Base Speaker for announcement
                             g_pending_handset_restore = true;
                             // Dial flow uses off-hook state as handset intent.
                             // Restore target is captured before forced base output.
-                            g_pending_handset_state = true; 
+                            g_pending_handset_state = g_output_mode_handset;
                             g_force_base_output = true;
                             update_audio_output();
 
@@ -2283,23 +2340,38 @@ extern "C" void app_main(void)
             }
         }
 
+        // Snooze alarm check
+        if (g_snooze_state.active && !g_alarm_state.active) {
+            int64_t now = esp_timer_get_time() / 1000;
+            if (now >= g_snooze_state.end_ms) {
+                bool snooze_msg_active = g_snooze_state.msg_active;
+                ESP_LOGI(TAG, "Snooze expired -> resuming daily alarm behavior");
+                log_snooze_state("expired");
+                g_snooze_state.active = false;
+                g_snooze_state.end_ms = 0;
+                g_snooze_state.msg_active = false;
+                g_snooze_active = false;
+                g_snooze_msg_active = false;
+                log_snooze_state("cleared_after_expire");
+                play_timer_alarm(ALARM_DAILY, APP_DAILY_ALARM_LOOP_MINUTES);
+                g_alarm_state.msg_active = snooze_msg_active;
+            }
+        }
+
         // Timer alarm check
         if (g_timer_state.active && !g_alarm_state.active) {
             int64_t now = esp_timer_get_time() / 1000;
             if (now >= g_timer_state.end_ms) {
-                bool snooze_expired = g_snooze_active;
-                bool snooze_msg_active = g_snooze_msg_active;
                 ESP_LOGI(TAG, "Timer expired -> alarm");
+                log_timer_state("expired");
                 g_timer_state.active = false;
-                g_snooze_active = false;
-                g_snooze_msg_active = false;
-                if (snooze_expired) {
-                    ESP_LOGI(TAG, "Snooze expired -> resuming daily alarm behavior");
-                    play_timer_alarm(ALARM_DAILY, APP_DAILY_ALARM_LOOP_MINUTES);
-                    g_alarm_state.msg_active = snooze_msg_active;
-                } else {
-                    play_timer_alarm();
-                }
+                g_timer_state.minutes = 0;
+                g_timer_state.end_ms = 0;
+                g_timer_state.announce_pending = false;
+                g_timer_state.intro_playing = false;
+                g_timer_state.announce_minutes = 0;
+                log_timer_state("cleared_after_expire");
+                play_timer_alarm();
             }
         }
 

@@ -229,6 +229,7 @@ const API = {
 
 function requestOtaPassword() {
     return new Promise((resolve) => {
+        const otaPopupFontSize = '0.60rem';
         const overlay = document.createElement('div');
         overlay.style.position = 'fixed';
         overlay.style.inset = '0';
@@ -245,12 +246,13 @@ function requestOtaPassword() {
         dialog.style.padding = '16px';
         dialog.style.width = 'min(360px, 92vw)';
         dialog.style.boxSizing = 'border-box';
+        dialog.style.fontSize = otaPopupFontSize;
 
         const title = document.createElement('h4');
         title.textContent = t('ota_password');
         title.style.margin = '0 0 10px 0';
         title.style.color = '#d4af37';
-        title.style.fontSize = '0.9rem';
+        title.style.fontSize = otaPopupFontSize;
         title.style.textTransform = 'uppercase';
 
         const input = document.createElement('input');
@@ -263,19 +265,24 @@ function requestOtaPassword() {
         input.style.border = '1px solid #555';
         input.style.background = '#111';
         input.style.color = '#fff';
+        input.style.fontSize = otaPopupFontSize;
 
         const btnRow = document.createElement('div');
         btnRow.style.display = 'flex';
         btnRow.style.gap = '8px';
         btnRow.style.justifyContent = 'flex-end';
-        btnRow.style.marginTop = '12px';
+        btnRow.style.marginTop = '14px';
 
         const cancelBtn = document.createElement('button');
         cancelBtn.textContent = t('cancel');
         cancelBtn.style.background = '#444';
+        cancelBtn.style.fontSize = otaPopupFontSize;
+        cancelBtn.style.padding = '8px 14px';
 
         const okBtn = document.createElement('button');
         okBtn.textContent = t('ok');
+        okBtn.style.fontSize = otaPopupFontSize;
+        okBtn.style.padding = '8px 14px';
 
         let settled = false;
         const close = (value) => {
