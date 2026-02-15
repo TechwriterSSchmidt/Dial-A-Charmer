@@ -5,7 +5,7 @@ Dial-A-Charmer is a vintage telephone brought back to life with more personality
 **Easy to Install:**
 
 1. **ESP-IDF Build (Recommended):** Build and flash from source with ESP-IDF.
-2. **Manual Flash:** Download the latest build from [firmware/dial-a-charmer-2026-02-14.bin](firmware/dial-a-charmer-2026-02-14.bin) and upload it manually.
+2. **Manual Flash:** Download the latest build from the [firmware folder](firmware/) and upload it manually.
 
 ## Support my projects
 
@@ -247,8 +247,10 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 * **Noncommercial Use**: You may use this software for personal, educational, or evaluation purposes.
 * **Commercial Use Restricted**: You may NOT use this software for commercial purposes (selling, paid services, business use) without prior written consent.
 
+<!-- markdownlint-disable-next-line MD033 -->
 <details>
-<summary><strong>PolyForm Noncommercial License 1.0.0 (vollständiger Text)</strong></summary>
+<!-- markdownlint-disable-next-line MD033 -->
+<summary>PolyForm Noncommercial License 1.0.0 (vollständiger Text)</summary>
 
 ### PolyForm Noncommercial License 1.0.0
 
@@ -293,4 +295,5 @@ You must ensure that anyone who gets a copy of any part of the software from you
 
 **THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.**
 
+<!-- markdownlint-disable-next-line MD033 -->
 </details>
