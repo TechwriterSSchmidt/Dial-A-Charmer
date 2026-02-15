@@ -334,6 +334,8 @@ static void audio_lock();
 static void audio_unlock();
 static void handle_extra_button_short_press();
 static void enter_deep_sleep();
+static void add_number_audio(std::vector<std::string> &files, int value);
+static void log_timer_state(const char *event);
 
 static const char *lang_code() {
     return app_lang_code();
@@ -376,6 +378,33 @@ static void announce_time_now() {
     snprintf(buf, sizeof(buf), "year_%d.wav", now.tm_year + 1900);
     files.push_back(time_path(buf));
 
+    start_voice_queue(files);
+}
+
+static void announce_timer_remaining() {
+    if (!g_timer_state.active) {
+        log_timer_state("announce_remaining_no_active_timer");
+        start_voice_queue({system_path("timer_none")});
+        return;
+    }
+
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    int64_t remaining_ms = g_timer_state.end_ms - now_ms;
+    int remaining_minutes = 0;
+    if (remaining_ms > 0) {
+        remaining_minutes = (int)((remaining_ms + 59999) / 60000);
+    }
+
+    if (remaining_minutes < 0) remaining_minutes = 0;
+    if (remaining_minutes > APP_TIMER_MAX_MINUTES) remaining_minutes = APP_TIMER_MAX_MINUTES;
+
+    ESP_LOGI(TAG, "Timer remaining requested: %d minutes", remaining_minutes);
+    log_timer_state("announce_remaining");
+
+    std::vector<std::string> files;
+    files.push_back(system_path("timer_remaining"));
+    add_number_audio(files, remaining_minutes);
+    files.push_back(system_path("minutes"));
     start_voice_queue(files);
 }
 
@@ -834,6 +863,7 @@ static void handle_voice_menu_digit(int digit) {
         files.push_back(system_path("pb_persona3_opt"));
         files.push_back(system_path("pb_persona4_opt"));
         files.push_back(system_path("pb_persona5_opt"));
+        files.push_back(system_path("pb_timer_remaining_opt"));
         files.push_back(system_path("pb_random_mix_opt"));
         files.push_back(system_path("pb_time_opt"));
         files.push_back(system_path("pb_menu_opt"));
@@ -1509,6 +1539,9 @@ void process_phonebook_function(PhonebookEntry entry) {
         }
         else if (entry.value == "ANNOUNCE_TIME") {
             announce_time_now();
+        }
+        else if (entry.value == "ANNOUNCE_TIMER_REMAINING") {
+            announce_timer_remaining();
         }
         else if (entry.value == "REBOOT") {
              ESP_LOGW(TAG, "Reboot requested. Playing ack...");

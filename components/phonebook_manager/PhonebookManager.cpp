@@ -96,6 +96,7 @@ void PhonebookManager::begin() {
     ensure(APP_PB_NUM_PERSONA_3, p3.empty() ? "Persona 3" : p3, "FUNCTION", "COMPLIMENT_CAT", "3");
     ensure(APP_PB_NUM_PERSONA_4, p4.empty() ? "Persona 4" : p4, "FUNCTION", "COMPLIMENT_CAT", "4");
     ensure(APP_PB_NUM_PERSONA_5, p5.empty() ? "Persona 5" : p5, "FUNCTION", "COMPLIMENT_CAT", "5");
+    ensure(APP_PB_NUM_TIMER_REMAINING, lang_en ? "Timer Remaining" : "Timer Restzeit", "FUNCTION", "ANNOUNCE_TIMER_REMAINING");
     ensure(APP_PB_NUM_RANDOM_MIX, lang_en ? "Random Mix (Surprise)" : "Zufallsmix (Überraschung)", "FUNCTION", "COMPLIMENT_MIX", "0");
     ensure(APP_PB_NUM_TIME, lang_en ? "Time Announcement" : "Zeitauskunft", "FUNCTION", "ANNOUNCE_TIME");
     

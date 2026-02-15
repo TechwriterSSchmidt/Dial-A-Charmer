@@ -34,6 +34,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | :--- | :--- | :--- |
 | **Kitchen Timer** | **Receiver On Hook** → Dial `1`-`500` | Sets a countdown timer in minutes. Phone rings when time expires. |
 | **Play Personas** | **Receiver Lifted** → Dial `1`-`5` | Plays audio content from specific categories (Personas). |
+| **Timer Remaining** | **Receiver Lifted** → Dial `8` | Announces the remaining kitchen-timer time in minutes. |
 | **Random Mix** | **Receiver Lifted** → Dial `11` | Plays a randomized mix from all Persona tracks. |
 | **Voice Menu** | **Receiver Lifted** → Dial `0` | Plays spoken instructions for system codes. |
 | **Voice Menu Options** | **While menu speaks** → Dial `1`-`4`, or `999` | Executes menu action immediately (Next Alarm, Night Mode, Phonebook, System Status, Reboot). |
@@ -61,6 +62,7 @@ The phonebook ships with default numbers. You can edit these entries in the Web 
 | `3` | Persona 3 | Play Persona 3 compliments |
 | `4` | Persona 4 | Play Persona 4 compliments |
 | `5` | Persona 5 | Play Persona 5 compliments |
+| `8` | Timer Restzeit | Announce remaining kitchen timer minutes |
 | `11` | Random Mix (Surprise) | Play a randomized mix |
 | `110` | Zeitauskunft | Announce time (local) |
 | `0` | Voice Admin Menu | Play spoken admin menu |

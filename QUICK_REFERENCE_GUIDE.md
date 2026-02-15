@@ -15,7 +15,12 @@
    - A timer is set for **5 minutes** (Confirmed by voice).
    - Phone rings when time is up. Lift receiver to stop ringing.
 
-3. **Stop / Snooze Alarm:**
+3. **Announce Remaining Timer Time:**
+   - Lift receiver and dial `8`.
+   - Announcement: **"Restzeit des Timers ... Minuten."**
+   - If no timer is active, the system announces that no timer is active.
+
+4. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
    - **Snooze:** Press the **Extra Button** (if installed).
    - **Important:** Snooze affects the daily alarm flow only; an active kitchen timer continues and is not deleted.
@@ -26,7 +31,7 @@
    - Daily alarm has priority and starts first.
    - Kitchen timer alert is triggered immediately after alarm state is free.
 
-4. **Voice Menu & Admin:**
+6. **Voice Menu & Admin:**
    - **Dial 0:** System Menu Instructions.
    - **While the menu speaks:** Dial `1`-`4`, or `999` for quick actions.
 
@@ -39,6 +44,8 @@ Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` scr
 ├── system/
 │   ├── dial_tone.wav       (Played on pickup)
 │   ├── timer_set_de.wav / timer_set_en.wav (Ack sound for timer)
+│   ├── timer_remaining_de.wav / timer_remaining_en.wav (Remaining timer announcement)
+│   ├── timer_none_de.wav / timer_none_en.wav (No active timer message)
 │   ├── beep.wav, click.wav ...
 ├── time/                   (Voice assets for clock)
 │   ├── de/                 (German assets)

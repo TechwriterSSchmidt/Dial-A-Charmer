@@ -229,7 +229,7 @@ const API = {
 
 function requestOtaPassword() {
     return new Promise((resolve) => {
-        const otaPopupFontSize = '0.60rem';
+        const otaPopupFontSize = '0.75rem';
         const overlay = document.createElement('div');
         overlay.style.position = 'fixed';
         overlay.style.inset = '0';
@@ -392,6 +392,7 @@ function render() {
     if (path === '/alarm') pageTitle = t('alarm_title');
     else if (path === '/configuration') pageTitle = t('config');
     else if (path === '/phonebook') pageTitle = t('pb');
+    else if (path === '/help') pageTitle = t('help');
     else if (path === '/setup') pageTitle = t('setup');
 
     // Header / Title (Dynamic + Version)
@@ -410,6 +411,8 @@ function render() {
         html += renderSettings();
     } else if (path === '/configuration') {
         html += renderAdvanced();
+    } else if (path === '/help') {
+        html += renderHelp();
     } else if (path === '/setup') {
         html += renderSetup();
         // Trigger scan automatically if not done
@@ -507,6 +510,7 @@ function renderHome() {
         ${renderBtn(t('alarms'), '/alarm')}
         ${renderBtn(t('pb'), '/phonebook')}
         ${renderBtn(t('config'), '/configuration')}
+        ${renderBtn(t('help'), '/help')}
         
     </div>
     `;
@@ -522,7 +526,8 @@ function renderFooter(activePage) {
         {k: 'home', h: '/'},
         {k: 'alarms', h: '/alarm'},
         {k: 'pb', h: '/phonebook'},
-        {k: 'config', h: '/configuration'}
+        {k: 'config', h: '/configuration'},
+        {k: 'help', h: '/help'}
     ];
     
     const style = "color:#ffc107; text-decoration:underline; margin:0 6px; font-size:0.9rem; letter-spacing:0.5px; font-weight:normal; font-family: 'Plaisir', serif, sans-serif;";
@@ -568,6 +573,7 @@ function renderPhonebook() {
         { id: 'p3', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '3', defName: 'Persona 3 (SciFi)', defNum: '3' },
         { id: 'p4', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '4', defName: 'Persona 4 (Captain)', defNum: '4' },
         { id: 'p5', type: 'FUNCTION', val: 'COMPLIMENT_CAT', param: '5', defName: 'Persona 5', defNum: '5' },
+        { id: 'p8', type: 'FUNCTION', val: 'ANNOUNCE_TIMER_REMAINING', param: '', defName: isDe ? 'Timer Restzeit' : 'Timer Remaining', defNum: '8' },
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
@@ -766,6 +772,64 @@ function renderSettings() {
     `;
 }
 
+function renderHelp() {
+    const isDe = state.lang === 'de';
+    const rows = isDe
+        ? [
+            ['Hörer abheben + 1-5', 'Spielt Persona-Inhalte ab.'],
+            ['Hörer abheben + 8', 'Sagt die Restzeit des aktiven Timers an.'],
+            ['Hörer abheben + 11', 'Startet den Zufallsmix.'],
+            ['Aufgelegt + 1-500 wählen', 'Setzt den Küchentimer in Minuten.'],
+            ['Während Klingeln: Extra-Taste', 'Aktiviert Schlummern (konfigurierbare Dauer).'],
+            ['Hörer abheben + 0', 'Startet Sprachmenü (1-4 und 999).']
+        ]
+        : [
+            ['Lift receiver + 1-5', 'Plays persona content.'],
+            ['Lift receiver + 8', 'Announces remaining active timer minutes.'],
+            ['Lift receiver + 11', 'Starts random mix.'],
+            ['Receiver on hook + dial 1-500', 'Sets kitchen timer in minutes.'],
+            ['While ringing: Extra button', 'Activates snooze (configurable duration).'],
+            ['Lift receiver + 0', 'Starts voice menu (1-4 and 999).']
+        ];
+
+    const tips = isDe
+        ? [
+            'Bei gleichzeitiger Fälligkeit hat der Tageswecker Vorrang, der Timer folgt danach.',
+            'Wenn kein Timer aktiv ist, meldet die 8-Funktion das direkt.',
+            'Bei mDNS-Problemen nutze die angesagte IP (0 → 4).'
+        ]
+        : [
+            'If daily alarm and timer are due together, daily alarm runs first.',
+            'If no timer is active, dialing 8 reports that immediately.',
+            'If mDNS fails, use announced IP (0 → 4).'
+        ];
+
+    return `
+        <div class="card" style="padding: 16px;">
+            <div style="font-size:1.05rem; margin-bottom:10px; color:#d4af37;">
+                ${isDe ? 'Wichtige Funktionen' : 'Essential Functions'}
+            </div>
+            <div style="display:grid; gap:10px;">
+                ${rows.map(([title, desc]) => `
+                    <div style="border:1px solid #444; border-radius:8px; padding:10px; background:#161616;">
+                        <div style="font-size:0.95rem; color:#d4af37; margin-bottom:3px;">${title}</div>
+                        <div style="font-size:0.82rem; color:#bda66a;">${desc}</div>
+                    </div>
+                `).join('')}
+            </div>
+
+            <div style="margin-top:14px; padding-top:10px; border-top:1px solid #333;">
+                <div style="font-size:0.95rem; color:#d4af37; margin-bottom:6px;">
+                    ${isDe ? 'Hinweise' : 'Notes'}
+                </div>
+                <ul style="margin:0; padding-left:20px; color:#bda66a; font-size:0.8rem; line-height:1.4;">
+                    ${tips.map((tip) => `<li>${tip}</li>`).join('')}
+                </ul>
+            </div>
+        </div>
+    `;
+}
+
 const PREVIEW_DEBOUNCE_MS = 400;
 let previewDebounceTimer = null;
 let previewPendingFile = "";
@@ -858,32 +922,6 @@ function renderAdvanced() {
                 </div>
             </div>
 
-            <!-- WIFI PANEL -->
-              <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
-
-                        <div style="display:flex; flex-direction:column; gap:6px;">
-                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
-                            <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
-                        </div>
-            </div>
-
-            <!-- CONSOLE PANEL -->
-            <div class="crt-panel">
-                <div class="crt-screen">
-                    <div class="crt-text" id="crt-log">READY&gt;_</div>
-                </div>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; gap:10px;">
-                <div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:78px;">
-                    <label class="switch" title="${t('sd_log')}">
-                        <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
-                        <span class="slider"></span>
-                    </label>
-                    <span class="alarm-label" style="margin-left:0; text-align:center; line-height:1.1;">${t('sd_log_enabled')}</span>
-                </div>
-                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
-            </div>
             <!-- VOLUME PANEL -->
             <div style="background:#222; padding:10px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('volume')}</h4>
@@ -997,6 +1035,33 @@ function renderAdvanced() {
                            oninput="document.getElementById('night-base-vol-disp').innerText=this.value+'%'"
                            onchange="saveLampSettings({night_base_volume: parseInt(this.value)})" style="width:100%"/>
                 </div>
+            </div>
+
+            <!-- WIFI PANEL -->
+              <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
+                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
+
+                        <div style="display:flex; flex-direction:column; gap:6px;">
+                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
+                            <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
+                        </div>
+            </div>
+
+            <!-- CONSOLE PANEL -->
+            <div class="crt-panel">
+                <div class="crt-screen">
+                    <div class="crt-text" id="crt-log">READY&gt;_</div>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; gap:10px;">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:78px;">
+                    <label class="switch" title="${t('sd_log')}">
+                        <input type="checkbox" id="sd-log-enabled" ${sdLogEnabled ? 'checked' : ''} onchange="saveSdLogEnabled(this.checked)">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="alarm-label" style="margin-left:0; text-align:center; line-height:1.1;">${t('sd_log_enabled')}</span>
+                </div>
+                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
             </div>
 
             <!-- OTA PANEL -->
