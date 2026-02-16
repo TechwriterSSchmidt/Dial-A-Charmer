@@ -1570,12 +1570,23 @@ static int get_snooze_minutes() {
     return (int)val;
 }
 
+static void play_persona_with_padding(const std::string &file) {
+    if (file.empty()) return;
+    start_voice_queue({
+        "/sdcard/system/silence_300ms.wav",
+        file,
+        "/sdcard/system/silence_300ms.wav",
+    });
+}
+
 static void play_persona_with_hook_sfx(const std::string &file) {
     if (file.empty()) return;
     g_persona_playback_active = true;
     start_voice_queue({
-        "/sdcard/system/hook_pickup.wav", 
-        file 
+        "/sdcard/system/hook_pickup.wav",
+        "/sdcard/system/silence_300ms.wav",
+        file,
+        "/sdcard/system/silence_300ms.wav",
         // Hangup is handled by event loop logic after queue finishes
     });
 }
@@ -1793,7 +1804,7 @@ void on_hook_change(bool off_hook) {
                 std::string file = get_random_file(folder);
 
                 if (!file.empty()) {
-                    play_file(file.c_str());
+                    play_persona_with_padding(file);
                 }
             }
 
@@ -1821,7 +1832,7 @@ void on_hook_change(bool off_hook) {
                     std::string file = get_random_file(folder);
                     
                     if (!file.empty()) {
-                        play_file(file.c_str());
+                        play_persona_with_padding(file);
                     }
                 }
                 
