@@ -43,7 +43,6 @@ static const char *TAG = "DIAL_A_CHARMER_ESP";
 static const uint8_t kNightBaseVolumeDefault = 50;
 static const uint8_t kLedMinEffectivePercent = 8;
 static const char *kNvsKeyNightBaseVol = "night_base_vol";
-static const char *kNvsKeyNightBaseVolLegacy = "night_base_volume";
 
 // Global Objects
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
@@ -111,8 +110,6 @@ uint8_t g_night_prev_r = 50;
 uint8_t g_night_prev_g = 20;
 uint8_t g_night_prev_b = 0;
 bool g_led_booting = true;
-bool g_snooze_active = false;
-bool g_snooze_msg_active = false;
 bool g_sd_error = false;
 bool g_force_base_output = false;
 bool g_pending_handset_restore = false;
@@ -594,7 +591,7 @@ static LedState get_led_state() {
     if (g_led_booting) return LED_BOOTING;
     if (g_sd_error) return LED_ERROR;
     if (g_alarm_state.active) return (g_alarm_state.source == ALARM_DAILY) ? LED_ALARM : LED_TIMER;
-    if (g_snooze_active) return LED_SNOOZE;
+    if (g_snooze_state.active) return LED_SNOOZE;
     return LED_IDLE;
 }
 
@@ -782,44 +779,6 @@ static void load_night_mode_from_nvs() {
     } else {
         g_night_mode_end_ms = 0;
     }
-}
-
-static void migrate_night_base_volume_key_once() {
-    nvs_handle_t my_handle;
-    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) != ESP_OK) {
-        return;
-    }
-
-    uint8_t migrated_value = kNightBaseVolumeDefault;
-    if (nvs_get_u8(my_handle, kNvsKeyNightBaseVol, &migrated_value) == ESP_OK) {
-        nvs_close(my_handle);
-        return;
-    }
-
-    uint8_t legacy_value = kNightBaseVolumeDefault;
-    esp_err_t legacy_ret = nvs_get_u8(my_handle, kNvsKeyNightBaseVolLegacy, &legacy_value);
-    if (legacy_ret != ESP_OK) {
-        nvs_close(my_handle);
-        return;
-    }
-
-    esp_err_t set_ret = nvs_set_u8(my_handle, kNvsKeyNightBaseVol, legacy_value);
-    if (set_ret == ESP_OK) {
-        esp_err_t commit_ret = nvs_commit(my_handle);
-        if (commit_ret == ESP_OK) {
-            ESP_LOGI(TAG,
-                     "Migrated NVS key '%s' -> '%s' (value=%u)",
-                     kNvsKeyNightBaseVolLegacy,
-                     kNvsKeyNightBaseVol,
-                     (unsigned)legacy_value);
-        } else {
-            ESP_LOGW(TAG, "NVS commit failed while migrating '%s': %s", kNvsKeyNightBaseVol, esp_err_to_name(commit_ret));
-        }
-    } else {
-        ESP_LOGW(TAG, "NVS write failed while migrating '%s': %s", kNvsKeyNightBaseVol, esp_err_to_name(set_ret));
-    }
-
-    nvs_close(my_handle);
 }
 
 static void refresh_night_mode_from_schedule() {
@@ -1094,13 +1053,18 @@ static void log_snooze_state(const char *event) {
     int64_t now_ms = esp_timer_get_time() / 1000;
     int64_t remaining_ms = g_snooze_state.end_ms - now_ms;
     ESP_LOGI("SNOOZE_STATE",
-             "event=%s active=%d msg_active=%d legacy_active=%d legacy_msg=%d remaining_ms=%lld",
+             "event=%s active=%d msg_active=%d remaining_ms=%lld",
              event ? event : "unknown",
              g_snooze_state.active ? 1 : 0,
              g_snooze_state.msg_active ? 1 : 0,
-             g_snooze_active ? 1 : 0,
-             g_snooze_msg_active ? 1 : 0,
              remaining_ms);
+}
+
+static void clear_snooze_state(const char *event) {
+    g_snooze_state.active = false;
+    g_snooze_state.end_ms = 0;
+    g_snooze_state.msg_active = false;
+    log_snooze_state(event);
 }
 
 static void start_timer_minutes(int minutes) {
@@ -1349,10 +1313,7 @@ void update_audio_output() {
             if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = APP_DEFAULT_BASE_VOLUME;
         }
         nvs_get_u8(my_handle, "vol_alarm", &alarm_vol);
-        esp_err_t nv_ret = nvs_get_u8(my_handle, kNvsKeyNightBaseVol, &night_base_vol);
-        if (nv_ret != ESP_OK) {
-            nvs_get_u8(my_handle, kNvsKeyNightBaseVolLegacy, &night_base_vol);
-        }
+        nvs_get_u8(my_handle, kNvsKeyNightBaseVol, &night_base_vol);
         nvs_close(my_handle);
     }
 
@@ -1569,12 +1530,7 @@ void play_busy_tone() {
 void play_timer_alarm(AlarmSource source = ALARM_TIMER, int loop_minutes = APP_TIMER_ALARM_LOOP_MINUTES) {
     g_alarm_state.active = true;
     g_alarm_state.source = source;
-    g_snooze_active = false;
-    g_snooze_msg_active = false;
-    g_snooze_state.active = false;
-    g_snooze_state.end_ms = 0;
-    g_snooze_state.msg_active = false;
-    log_snooze_state("cleared_start_alarm");
+    clear_snooze_state("cleared_start_alarm");
     g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)loop_minutes * 60 * 1000;
     g_alarm_state.fade_active = false;
     g_alarm_state.fade_factor = 1.0f;
@@ -1734,7 +1690,7 @@ static void handle_extra_button_short_press() {
         if (g_alarm_state.source == ALARM_TIMER) {
             ESP_LOGI(TAG, "Timer expired -> deleted via Key 5");
             reset_alarm_state(false);
-            g_snooze_active = false;
+            clear_snooze_state("cleared_key5_timer_alarm");
             g_force_base_output = true;
             update_audio_output();
             play_file(system_path("timer_deleted").c_str());
@@ -1742,9 +1698,7 @@ static void handle_extra_button_short_press() {
         }
 
         ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
-        g_snooze_msg_active = g_alarm_state.msg_active;
         reset_alarm_state(true);
-        g_snooze_active = true;
 
         g_pending_handset_restore = true;
         g_pending_handset_state = g_output_mode_handset;
@@ -1758,7 +1712,7 @@ static void handle_extra_button_short_press() {
 
         g_snooze_state.active = true;
         g_snooze_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)snooze * 60 * 1000;
-        g_snooze_state.msg_active = g_snooze_msg_active;
+        g_snooze_state.msg_active = g_alarm_state.msg_active;
         log_snooze_state("set_key5");
         log_timer_state("snooze_started_timer_unchanged");
     }
@@ -1814,18 +1768,13 @@ void on_hook_change(bool off_hook) {
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
 
-        if (g_snooze_state.active || g_snooze_active) {
-            bool play_random_msg = g_snooze_state.msg_active || g_snooze_msg_active;
+        if (g_snooze_state.active) {
+            bool play_random_msg = g_snooze_state.msg_active;
 
             ESP_LOGI(TAG, "Snooze + alarm cleared via pickup");
             TimeManager::stopAlarm();
             reset_alarm_state(true);
-            g_snooze_active = false;
-            g_snooze_msg_active = false;
-            g_snooze_state.active = false;
-            g_snooze_state.end_ms = 0;
-            g_snooze_state.msg_active = false;
-            log_snooze_state("cleared_pickup_snooze");
+            clear_snooze_state("cleared_pickup_snooze");
 
             g_force_base_output = false;
             update_audio_output();
@@ -1848,12 +1797,7 @@ void on_hook_change(bool off_hook) {
             if (g_alarm_state.source == ALARM_TIMER) {
                 ESP_LOGI(TAG, "Timer expired -> deleted via pickup");
                 reset_alarm_state(false);
-                g_snooze_active = false;
-                g_snooze_msg_active = false;
-                g_snooze_state.active = false;
-                g_snooze_state.end_ms = 0;
-                g_snooze_state.msg_active = false;
-                log_snooze_state("cleared_pickup_timer_alarm");
+                clear_snooze_state("cleared_pickup_timer_alarm");
                 g_force_base_output = true;
                 update_audio_output();
                 play_file(system_path("timer_deleted").c_str());
@@ -1861,12 +1805,7 @@ void on_hook_change(bool off_hook) {
             } else {
                 bool play_random_msg = g_alarm_state.msg_active;
                 reset_alarm_state(true);
-                g_snooze_active = false;
-                g_snooze_msg_active = false;
-                g_snooze_state.active = false;
-                g_snooze_state.end_ms = 0;
-                g_snooze_state.msg_active = false;
-                log_snooze_state("cleared_pickup_daily_alarm");
+                clear_snooze_state("cleared_pickup_daily_alarm");
                 g_force_base_output = false;
                 update_audio_output(); 
                 
@@ -2043,7 +1982,6 @@ extern "C" void app_main(void)
 #endif
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
 
-    migrate_night_base_volume_key_once();
     load_night_mode_from_nvs();
 
     g_audio_mutex = xSemaphoreCreateMutex();
@@ -2328,12 +2266,7 @@ extern "C" void app_main(void)
              if (!g_alarm_state.active) {
                  g_alarm_state.active = true;
                  g_alarm_state.source = ALARM_DAILY;
-                 g_snooze_active = false;
-                 g_snooze_msg_active = false;
-                 g_snooze_state.active = false;
-                 g_snooze_state.end_ms = 0;
-                 g_snooze_state.msg_active = false;
-                 log_snooze_state("cleared_daily_alarm_trigger");
+                 clear_snooze_state("cleared_daily_alarm_trigger");
                  g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  g_alarm_state.retry_last_ms = 0;
                  
@@ -2419,7 +2352,7 @@ extern "C" void app_main(void)
                             ESP_LOGI(TAG, "Timer set: %d minutes", minutes);
                             // Reset alarm file to default for kitchen timer
                             g_alarm_state.current_file = get_timer_ringtone_path();
-                            g_snooze_active = false;
+                            clear_snooze_state("cleared_dial_timer_set");
 
                             start_timer_minutes(minutes);
                             g_timer_state.announce_minutes = minutes;
@@ -2506,12 +2439,7 @@ extern "C" void app_main(void)
                 bool snooze_msg_active = g_snooze_state.msg_active;
                 ESP_LOGI(TAG, "Snooze expired -> resuming daily alarm behavior");
                 log_snooze_state("expired");
-                g_snooze_state.active = false;
-                g_snooze_state.end_ms = 0;
-                g_snooze_state.msg_active = false;
-                g_snooze_active = false;
-                g_snooze_msg_active = false;
-                log_snooze_state("cleared_after_expire");
+                clear_snooze_state("cleared_after_expire");
                 play_timer_alarm(ALARM_DAILY, APP_DAILY_ALARM_LOOP_MINUTES);
                 g_alarm_state.msg_active = snooze_msg_active;
             }

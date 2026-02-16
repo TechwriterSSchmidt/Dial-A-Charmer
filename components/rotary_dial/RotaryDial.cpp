@@ -310,5 +310,5 @@ void RotaryDial::onDialComplete(dial_callback_t callback) { _dial_callback = cal
 void RotaryDial::onHookChange(hook_callback_t callback) { _hook_callback = callback; }
 void RotaryDial::onButtonPress(button_callback_t callback) { _btn_callback = callback; }
 bool RotaryDial::isOffHook() { return _off_hook; }
-bool RotaryDial::isButtonDown() { return _btn_state; } // TODO: Implement button logic in loop
+bool RotaryDial::isButtonDown() { return _btn_state; }
 bool RotaryDial::isDialing() const { return _dialing; }
