@@ -42,6 +42,8 @@
 static const char *TAG = "DIAL_A_CHARMER_ESP";
 static const uint8_t kNightBaseVolumeDefault = 50;
 static const uint8_t kLedMinEffectivePercent = 8;
+static const char *kNvsKeyNightBaseVol = "night_base_vol";
+static const char *kNvsKeyNightBaseVolLegacy = "night_base_volume";
 
 // Global Objects
 RotaryDial dial(APP_PIN_DIAL_PULSE, APP_PIN_HOOK, APP_PIN_EXTRA_BTN, APP_PIN_DIAL_MODE);
@@ -472,6 +474,54 @@ enum LedState {
     LED_ERROR,
 };
 
+static constexpr int kAudioFallbackSampleRate = 44100;
+static constexpr int kAudioFallbackBits = 16;
+static constexpr int kAudioFallbackOutChannels = 2;
+
+static inline int sanitize_sample_rate(int sample_rate) {
+    if (sample_rate < 8000 || sample_rate > 96000) {
+        return kAudioFallbackSampleRate;
+    }
+    return sample_rate;
+}
+
+static inline int sanitize_bits_per_sample(int bits) {
+    if (bits != 16) {
+        return kAudioFallbackBits;
+    }
+    return bits;
+}
+
+static inline int sanitize_out_channels(int channels) {
+    if (channels <= 1) {
+        return kAudioFallbackOutChannels;
+    }
+    if (channels > 2) {
+        return 2;
+    }
+    return channels;
+}
+
+static bool apply_i2s_clock(int sample_rate, int bits, int out_channels, const char *reason) {
+    if (!i2s_writer) {
+        return false;
+    }
+
+    esp_err_t clk_ret = i2s_stream_set_clk(i2s_writer, sample_rate, bits, out_channels);
+    if (clk_ret != ESP_OK) {
+        ESP_LOGW(TAG,
+                 "i2s_stream_set_clk failed (%s): rate=%d bits=%d out_ch=%d err=0x%x",
+                 reason ? reason : "unknown",
+                 sample_rate,
+                 bits,
+                 out_channels,
+                 (unsigned)clk_ret);
+        return false;
+    }
+
+    return true;
+}
+
 static void set_pa_enable(bool enable) {
 #if APP_PIN_PA_ENABLE >= 0
     static bool s_pa_enabled = false;
@@ -732,6 +782,44 @@ static void load_night_mode_from_nvs() {
     } else {
         g_night_mode_end_ms = 0;
     }
+}
+
+static void migrate_night_base_volume_key_once() {
+    nvs_handle_t my_handle;
+    if (nvs_open("dialcharm", NVS_READWRITE, &my_handle) != ESP_OK) {
+        return;
+    }
+
+    uint8_t migrated_value = kNightBaseVolumeDefault;
+    if (nvs_get_u8(my_handle, kNvsKeyNightBaseVol, &migrated_value) == ESP_OK) {
+        nvs_close(my_handle);
+        return;
+    }
+
+    uint8_t legacy_value = kNightBaseVolumeDefault;
+    esp_err_t legacy_ret = nvs_get_u8(my_handle, kNvsKeyNightBaseVolLegacy, &legacy_value);
+    if (legacy_ret != ESP_OK) {
+        nvs_close(my_handle);
+        return;
+    }
+
+    esp_err_t set_ret = nvs_set_u8(my_handle, kNvsKeyNightBaseVol, legacy_value);
+    if (set_ret == ESP_OK) {
+        esp_err_t commit_ret = nvs_commit(my_handle);
+        if (commit_ret == ESP_OK) {
+            ESP_LOGI(TAG,
+                     "Migrated NVS key '%s' -> '%s' (value=%u)",
+                     kNvsKeyNightBaseVolLegacy,
+                     kNvsKeyNightBaseVol,
+                     (unsigned)legacy_value);
+        } else {
+            ESP_LOGW(TAG, "NVS commit failed while migrating '%s': %s", kNvsKeyNightBaseVol, esp_err_to_name(commit_ret));
+        }
+    } else {
+        ESP_LOGW(TAG, "NVS write failed while migrating '%s': %s", kNvsKeyNightBaseVol, esp_err_to_name(set_ret));
+    }
+
+    nvs_close(my_handle);
 }
 
 static void refresh_night_mode_from_schedule() {
@@ -1261,7 +1349,10 @@ void update_audio_output() {
             if (nvs_get_u8(my_handle, "volume", &vol) != ESP_OK) vol = APP_DEFAULT_BASE_VOLUME;
         }
         nvs_get_u8(my_handle, "vol_alarm", &alarm_vol);
-        nvs_get_u8(my_handle, "night_base_volume", &night_base_vol);
+        esp_err_t nv_ret = nvs_get_u8(my_handle, kNvsKeyNightBaseVol, &night_base_vol);
+        if (nv_ret != ESP_OK) {
+            nvs_get_u8(my_handle, kNvsKeyNightBaseVolLegacy, &night_base_vol);
+        }
         nvs_close(my_handle);
     }
 
@@ -1409,6 +1500,11 @@ void play_file(const char* path) {
     // Force Output Selection immediately after run logic
     update_audio_output();
     ESP_LOGI(TAG, "Requesting playback: %s", path);
+
+    apply_i2s_clock(kAudioFallbackSampleRate,
+                    kAudioFallbackBits,
+                    kAudioFallbackOutChannels,
+                    "play_file_fallback");
 
     audio_element_set_uri(fatfs_stream, path);
     
@@ -1718,6 +1814,35 @@ void on_hook_change(bool off_hook) {
         g_persona_playback_active = false;
         g_any_digit_dialed = false;
 
+        if (g_snooze_state.active || g_snooze_active) {
+            bool play_random_msg = g_snooze_state.msg_active || g_snooze_msg_active;
+
+            ESP_LOGI(TAG, "Snooze + alarm cleared via pickup");
+            TimeManager::stopAlarm();
+            reset_alarm_state(true);
+            g_snooze_active = false;
+            g_snooze_msg_active = false;
+            g_snooze_state.active = false;
+            g_snooze_state.end_ms = 0;
+            g_snooze_state.msg_active = false;
+            log_snooze_state("cleared_pickup_snooze");
+
+            g_force_base_output = false;
+            update_audio_output();
+
+            if (play_random_msg) {
+                int persona = (esp_random() % 5) + 1;
+                std::string folder = "/sdcard/persona_0" + std::to_string(persona) + "/" + lang_code();
+                std::string file = get_random_file(folder);
+
+                if (!file.empty()) {
+                    play_file(file.c_str());
+                }
+            }
+
+            skip_dialtone = true;
+        }
+
         if (g_alarm_state.active) {
             TimeManager::stopAlarm();
             if (g_alarm_state.source == ALARM_TIMER) {
@@ -1918,6 +2043,7 @@ extern "C" void app_main(void)
 #endif
     ESP_LOGI(TAG, "Initializing Dial-A-Charmer (ESP-ADF version)...");
 
+    migrate_night_base_volume_key_once();
     load_night_mode_from_nvs();
 
     g_audio_mutex = xSemaphoreCreateMutex();
@@ -2444,14 +2570,35 @@ extern "C" void app_main(void)
                 audio_element_getinfo(wav_decoder, &music_info);
                 // Propagate decoder info to gain element (so it knows input channels)
                 audio_element_setinfo(gain_element, &music_info);
-                int out_channels = (music_info.channels == 1) ? 2 : music_info.channels;
+                int out_channels_raw = (music_info.channels == 1) ? 2 : music_info.channels;
+                int sample_rate = sanitize_sample_rate(music_info.sample_rates);
+                int bits = sanitize_bits_per_sample(music_info.bits);
+                int out_channels = sanitize_out_channels(out_channels_raw);
+
+                if (sample_rate != music_info.sample_rates ||
+                    bits != music_info.bits ||
+                    out_channels != out_channels_raw) {
+                    ESP_LOGW(TAG,
+                             "WAV info sanitized: rate=%d->%d ch=%d->%d bits=%d->%d",
+                             music_info.sample_rates,
+                             sample_rate,
+                             out_channels_raw,
+                             out_channels,
+                             music_info.bits,
+                             bits);
+                }
                 
                 ESP_LOGI(TAG, "WAV info: rate=%d, ch=%d, bits=%d (out_ch=%d)", 
-                    music_info.sample_rates, music_info.channels, music_info.bits, out_channels);
-                i2s_stream_set_clk(i2s_writer, music_info.sample_rates, music_info.bits, out_channels);
+                    sample_rate, music_info.channels, bits, out_channels);
+                if (!apply_i2s_clock(sample_rate, bits, out_channels, "wav_music_info")) {
+                    apply_i2s_clock(kAudioFallbackSampleRate,
+                                    kAudioFallbackBits,
+                                    kAudioFallbackOutChannels,
+                                    "wav_music_info_fallback");
+                }
 #if APP_AUDIO_DIAG_LOG
-                audio_diag_mark_music_info(music_info.sample_rates,
-                                           music_info.bits,
+                audio_diag_mark_music_info(sample_rate,
+                                           bits,
                                            music_info.channels,
                                            out_channels);
 #endif

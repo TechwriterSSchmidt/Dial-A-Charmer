@@ -239,6 +239,8 @@ static void set_runtime_logging_enabled(bool enabled) {
 
 static const size_t OTA_PASSWORD_MAX = 64;
 static const char *WIFI_PASS_SALT = "Dial-A-Charmer::wifi_pass::v1";
+static const char *NVS_KEY_NIGHT_BASE_VOL = "night_base_vol";
+static const char *NVS_KEY_NIGHT_BASE_VOL_LEGACY = "night_base_volume";
 
 static void ota_reboot_task(void *pvParameters) {
     (void)pvParameters;
@@ -961,7 +963,12 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
 
     // Night mode base speaker volume
     uint8_t night_base_vol = 50;
-    if (err == ESP_OK) nvs_get_u8(my_handle, "night_base_volume", &night_base_vol);
+    if (err == ESP_OK) {
+        esp_err_t nv_ret = nvs_get_u8(my_handle, NVS_KEY_NIGHT_BASE_VOL, &night_base_vol);
+        if (nv_ret != ESP_OK) {
+            nvs_get_u8(my_handle, NVS_KEY_NIGHT_BASE_VOL_LEGACY, &night_base_vol);
+        }
+    }
     cJSON_AddNumberToObject(root, "night_base_volume", night_base_vol);
 
     // Snooze Time
@@ -1145,7 +1152,7 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
             int v = item->valueint;
             if (v < 0) v = 0;
             if (v > 100) v = 100;
-            mark_nvs_write(nvs_set_u8(my_handle, "night_base_volume", (uint8_t)v), "night_base_volume");
+            mark_nvs_write(nvs_set_u8(my_handle, NVS_KEY_NIGHT_BASE_VOL, (uint8_t)v), NVS_KEY_NIGHT_BASE_VOL);
         }
 
         item = cJSON_GetObjectItem(root, "snooze_min");
@@ -1451,8 +1458,8 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         mime_type = "application/font-otf";
         is_font = true;
     } else if (strcmp(file_path, "/favicon.ico") == 0) {
-
-        httpd_resp_send_404(req);
+        httpd_resp_set_status(req, "204 No Content");
+        httpd_resp_send(req, NULL, 0);
         return ESP_OK;
     } else if (strcmp(file_path, "/hotspot-detect.html") == 0 || 
                strcmp(file_path, "/generate_204") == 0 || 

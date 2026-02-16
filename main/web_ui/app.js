@@ -275,7 +275,9 @@ function requestOtaPassword() {
 
         const cancelBtn = document.createElement('button');
         cancelBtn.textContent = t('cancel');
-        cancelBtn.style.background = '#444';
+        cancelBtn.style.background = '#8B0000';
+        cancelBtn.style.borderColor = '#8B0000';
+        cancelBtn.style.color = '#f0e6d2';
         cancelBtn.style.fontSize = otaPopupFontSize;
         cancelBtn.style.padding = '8px 14px';
 
@@ -517,8 +519,8 @@ function renderHome() {
 }
 
 function renderBtn(label, href) {
-    const style = "background-color:#db1515; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #b72525; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
-    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#e03a3a'; this.style.borderColor='#c43131'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#d12c2c'; this.style.borderColor='#b72525'; this.style.color='#f0e6d2'">${label}</button>`;
+    const style = "background-color:#8B0000; color:#f0e6d2; width:100%; border-radius:8px; padding:18px; font-size:1.5rem; margin-bottom:15px; border:1px solid #8B0000; cursor:pointer; text-transform:uppercase; letter-spacing:2px; font-family: 'Plaisir', serif, sans-serif; transition: all 0.2s;";
+    return `<button onclick="nav('${href}')" style="${style}" onmouseover="this.style.backgroundColor='#8B0000'; this.style.borderColor='#8B0000'; this.style.color='#fff'" onmouseout="this.style.backgroundColor='#8B0000'; this.style.borderColor='#8B0000'; this.style.color='#f0e6d2'">${label}</button>`;
 }
 
 function renderFooter(activePage) {
@@ -1211,7 +1213,7 @@ function renderSetup() {
             <input type="password" id="wifi-pass" placeholder="${t('password')}" style="width:100%; padding:10px; margin:10px 0; color:black;">
             <br>
             <button onclick="connectWifi()" style="padding:10px 20px;">${t('connect')}</button>
-            <button onclick="state.selectedWifi=null; render()" style="padding:10px 20px; background:#444;">${t('cancel')}</button>
+            <button onclick="state.selectedWifi=null; render()" style="padding:10px 20px; background:#8B0000; border-color:#8B0000; color:#f0e6d2;">${t('cancel')}</button>
         `;
     }
 

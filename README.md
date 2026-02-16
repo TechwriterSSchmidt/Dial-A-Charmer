@@ -144,6 +144,31 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 └── time/                      (Time announcements, DE/EN)
 ```
 
+### WAV Format Requirements
+
+To avoid noise, distorted playback, or wrong playback speed, all WAV files should use:
+
+* **Codec:** PCM (`pcm_s16le`)
+* **Sample rate:** `44100 Hz`
+* **Bit depth:** `16-bit`
+* **Channels:** Mono (`1`) or Stereo (`2`)
+
+Check one file:
+
+* `ffprobe -v error -select_streams a:0 -show_entries stream=codec_name,sample_rate,bits_per_sample,channels -of default=nw=1:nk=1 input.wav`
+
+Convert one file (Linux/macOS/Windows with ffmpeg in PATH):
+
+* `ffmpeg -y -i input.wav -ar 44100 -acodec pcm_s16le output.wav`
+
+Batch convert all WAV files in a folder tree (Linux/macOS, in-place):
+
+* `find sd_card_content -type f -name '*.wav' -print0 | while IFS= read -r -d '' f; do tmp="${f%.wav}.norm.wav"; ffmpeg -y -v error -i "$f" -ar 44100 -acodec pcm_s16le "$tmp" && mv "$tmp" "$f"; done`
+
+Batch convert all WAV files in a folder tree (Windows PowerShell, in-place):
+
+* `Get-ChildItem -Path .\sd_card_content -Recurse -Filter *.wav | ForEach-Object { $in=$_.FullName; $tmp=[System.IO.Path]::ChangeExtension($in,'.norm.wav'); ffmpeg -y -v error -i "$in" -ar 44100 -acodec pcm_s16le "$tmp"; Move-Item -Force "$tmp" "$in" }`
+
 ### Audio Utilities (`utils/`)
 
 **`generate_sd_content.py`** (Recommended)
@@ -163,6 +188,14 @@ This tool splits large, long audio files (e.g. combined recordings) into individ
 
 * **Usage:** `python utils/split_audio.py -o my_output_folder (input_files)`
 * **Function:** Detects silence gaps >1000ms and chops the file. Resulting files (`001.mp3`, `002.mp3`...) are ready for `persona_XX` folders.
+
+**`normalize_wav.py`**
+Normalizes WAV files in-place to the required playback format.
+
+* **Usage (full SD content):** `python utils/normalize_wav.py`
+* **Usage (specific folder):** `python utils/normalize_wav.py sd_card_content/ringtones`
+* **Dry run:** `python utils/normalize_wav.py --dry-run`
+* **Target format:** `44100 Hz`, `16-bit PCM (pcm_s16le)`, mono or stereo
 
 ## Status Indication
 
