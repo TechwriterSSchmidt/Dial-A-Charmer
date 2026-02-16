@@ -1067,6 +1067,24 @@ static void clear_snooze_state(const char *event) {
     log_snooze_state(event);
 }
 
+static void force_base_output_with_pending_restore(bool force_handset_off) {
+    g_pending_handset_restore = true;
+    g_pending_handset_state = g_output_mode_handset;
+    if (force_handset_off) {
+        g_output_mode_handset = false;
+    }
+    g_force_base_output = true;
+    update_audio_output();
+}
+
+static void dismiss_timer_alarm_with_feedback(const char *event) {
+    reset_alarm_state(false);
+    clear_snooze_state(event);
+    g_force_base_output = true;
+    update_audio_output();
+    play_file(system_path("timer_deleted").c_str());
+}
+
 static void start_timer_minutes(int minutes) {
     // Override any existing timer or pending timer announcements
     g_timer_state.active = true;
@@ -1091,11 +1109,7 @@ static bool cancel_timer_with_feedback(const char *reason) {
     log_timer_state("cancel");
 
     stop_playback();
-    g_pending_handset_restore = true;
-    g_pending_handset_state = g_output_mode_handset;
-    g_output_mode_handset = false;
-    g_force_base_output = true;
-    update_audio_output();
+    force_base_output_with_pending_restore(true);
     play_file(system_path("timer_deleted").c_str());
     return true;
 }
@@ -1689,21 +1703,15 @@ static void handle_extra_button_short_press() {
 
         if (g_alarm_state.source == ALARM_TIMER) {
             ESP_LOGI(TAG, "Timer expired -> deleted via Key 5");
-            reset_alarm_state(false);
-            clear_snooze_state("cleared_key5_timer_alarm");
-            g_force_base_output = true;
-            update_audio_output();
-            play_file(system_path("timer_deleted").c_str());
+            dismiss_timer_alarm_with_feedback("cleared_key5_timer_alarm");
             return;
         }
 
         ESP_LOGI(TAG, "Snoozing Alarm via Key 5");
+        bool alarm_msg_active = g_alarm_state.msg_active;
         reset_alarm_state(true);
 
-        g_pending_handset_restore = true;
-        g_pending_handset_state = g_output_mode_handset;
-        g_force_base_output = true;
-        update_audio_output(); // Force Base Speaker for snooze prompt
+        force_base_output_with_pending_restore(false); // Force Base Speaker for snooze prompt
 
         play_file(system_path("snooze_active").c_str());
 
@@ -1712,7 +1720,7 @@ static void handle_extra_button_short_press() {
 
         g_snooze_state.active = true;
         g_snooze_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)snooze * 60 * 1000;
-        g_snooze_state.msg_active = g_alarm_state.msg_active;
+        g_snooze_state.msg_active = alarm_msg_active;
         log_snooze_state("set_key5");
         log_timer_state("snooze_started_timer_unchanged");
     }
@@ -1796,11 +1804,7 @@ void on_hook_change(bool off_hook) {
             TimeManager::stopAlarm();
             if (g_alarm_state.source == ALARM_TIMER) {
                 ESP_LOGI(TAG, "Timer expired -> deleted via pickup");
-                reset_alarm_state(false);
-                clear_snooze_state("cleared_pickup_timer_alarm");
-                g_force_base_output = true;
-                update_audio_output();
-                play_file(system_path("timer_deleted").c_str());
+                dismiss_timer_alarm_with_feedback("cleared_pickup_timer_alarm");
                 skip_dialtone = true;
             } else {
                 bool play_random_msg = g_alarm_state.msg_active;
@@ -2361,12 +2365,7 @@ extern "C" void app_main(void)
                             log_timer_state("set_dial_announce_pending");
 
                             // Force Base Speaker for announcement
-                            g_pending_handset_restore = true;
-                            // Dial flow uses off-hook state as handset intent.
-                            // Restore target is captured before forced base output.
-                            g_pending_handset_state = g_output_mode_handset;
-                            g_force_base_output = true;
-                            update_audio_output();
+                            force_base_output_with_pending_restore(false);
 
                             play_file(system_path("timer_set").c_str());
                         } else {
