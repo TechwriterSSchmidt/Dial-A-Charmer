@@ -66,6 +66,9 @@ static esp_event_handler_instance_t s_wifi_event_instance = NULL;
 static esp_event_handler_instance_t s_ip_event_instance = NULL;
 static int s_wifi_retry_count = 0;
 static bool s_ap_mode_active = false;
+static portMUX_TYPE s_preview_mux = portMUX_INITIALIZER_UNLOCKED;
+static int64_t s_last_preview_ms = 0;
+static char s_last_preview_file[128] = "";
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data) {
@@ -662,6 +665,36 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
                 
                 char filepath[128];
                 snprintf(filepath, sizeof(filepath), "/sdcard/ringtones/%s", param);
+
+                int64_t now_ms = esp_timer_get_time() / 1000;
+                bool suppress = false;
+                bool same_file = false;
+                int64_t delta_ms = 0;
+
+                portENTER_CRITICAL(&s_preview_mux);
+                delta_ms = (s_last_preview_ms > 0) ? (now_ms - s_last_preview_ms) : INT64_MAX;
+                same_file = (strncmp(s_last_preview_file, filepath, sizeof(s_last_preview_file) - 1) == 0);
+
+                if (delta_ms >= 0 && delta_ms < 300) {
+                    suppress = true;
+                }
+                if (same_file && delta_ms >= 0 && delta_ms < 1200) {
+                    suppress = true;
+                }
+
+                if (!suppress) {
+                    s_last_preview_ms = now_ms;
+                    strncpy(s_last_preview_file, filepath, sizeof(s_last_preview_file) - 1);
+                    s_last_preview_file[sizeof(s_last_preview_file) - 1] = '\0';
+                }
+                portEXIT_CRITICAL(&s_preview_mux);
+
+                if (suppress) {
+                    ESP_LOGI(TAG, "Preview request suppressed (debounce, dt=%lldms, same=%d): %s",
+                             (long long)delta_ms, same_file ? 1 : 0, filepath);
+                    httpd_resp_send(req, "OK", 2);
+                    return ESP_OK;
+                }
                 
                 ESP_LOGI(TAG, "Preview request: %s", filepath);
                 
