@@ -114,8 +114,6 @@ bool g_sd_error = false;
 bool g_force_base_output = false;
 bool g_pending_handset_restore = false;
 bool g_pending_handset_state = false;
-bool g_reboot_pending = false;
-int64_t g_reboot_request_time = 0;
 bool g_extra_btn_active = false;
 bool g_extra_btn_long_handled = false;
 int64_t g_extra_btn_press_start_ms = 0;
@@ -914,7 +912,6 @@ static void handle_voice_menu_digit(int digit) {
         files.push_back(system_path("pb_random_mix_opt"));
         files.push_back(system_path("pb_time_opt"));
         files.push_back(system_path("pb_menu_opt"));
-        files.push_back(system_path("pb_reboot_opt"));
         start_voice_queue(files);
     } else if (digit == 4) {
         std::vector<std::string> files;
@@ -1619,12 +1616,6 @@ void process_phonebook_function(PhonebookEntry entry) {
         }
         else if (entry.value == "ANNOUNCE_TIMER_REMAINING") {
             announce_timer_remaining();
-        }
-        else if (entry.value == "REBOOT") {
-             ESP_LOGW(TAG, "Reboot requested. Playing ack...");
-             play_file("/sdcard/system/pb_reboot_en.wav");
-             g_reboot_pending = true;
-             g_reboot_request_time = esp_timer_get_time() / 1000;
         }
         else if (entry.value == "VOICE_MENU") {
             g_voice_menu_active = true;
@@ -2348,9 +2339,7 @@ extern "C" void app_main(void)
                 
                 // Voice menu (single digit)
                 if (g_voice_menu_active && g_off_hook) {
-                    if (dial_buffer == APP_PB_NUM_REBOOT && phonebook.hasEntry(APP_PB_NUM_REBOOT)) {
-                        process_phonebook_function(phonebook.getEntry(APP_PB_NUM_REBOOT));
-                    } else if (dial_buffer.size() == 1) {
+                    if (dial_buffer.size() == 1) {
                         int digit = dial_buffer[0] - '0';
                         handle_voice_menu_digit(digit);
                     } else {
@@ -2359,9 +2348,7 @@ extern "C" void app_main(void)
                 }
                 // On-hook -> Timer mode (1-3 digits, up to 500 minutes)
                 else if (!g_off_hook) {
-                    if (dial_buffer == APP_PB_NUM_REBOOT && phonebook.hasEntry(APP_PB_NUM_REBOOT)) {
-                        process_phonebook_function(phonebook.getEntry(APP_PB_NUM_REBOOT));
-                    } else if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
+                    if (dial_buffer.size() >= 1 && dial_buffer.size() <= 3) {
                         int minutes = atoi(dial_buffer.c_str());
                         if (minutes >= APP_TIMER_MIN_MINUTES && minutes <= APP_TIMER_MAX_MINUTES) {
                             ESP_LOGI(TAG, "Timer set: %d minutes", minutes);
@@ -2489,16 +2476,6 @@ extern "C" void app_main(void)
 
         if (ret != ESP_OK) {
             continue;
-        }
-        
-        // Handle Reboot Sequence (Allow pipeline to drain)
-        if (g_reboot_pending) {
-            int64_t now_ms = esp_timer_get_time() / 1000;
-            // Reboot if not playing OR timeout (5s)
-            if (!is_playing || (now_ms - g_reboot_request_time) > 5000) {
-                 ESP_LOGW(TAG, "PERFORMING SYSTEM REBOOT NOW");
-                 safe_reboot();
-            }
         }
 
         if (msg.source_type == AUDIO_ELEMENT_TYPE_ELEMENT) {

@@ -37,7 +37,7 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Timer Remaining** | **Receiver Lifted** → Dial `8` | Announces the remaining kitchen-timer time in minutes. |
 | **Random Mix** | **Receiver Lifted** → Dial `11` | Plays a randomized mix from all Persona tracks. |
 | **Voice Menu** | **Receiver Lifted** → Dial `0` | Plays spoken instructions for system codes. |
-| **Voice Menu Options** | **While menu speaks** → Dial `1`-`4`, or `999` | Executes menu action immediately (Next Alarm, Night Mode, Phonebook, System Status, Reboot). |
+| **Voice Menu Options** | **While menu speaks** → Dial `1`-`4` | Executes menu action immediately (Next Alarm, Night Mode, Phonebook, System Status). |
 | **Stop Ringing** | **Ringing** → Lift Receiver | Stops the alarm or timer alert. |
 | **Snooze** | **Ringing** → Press Extra Button | Snoozes the daily alarm for the configured duration (set in Web UI), keeps an active kitchen timer untouched, and activates a slow breathing Signallampe effect. |
 | **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
@@ -66,7 +66,6 @@ The phonebook ships with default numbers. You can edit these entries in the Web 
 | `11` | Random Mix (Surprise) | Play a randomized mix |
 | `110` | Zeitauskunft | Announce time (local) |
 | `0` | Voice Admin Menu | Play spoken admin menu |
-| `999` | System Reboot | Reboot device |
 
 Voice Menu actions (dial while the menu speaks):
 
@@ -74,7 +73,6 @@ Voice Menu actions (dial while the menu speaks):
 * `2` Night mode toggle
 * `3` Phonebook options (reads numbers)
 * `4` System status (WiFi, IP, NTP, SD)
-* `999` System reboot
 
 ## Hardware Support & Pinout
 

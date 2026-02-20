@@ -33,7 +33,7 @@
 
 6. **Voice Menu & Admin:**
    - **Dial 0:** System Menu Instructions.
-   - **While the menu speaks:** Dial `1`-`4`, or `999` for quick actions.
+   - **While the menu speaks:** Dial `1`-`4` for quick actions.
 
 ## 📂 Content Management (SD Card)
 

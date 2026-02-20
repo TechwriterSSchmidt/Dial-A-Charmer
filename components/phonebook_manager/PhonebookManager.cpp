@@ -102,7 +102,6 @@ void PhonebookManager::begin() {
     
     // Admin
     ensure(APP_PB_NUM_VOICE_MENU, lang_en ? "Voice Admin Menu" : "Sprachmenü", "FUNCTION", "VOICE_MENU");
-    ensure(APP_PB_NUM_REBOOT, lang_en ? "System Reboot" : "System Neustart", "FUNCTION", "REBOOT");
 }
 
 void PhonebookManager::load() {

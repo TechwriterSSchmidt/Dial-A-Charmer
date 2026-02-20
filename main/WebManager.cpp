@@ -833,13 +833,6 @@ static esp_err_t api_time_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
-static esp_err_t api_reboot_handler(httpd_req_t *req) {
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, "{\"ok\":true,\"rebooting\":true}", HTTPD_RESP_USE_STRLEN);
-    xTaskCreate(ota_reboot_task, "reboot_task", 2048, NULL, 5, NULL);
-    return ESP_OK;
-}
-
 static esp_err_t api_ota_handler(httpd_req_t *req) {
     if (!ota_password_matches(req)) {
         httpd_resp_set_status(req, "403 Forbidden");
@@ -1804,14 +1797,6 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &time_uri);
-
-        httpd_uri_t reboot_uri = {
-            .uri       = "/api/reboot",
-            .method    = HTTP_POST,
-            .handler   = api_reboot_handler,
-            .user_ctx  = NULL
-        };
-        httpd_register_uri_handler(server, &reboot_uri);
 
         httpd_uri_t ota_uri = {
             .uri       = "/api/ota",

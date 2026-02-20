@@ -125,7 +125,6 @@
 #define APP_PB_NUM_RANDOM_MIX "11"
 #define APP_PB_NUM_TIME "110"
 #define APP_PB_NUM_VOICE_MENU "0"
-#define APP_PB_NUM_REBOOT "999"
 
 
 // Debug / Monitor

@@ -86,9 +86,6 @@ const TEXT = {
         ota_status_uploading: "Upload läuft...",
         ota_status_done: "Update OK, Neustart...",
         ota_status_failed: "Update fehlgeschlagen",
-        reboot_title: "Neustart",
-        reboot_button: "Jetzt neu starten",
-        reboot_hint: "Das Gerät startet sofort neu.",
         last_reset: "Letzter Reset",
         reset_reason: "Grund",
         boot_count: "Boots"
@@ -160,9 +157,6 @@ const TEXT = {
         ota_status_uploading: "Uploading...",
         ota_status_done: "Update OK, rebooting...",
         ota_status_failed: "Update failed",
-        reboot_title: "Reboot",
-        reboot_button: "Reboot now",
-        reboot_hint: "Device will reboot immediately.",
         last_reset: "Last Reset",
         reset_reason: "Reason",
         boot_count: "Boots"
@@ -223,8 +217,7 @@ const API = {
             xhr.onerror = () => reject(new Error('OTA failed'));
             xhr.send(file);
         });
-    },
-    reboot: () => fetch('/api/reboot', { method: 'POST' })
+    }
 };
 
 function requestOtaPassword() {
@@ -579,8 +572,7 @@ function renderPhonebook() {
         { id: 'p6', type: 'FUNCTION', val: 'COMPLIMENT_MIX', param: '0', defName: 'Random Mix (Surprise)', defNum: '11' },
 
         { id: 'time', type: 'FUNCTION', val: 'ANNOUNCE_TIME', param: '', defName: isDe ? 'Zeitauskunft' : 'Time Announcement', defNum: '110' },
-        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '0' },
-        { id: 'reboot', type: 'FUNCTION', val: 'REBOOT', param: '', defName: isDe ? 'System Neustart' : 'System Reboot', defNum: '999' }
+        { id: 'menu', type: 'FUNCTION', val: 'VOICE_MENU', param: '', defName: isDe ? 'Sprachmenue' : 'Voice Admin Menu', defNum: '0' }
     ];
 
     let rows = "";
@@ -598,11 +590,9 @@ function renderPhonebook() {
             }
         }
 
-        const criticalClass = item.defNum === '999' ? 'pb-critical' : '';
-
         const displayKey = currentKey || item.defNum;
         rows += `
-            <tr class="${criticalClass}">
+            <tr>
                 <td class="pb-num-cell">
                     <div class="pb-num-text">${displayKey}</div>
                 </td>
@@ -1102,13 +1092,6 @@ function renderAdvanced() {
                 <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('ota_hint')}</div>
             </div>
 
-            <!-- REBOOT PANEL -->
-            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('reboot_title')}</h4>
-                <button onclick="requestReboot()" style="margin-top:10px; font-size:1.05rem;">${t('reboot_button')}</button>
-                <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('reboot_hint')}</div>
-            </div>
-
         </div>
     `;
 }
@@ -1183,10 +1166,6 @@ window.startOtaUpload = async () => {
     }).catch(() => {
         if (statusEl) statusEl.textContent = t('ota_status_failed');
     });
-};
-
-window.requestReboot = () => {
-    API.reboot().catch(() => {});
 };
 
 function renderSetup() {
