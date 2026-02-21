@@ -76,8 +76,9 @@
 #define APP_AUDIO_UNMUTE_ON_RESUME 1
 #define APP_AUDIO_UNMUTE_FALLBACK_MS 50
 
-// Extra button (Key 5) long-press handling
-#define APP_EXTRA_BTN_DEEPSLEEP_MS 10000
+// Extra button (Key 5) multi-click deep-sleep handling
+#define APP_EXTRA_BTN_SLEEP_CLICK_COUNT 5
+#define APP_EXTRA_BTN_MULTI_CLICK_WINDOW_MS 3000
 
 // Timer settings
 #define APP_TIMER_MIN_MINUTES 1
@@ -144,6 +145,10 @@
 // SD log capture (debug)
 #define APP_ENABLE_SD_LOG (APP_LOGGING_MASTER && 1)
 #define APP_SD_LOG_PATH "/sdcard/logs/app.log"
-#define APP_SD_LOG_MAX_BYTES (2 * 1024 * 1024)
+#define APP_SD_LOG_MAX_BYTES (10 * 1024 * 1024)
 #define APP_SD_LOG_FLUSH_INTERVAL_MS 5000
 #define APP_SD_LOG_BUFFER_LINES 120
+
+// mDNS resilience
+#define APP_MDNS_REANNOUNCE_INTERVAL_MS 90000
+#define APP_MDNS_REANNOUNCE_MIN_GAP_MS 15000

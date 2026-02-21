@@ -17,14 +17,14 @@
 
 3. **Announce Remaining Timer Time:**
    - Lift receiver and dial `8`.
-   - Announcement: **"Restzeit des Timers ... Minuten."**
+   - Announcement: **"Timer remaining ... minutes."**
    - If no timer is active, the system announces that no timer is active.
 
 4. **Stop / Snooze Alarm:**
    - **Stop:** Lift receiver and hang up again.
    - **Snooze:** Press the **Extra Button** (if installed).
    - **Important:** Snooze affects the daily alarm flow only; an active kitchen timer continues and is not deleted.
-   - **Signallampe:** Slow warm-white breathing while snooze is active.
+   - **Signal Lamp:** Slow warm-white breathing while snooze is active.
    - *Snooze duration is configurable in Web Interface (Default: 5 min, range: 1-60 min).*
 
 5. **If Timer and Daily Alarm Are Due Together:**
@@ -34,6 +34,12 @@
 6. **Voice Menu & Admin:**
    - **Dial 0:** System Menu Instructions.
    - **While the menu speaks:** Dial `1`-`4` for quick actions.
+
+7. **Deep Sleep (Battery Saving):**
+   - Keep receiver **ON** the hook (Idle state).
+   - Press the **Extra Button** **5 times within 3 seconds**.
+   - The signal lamp turns off before Deep Sleep to minimize power draw.
+   - Wakeup is configured on the Extra Button (active-low).
 
 ## 📂 Content Management (SD Card)
 
@@ -76,7 +82,7 @@ Connect to the WiFi Access Point named **Dial-A-Charmer** (No Password) or your 
 - **Ringtones**: Select and Preview from 5 distinct styles.
 - **Repeating Alarm**: Set a daily schedule (Time + Active Days) for your regular wake-up call.
 - **Snooze Duration**: Configurable 1-60 minutes (default 5).
-- **Signallampe (LED)**: On/Off, Day/Night brightness, and day/night start hours.
+- **Signal Lamp (LED)**: On/Off, Day/Night brightness, and day/night start hours.
 - **Night Base Volume**: Base-speaker volume used while night mode is active.
 
 **Night Mode Behavior:**

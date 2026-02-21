@@ -39,7 +39,8 @@ If you like this project, consider a tip. Your tip motivates me to continue deve
 | **Voice Menu** | **Receiver Lifted** → Dial `0` | Plays spoken instructions for system codes. |
 | **Voice Menu Options** | **While menu speaks** → Dial `1`-`4` | Executes menu action immediately (Next Alarm, Night Mode, Phonebook, System Status). |
 | **Stop Ringing** | **Ringing** → Lift Receiver | Stops the alarm or timer alert. |
-| **Snooze** | **Ringing** → Press Extra Button | Snoozes the daily alarm for the configured duration (set in Web UI), keeps an active kitchen timer untouched, and activates a slow breathing Signallampe effect. |
+| **Snooze** | **Ringing** → Press Extra Button | Snoozes the daily alarm for the configured duration (set in Web UI), keeps an active kitchen timer untouched, and activates a slow breathing signal lamp effect. |
+| **Deep Sleep** | **Idle (On Hook)** → Press Extra Button `5x` within `3s` | Plays sleep prompt, turns the signal lamp off to reduce power draw, then enters Deep Sleep. |
 | **Web Interface** | Browser: `dial-a-charmer.local` | Manage settings, phonebook entries, and recurring alarm schedules. |
 
 ### System Capabilities
@@ -62,9 +63,9 @@ The phonebook ships with default numbers. You can edit these entries in the Web 
 | `3` | Persona 3 | Play Persona 3 compliments |
 | `4` | Persona 4 | Play Persona 4 compliments |
 | `5` | Persona 5 | Play Persona 5 compliments |
-| `8` | Timer Restzeit | Announce remaining kitchen timer minutes |
+| `8` | Timer Remaining | Announce remaining kitchen timer minutes |
 | `11` | Random Mix (Surprise) | Play a randomized mix |
-| `110` | Zeitauskunft | Announce time (local) |
+| `110` | Time Announcement | Announce time (local) |
 | `0` | Voice Admin Menu | Play spoken admin menu |
 
 Voice Menu actions (dial while the menu speaks):
@@ -104,11 +105,11 @@ Once the device is connected to your WiFi network (or you are connected to its A
 
 👉 **[http://dial-a-charmer.local](http://dial-a-charmer.local)**
 
-(Requires a modern browser on Android, iOS, Windows, or macOS. If mDNS fails, use the IP announced via the Voice Menu: Dial `0`, then `4` for Systemstatus.)
+(Requires a modern browser on Android, iOS, Windows, or macOS. If mDNS fails, use the IP announced via the Voice Menu: Dial `0`, then `4` for system status.)
 
-### Signallampe Settings (Web UI)
+### Signal Lamp Settings (Web UI)
 
-The Configuration page includes a **Signallampe** card (below **Timer-Ton**) with:
+The Configuration page includes a **Signal Lamp** card (below **Timer Tone**) with:
 
 * LED enable/disable toggle
 * Day and Night brightness sliders (percent)
@@ -199,7 +200,7 @@ Normalizes WAV files in-place to the required playback format.
 
 Single WS2812B LED provides visual feedback depending on the system state.
 
-Brightness and schedule are configurable in the **Signallampe** card (Web UI).
+Brightness and schedule are configurable in the **Signal Lamp** card (Web UI).
 
 | State | Color/Effect | Meaning |
 | :--- | :--- | :--- |
@@ -260,6 +261,9 @@ You can enable buffered SD logging during testing (see `app_config.h`). Logs are
 
 Logging is buffered and flushed periodically to reduce interference with audio playback.
 
+To protect the SD card from uncontrolled growth, the main log file is capped at **10 MB**.
+When the limit is reached, `app.log` is rotated to `app.log.1` and a new `app.log` is started.
+
 Runtime state tags are available to diagnose alarm/timer interactions quickly:
 
 * `TIMER_STATE` (set/cancel/expired/cleared)
@@ -281,7 +285,7 @@ This project is licensed under the **PolyForm Noncommercial License 1.0.0**.
 <!-- markdownlint-disable-next-line MD033 -->
 <details>
 <!-- markdownlint-disable-next-line MD033 -->
-<summary>PolyForm Noncommercial License 1.0.0 (vollständiger Text)</summary>
+<summary>PolyForm Noncommercial License 1.0.0 (full text)</summary>
 
 ### PolyForm Noncommercial License 1.0.0
 

@@ -115,8 +115,10 @@ bool g_force_base_output = false;
 bool g_pending_handset_restore = false;
 bool g_pending_handset_state = false;
 bool g_extra_btn_active = false;
-bool g_extra_btn_long_handled = false;
-int64_t g_extra_btn_press_start_ms = 0;
+bool g_extra_btn_sleep_requested = false;
+uint8_t g_extra_btn_click_count = 0;
+int64_t g_extra_btn_click_window_start_ms = 0;
+bool g_led_force_off = false;
 // Alarm State
 int g_saved_volume = -1;
 
@@ -331,6 +333,7 @@ static void audio_lock();
 static void audio_unlock();
 static void handle_extra_button_short_press();
 static void enter_deep_sleep();
+static bool can_trigger_deep_sleep_via_button();
 static void add_number_audio(std::vector<std::string> &files, int value);
 static void log_timer_state(const char *event);
 
@@ -574,6 +577,10 @@ static void pipeline_stop_and_reset(bool reset_items_state, bool take_audio_lock
 }
 
 static void apply_led_color(uint8_t r, uint8_t g, uint8_t b) {
+    if (g_led_force_off) {
+        set_led_color(0, 0, 0);
+        return;
+    }
     if (!g_led_enabled) {
         set_led_color(0, 0, 0);
         return;
@@ -1689,8 +1696,36 @@ void on_dial_complete(int number) {
 void on_button_press() {
     ESP_LOGI(TAG, "--- EXTRA BUTTON (Key 5) PRESSED ---");
     g_extra_btn_active = true;
-    g_extra_btn_long_handled = false;
-    g_extra_btn_press_start_ms = esp_timer_get_time() / 1000;
+    int64_t now_ms = esp_timer_get_time() / 1000;
+
+    if (!can_trigger_deep_sleep_via_button()) {
+        g_extra_btn_click_count = 0;
+        g_extra_btn_click_window_start_ms = 0;
+        return;
+    }
+
+    if (g_extra_btn_click_window_start_ms == 0 ||
+        (now_ms - g_extra_btn_click_window_start_ms) > APP_EXTRA_BTN_MULTI_CLICK_WINDOW_MS) {
+        g_extra_btn_click_window_start_ms = now_ms;
+        g_extra_btn_click_count = 1;
+    } else {
+        g_extra_btn_click_count++;
+    }
+
+    ESP_LOGI(TAG,
+             "DeepSleep multi-click progress: %u/%u",
+             (unsigned)g_extra_btn_click_count,
+             (unsigned)APP_EXTRA_BTN_SLEEP_CLICK_COUNT);
+
+    if (g_extra_btn_click_count >= APP_EXTRA_BTN_SLEEP_CLICK_COUNT) {
+        g_extra_btn_click_count = 0;
+        g_extra_btn_click_window_start_ms = 0;
+        g_extra_btn_sleep_requested = true;
+    }
+}
+
+static bool can_trigger_deep_sleep_via_button() {
+    return (!g_off_hook && !g_alarm_state.active && !g_timer_state.active);
 }
 
 static void handle_extra_button_short_press() {
@@ -1729,12 +1764,22 @@ static void handle_extra_button_short_press() {
 }
 
 static void enter_deep_sleep() {
-    ESP_LOGI(TAG, "Entering deep sleep (Key 5 long press)");
+    ESP_LOGI(TAG, "Entering deep sleep (Key 5 multi-click)");
     play_file("/sdcard/system/system_sleep_en.wav");
     vTaskDelay(pdMS_TO_TICKS(3000));
     stop_playback();
     set_pa_enable(false);
+
+    g_led_force_off = true;
     set_led_color(0, 0, 0);
+
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    esp_err_t wake_cfg_err = esp_sleep_enable_ext0_wakeup((gpio_num_t)APP_PIN_EXTRA_BTN, 0);
+    if (wake_cfg_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to configure ext0 wakeup on GPIO %d: %s",
+                 APP_PIN_EXTRA_BTN,
+                 esp_err_to_name(wake_cfg_err));
+    }
     
     // Wait for button release before entering sleep
     ESP_LOGI(TAG, "Waiting for button release before sleep...");
@@ -1879,23 +1924,14 @@ void input_task(void *pvParameters) {
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
 
-        int64_t now_ms = esp_timer_get_time() / 1000;
+        if (g_extra_btn_sleep_requested) {
+            g_extra_btn_sleep_requested = false;
+            enter_deep_sleep();
+        }
+
         bool btn_down = dial.isButtonDown();
-        if (btn_down) {
-            if (!g_extra_btn_active) {
-                g_extra_btn_active = true;
-                g_extra_btn_long_handled = false;
-                g_extra_btn_press_start_ms = now_ms;
-            }
-            if (!g_extra_btn_long_handled &&
-                (now_ms - g_extra_btn_press_start_ms) >= APP_EXTRA_BTN_DEEPSLEEP_MS) {
-                g_extra_btn_long_handled = true;
-                enter_deep_sleep();
-            }
-        } else if (g_extra_btn_active) {
-            if (!g_extra_btn_long_handled) {
-                handle_extra_button_short_press();
-            }
+        if (!btn_down && g_extra_btn_active) {
+            handle_extra_button_short_press();
             g_extra_btn_active = false;
         }
 

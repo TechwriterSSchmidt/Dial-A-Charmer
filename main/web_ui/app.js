@@ -35,6 +35,7 @@ const TEXT = {
         snooze: "Schlummerzeit", // New
         alarm: "Wecker",
         datetime: "Datum & Zeit",
+        synchronized: "synchronisiert",
         timezone: "Zeitzone",
         tz_save: "Zone speichern",
         setup: "Einrichtung",
@@ -106,6 +107,7 @@ const TEXT = {
         snooze: "Snooze Time", // New
         alarm: "Alarm",
         datetime: "Date & Time",
+        synchronized: "synchronized",
         timezone: "Timezone",
         tz_save: "Save Zone",
         setup: "Setup",
@@ -765,49 +767,31 @@ function renderSettings() {
 }
 
 function renderHelp() {
-    const isDe = state.lang === 'de';
-    const usageItems = isDe
-        ? [
-            'Hörer abheben + 1-5 wählen, spielt Persona-Inhalte ab.',
-            'Aufgelegt + 1-500 wählen, setzt den Küchentimer in Minuten.',
-            'Wenn Timer gestellt ist, Taste drücken um Timer zurückzusetzen.',
-            'Hörer abheben + 8 wählen, sagt die Restzeit des aktiven Timers an.',
-            'Schlummern bei Wecker - Taste drücken.',
-            'Hörer abheben + 0 wählen, startet das Sprachmenü.',
-            'Wenn dial-a-charmer.local nicht gefunden wird, nutze die angesagte IP-Adresse (0 + 4).'
-        ]
-        : [
-            'Lift receiver + dial 1-5 to play persona content.',
-            'Receiver on hook + dial 1-500 to set kitchen timer in minutes.',
-            'If a timer is active, press the extra button to reset/delete it.',
-            'Lift receiver + dial 8 to announce remaining active timer minutes.',
-            'Snooze while alarm rings by pressing the extra button.',
-            'Lift receiver + dial 0 to start the voice menu.',
-            'If dial-a-charmer.local is not found, use the announced IP address (0 + 4).'
-        ];
+    const usageItems = [
+        'Lift receiver + dial 1-5 to play persona content.',
+        'Receiver on hook + dial 1-500 to set kitchen timer in minutes.',
+        'If a timer is active, press the extra button to reset/delete it.',
+        'Lift receiver + dial 8 to announce remaining active timer minutes.',
+        'Snooze while alarm rings by pressing the extra button.',
+        'Idle deep sleep: keep receiver on hook and press the extra button 5 times within 3 seconds.',
+        'Before deep sleep, the signal lamp is turned off to reduce power draw.',
+        'Lift receiver + dial 0 to start the voice menu.',
+        'If dial-a-charmer.local is not found, use the announced IP address (0 + 4).'
+    ];
 
-    const lampRows = isDe
-        ? [
-            ['Blau/Gold pulsierend', 'Booting / WLAN-Verbindung'],
-            ['Vintage Orange', 'Bereit / Idle'],
-            ['Warmweiss pulsierend', 'Wecker aktiv'],
-            ['Rot schnell pulsierend', 'Timer abgelaufen'],
-            ['Warmweiss langsam atmend', 'Schlummern aktiv'],
-            ['Rot SOS', 'Fehler / SD fehlt']
-        ]
-        : [
-            ['Blue/Gold pulse', 'Booting / WiFi connection'],
-            ['Vintage orange', 'Ready / idle'],
-            ['Warm white pulse', 'Alarm active'],
-            ['Fast red pulse', 'Timer expired'],
-            ['Slow warm white breathing', 'Snooze active'],
-            ['Red SOS', 'Error / SD missing']
-        ];
+    const lampRows = [
+        ['Blue/Gold pulse', 'Booting / WiFi connection'],
+        ['Vintage orange', 'Ready / idle'],
+        ['Warm white pulse', 'Alarm active'],
+        ['Fast red pulse', 'Timer expired'],
+        ['Slow warm white breathing', 'Snooze active'],
+        ['Red SOS', 'Error / SD missing']
+    ];
 
     return `
         <div class="card" style="padding: 16px;">
             <div style="font-size:1.05rem; margin-bottom:8px; color:#d4af37;">
-                ${isDe ? 'Funktionsbeschreibung' : 'Function Overview'}
+                Function Overview
             </div>
             <div style="border:1px solid #444; border-radius:8px; padding:10px; background:#161616;">
                 <ul style="margin:0; padding-left:20px; color:#bda66a; font-size:0.84rem; line-height:1.45;">
@@ -818,13 +802,13 @@ function renderHelp() {
 
         <div class="card" style="padding: 16px; margin-top: 12px;">
             <div style="font-size:1.05rem; margin-bottom:8px; color:#d4af37;">
-                ${isDe ? 'Signallampe' : 'Signal Lamp'}
+                Signal Lamp
             </div>
             <table style="width:100%; border-collapse:collapse; font-size:0.84rem;">
                 <thead>
                     <tr>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">${isDe ? 'Farbe' : 'Color'}</th>
-                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">${isDe ? 'Bedeutung' : 'Meaning'}</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">Color</th>
+                        <th style="text-align:left; padding:8px; border-bottom:1px solid #444; color:#d4af37;">Meaning</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -899,6 +883,8 @@ window.saveAlarms = () => {
 
 function renderAdvanced() {
      const currentTime = state.settings.current_time || "--";
+    const isTimeSynchronized = !!state.settings.time_synchronized;
+    const currentTimeDisplay = isTimeSynchronized ? `${currentTime} (${t('synchronized')})` : currentTime;
      const currentTz = state.settings.timezone || "";
     const ledEnabled = (state.settings.led_enabled === undefined) ? true : !!state.settings.led_enabled;
     const ledDayPct = (state.settings.led_day_pct === undefined) ? 100 : state.settings.led_day_pct;
@@ -922,7 +908,7 @@ function renderAdvanced() {
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('datetime')}</h4>
 
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-                    <div style="color:#d4af37; font-size:1.1rem; font-family:'Plaisir', serif;">${currentTime}</div>
+                    <div style="color:#d4af37; font-size:1.1rem; font-family:'Plaisir', serif;">${currentTimeDisplay}</div>
                     
                     <div style="text-align:right;">
                         <select id="tz-select" style="padding:6px; width:140px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem;" onchange="saveTimezone(this.value)">

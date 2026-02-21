@@ -66,9 +66,63 @@ static esp_event_handler_instance_t s_wifi_event_instance = NULL;
 static esp_event_handler_instance_t s_ip_event_instance = NULL;
 static int s_wifi_retry_count = 0;
 static bool s_ap_mode_active = false;
+static bool s_mdns_ready = false;
+static TaskHandle_t s_mdns_reannounce_task = nullptr;
+static portMUX_TYPE s_mdns_mux = portMUX_INITIALIZER_UNLOCKED;
+static int64_t s_last_mdns_reannounce_ms = 0;
 static portMUX_TYPE s_preview_mux = portMUX_INITIALIZER_UNLOCKED;
 static int64_t s_last_preview_ms = 0;
 static char s_last_preview_file[128] = "";
+
+static bool is_sta_connected() {
+    wifi_ap_record_t ap_info;
+    return (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK);
+}
+
+static void reannounce_mdns_if_needed(const char *reason) {
+    if (!s_mdns_ready || !is_sta_connected()) {
+        return;
+    }
+
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    bool allow = false;
+    portENTER_CRITICAL(&s_mdns_mux);
+    if ((now_ms - s_last_mdns_reannounce_ms) >= APP_MDNS_REANNOUNCE_MIN_GAP_MS) {
+        s_last_mdns_reannounce_ms = now_ms;
+        allow = true;
+    }
+    portEXIT_CRITICAL(&s_mdns_mux);
+
+    if (!allow) {
+        return;
+    }
+
+    esp_err_t err = mdns_hostname_set("dial-a-charmer");
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "mDNS hostname reannounce failed (%s): %s", reason ? reason : "n/a", esp_err_to_name(err));
+    }
+
+    err = mdns_instance_name_set("Dial-A-Charmer Web Interface");
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "mDNS instance reannounce failed (%s): %s", reason ? reason : "n/a", esp_err_to_name(err));
+    }
+
+    mdns_service_remove("_http", "_tcp");
+    err = mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "mDNS service reannounce failed (%s): %s", reason ? reason : "n/a", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "mDNS reannounced (%s): http://dial-a-charmer.local", reason ? reason : "unknown");
+    }
+}
+
+static void mdns_reannounce_task(void *pvParameters) {
+    (void)pvParameters;
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(APP_MDNS_REANNOUNCE_INTERVAL_MS));
+        reannounce_mdns_if_needed("periodic");
+    }
+}
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                int32_t event_id, void* event_data) {
@@ -90,6 +144,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "Got IP:" IPSTR, IP2STR(&event->ip_info.ip));
         ESP_LOGI(TAG, "WiFi connected, IP address: " IPSTR, IP2STR(&event->ip_info.ip));
         s_wifi_retry_count = 0;
+        reannounce_mdns_if_needed("got_ip");
     }
 }
 
@@ -101,6 +156,52 @@ static char s_sd_log_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
 static char s_sd_log_flush_buf[APP_SD_LOG_BUFFER_LINES][LOG_LINE_MAX];
 static size_t s_sd_log_buf_count = 0;
 static bool s_sd_log_enabled = true;
+
+static bool sd_log_open_file_if_needed() {
+    if (s_sd_log_file) {
+        return true;
+    }
+
+    const char *log_path = APP_SD_LOG_PATH;
+    char dir_path[128] = {0};
+    const char *last = strrchr(log_path, '/');
+    if (last && last != log_path) {
+        size_t len = (size_t)(last - log_path);
+        if (len < sizeof(dir_path)) {
+            memcpy(dir_path, log_path, len);
+            dir_path[len] = '\0';
+            mkdir(dir_path, 0775);
+        }
+    }
+
+    s_sd_log_file = fopen(log_path, "a");
+    return s_sd_log_file != nullptr;
+}
+
+static bool sd_log_rotate_file() {
+    if (s_sd_log_file) {
+        fclose(s_sd_log_file);
+        s_sd_log_file = nullptr;
+    }
+
+    char backup_path[160];
+    snprintf(backup_path, sizeof(backup_path), "%s.1", APP_SD_LOG_PATH);
+    remove(backup_path);
+    rename(APP_SD_LOG_PATH, backup_path);
+
+    s_sd_log_file = fopen(APP_SD_LOG_PATH, "w");
+    return s_sd_log_file != nullptr;
+}
+
+static long sd_log_get_current_size() {
+    if (!s_sd_log_file) {
+        return 0;
+    }
+    if (fseek(s_sd_log_file, 0, SEEK_END) != 0) {
+        return -1;
+    }
+    return ftell(s_sd_log_file);
+}
 
 static void sd_log_write_line(const char *line) {
     if (!line || !line[0]) {
@@ -151,44 +252,26 @@ static void sd_log_flush_task(void *pvParameters) {
             continue;
         }
 
-        if (!s_sd_log_file) {
-            const char *log_path = APP_SD_LOG_PATH;
-            char dir_path[128] = {0};
-            const char *last = strrchr(log_path, '/');
-            if (last && last != log_path) {
-                size_t len = (size_t)(last - log_path);
-                if (len < sizeof(dir_path)) {
-                    memcpy(dir_path, log_path, len);
-                    dir_path[len] = '\0';
-                    mkdir(dir_path, 0775);
-                }
-            }
-            s_sd_log_file = fopen(log_path, "a");
-        }
-
-        if (!s_sd_log_file) {
+        if (!sd_log_open_file_if_needed()) {
             continue;
         }
 
-        fseek(s_sd_log_file, 0, SEEK_END);
-        long size = ftell(s_sd_log_file);
-        if (size >= (long)APP_SD_LOG_MAX_BYTES) {
-            fclose(s_sd_log_file);
-            s_sd_log_file = nullptr;
-
-            char backup_path[160];
-            snprintf(backup_path, sizeof(backup_path), "%s.1", APP_SD_LOG_PATH);
-            remove(backup_path);
-            rename(APP_SD_LOG_PATH, backup_path);
-
-            s_sd_log_file = fopen(APP_SD_LOG_PATH, "w");
-            if (!s_sd_log_file) {
-                continue;
-            }
+        long size = sd_log_get_current_size();
+        if (size < 0) {
+            continue;
         }
         for (size_t i = 0; i < count; ++i) {
+            size_t line_len = strnlen(s_sd_log_flush_buf[i], LOG_LINE_MAX) + 1; // + newline
+            if (size >= (long)APP_SD_LOG_MAX_BYTES ||
+                (size + (long)line_len) > (long)APP_SD_LOG_MAX_BYTES) {
+                if (!sd_log_rotate_file()) {
+                    break;
+                }
+                size = 0;
+            }
             fputs(s_sd_log_flush_buf[i], s_sd_log_file);
             fputc('\n', s_sd_log_file);
+            size += (long)line_len;
         }
         fflush(s_sd_log_file);
         fsync(fileno(s_sd_log_file));
@@ -1042,6 +1125,7 @@ static esp_err_t api_settings_get_handler(httpd_req_t *req) {
     char timeStr[64];
     strftime(timeStr, sizeof(timeStr), "%Y-%m-%d %H:%M:%S", &now);
     cJSON_AddStringToObject(root, "current_time", timeStr);
+    cJSON_AddBoolToObject(root, "time_synchronized", TimeManager::getLastNtpSync() > 0);
     
     std::string tz = TimeManager::getTimezone();
     if(tz.empty()) tz = "CET-1CEST,M3.5.0,M10.5.0/3"; // Fallback default in UI
@@ -1706,6 +1790,11 @@ void WebManager::setupMdns() {
     
     // Add HTTP service
     mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+    s_mdns_ready = true;
+
+    if (!s_mdns_reannounce_task) {
+        xTaskCreate(mdns_reannounce_task, "mdns_reannounce", 4096, NULL, 2, &s_mdns_reannounce_task);
+    }
     ESP_LOGI(TAG, "mDNS started: http://dial-a-charmer.local");
 }
 
