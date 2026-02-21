@@ -4,6 +4,7 @@ import hashlib
 import shutil
 import re
 import random
+import argparse
 import concurrent.futures
 import threading
 import time
@@ -778,15 +779,14 @@ def generate_sd_card_structure(categories):
         langs = ", ".join(categories[cat])
         print(f"  {i+1}. {cat} ({langs})")
 
-    # Clean up old playlists and persona folders before regenerating
-    playlist_dir = SD_ROOT / "playlists"
-    if playlist_dir.exists():
-        for old_pl in playlist_dir.glob("cat_*_v3.m3u"):
+        # Clean up legacy playlists and old persona folders before regenerating
+        legacy_playlist_dir = SD_ROOT / "playlists"
+        if legacy_playlist_dir.exists() and legacy_playlist_dir.is_dir():
             try:
-                old_pl.unlink()
-                print(f"  [DEL] Old playlist: {old_pl.name}")
+                shutil.rmtree(legacy_playlist_dir)
+                print("  [DEL] Legacy playlists folder removed.")
             except Exception as e:
-                print(f"  [WARN] Could not delete {old_pl.name}: {e}")
+                print(f"  [WARN] Could not remove legacy playlists folder: {e}")
 
     for old_persona in SD_ROOT.glob("persona_*"):
         if old_persona.is_dir():
@@ -854,9 +854,7 @@ def generate_sd_card_structure(categories):
 
         if selected_cat:
             persona_assignments[persona_idx] = selected_cat
-            
-            # Prepare Playlist Data
-            playlist_tracks = {'de': [], 'en': []}
+            first_copied_filename = {'de': None, 'en': None}
             
             safe_cat = re.sub(r'[^a-zA-Z0-9_\-]', '', selected_cat)
             
@@ -874,48 +872,20 @@ def generate_sd_card_structure(categories):
                             
                             # Copy File
                             shutil.copy2(wav_file, target_dir / wav_file.name)
-                            
-                            # Add to Playlist
-                            # Path format: /persona_01/de/file.wav
-                            relative_path = f"/persona_{persona_idx:02d}/{f_lang}/{wav_file.name}"
-                            playlist_tracks[f_lang].append(relative_path)
+                            if first_copied_filename[f_lang] is None:
+                                first_copied_filename[f_lang] = wav_file.name
                             
                             copied_count += 1
             
             print(f"     Copied {copied_count} files.")
 
             display_name = ""
-            if playlist_tracks["en"]:
-                display_name = extract_category_from_wav_name(Path(playlist_tracks["en"][0]).name)
-            elif playlist_tracks["de"]:
-                display_name = extract_category_from_wav_name(Path(playlist_tracks["de"][0]).name)
+            if first_copied_filename["en"]:
+                display_name = extract_category_from_wav_name(first_copied_filename["en"])
+            elif first_copied_filename["de"]:
+                display_name = extract_category_from_wav_name(first_copied_filename["de"])
             if display_name:
                 persona_assignments[persona_idx] = display_name
-            
-            # Generate Playlists
-            playlist_dir = SD_ROOT / "playlists"
-            playlist_dir.mkdir(exist_ok=True)
-            
-            for lang in ['de', 'en']:
-                tracks = playlist_tracks[lang]
-                if tracks:
-                    random.shuffle(tracks)
-                    # Filename: cat_1_de_v3.m3u
-                    pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
-                    pl_path = playlist_dir / pl_filename
-                    
-                    with open(pl_path, 'w', encoding='utf-8') as f:
-                        for track in tracks:
-                            f.write(track + "\n")
-                    print(f"     Created Playlist: {pl_filename} ({len(tracks)} tracks)")
-                else:
-                    # Clean up old playlist if it exists? 
-                    # Stale playlist files are removed when track list is empty.
-                    pl_filename = f"cat_{persona_idx}_{lang}_v3.m3u"
-                    pl_path = playlist_dir / pl_filename
-                    if pl_path.exists():
-                        pl_path.unlink()
-                        print(f"     Removed Playlist: {pl_filename} (0 tracks)")
 
     print(f"\nDone! SD Card content generated in: {SD_ROOT}")
 
@@ -1328,7 +1298,22 @@ def generate_system_sounds():
     print("System sounds update complete.")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Generate Dial-A-Charmer SD card content")
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Assign personas automatically using defaults and skip prompts",
+    )
+    return parser.parse_args()
+
+
 def main():
+    global NON_INTERACTIVE
+    args = parse_args()
+    if args.non_interactive:
+        NON_INTERACTIVE = True
+
     try:
         categories = generate_audio_cache()
         generate_sd_card_structure(categories)

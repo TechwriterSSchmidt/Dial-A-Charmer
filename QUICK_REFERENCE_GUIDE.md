@@ -6,7 +6,7 @@
    - Lift the receiver. Wait for the **Dial Tone**.
    - **Important:** specific content must be dialed within **5 seconds**.
    - *Behavior:* If no number is dialed, a **Busy Signal** plays. Hang up to reset.
-   - **Dial 1-5:** Persona Playlists (Configurable).
+   - **Dial 1-5:** Persona playback (folder-based, random clip).
    - **Dial 11:** Random Mix.
 
 2. **Set a Kitchen Timer:**
@@ -58,7 +58,6 @@ Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` scr
 │   ├── en/                 (English assets)
 ├── ringtones/              
 │   ├── *.wav               (Ringtone options)
-├── playlists/              (Auto-generated playlists)
 ├── persona_01/             (Persona 1 - Dial 1)
 ├── persona_02/             (Persona 2 - Dial 2)
 ├── persona_03/             (Persona 3 - Dial 3)
@@ -67,7 +66,7 @@ Ensure your SD card is formatted (FAT32). The `utils/generate_sd_content.py` scr
 │   └── fortune.txt         (Enables Fortune mode detection)
 ```
 
-*Note: Run `python utils/generate_sd_content.py` to generate system assets.*
+*Note: Run `python utils/generate_sd_content.py` (or `python utils/generate_sd_content.py --non-interactive`) to generate system assets.*
 
 ## ⚙️ Web Configuration
 

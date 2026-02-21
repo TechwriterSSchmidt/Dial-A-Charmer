@@ -1,5 +1,41 @@
 # Release Notes - Dial-A-Charmer
 
+## v2.2 (2026-02-21) - "Content Tooling Simplification"
+- **SD Content Generator:**
+    - Removed playlist generation logic (`cat_<persona>_<lang>_v3.m3u`) from `utils/generate_sd_content.py`.
+    - Added cleanup of legacy `/sd_card_content/playlists` during regeneration.
+    - Added CLI option `--non-interactive` to auto-assign personas and skip prompt-based selection.
+- **Playback Model Clarification:**
+    - Persona playback remains folder-based random WAV selection from `persona_XX/<lang>/`.
+    - Random selection is reboot-stable in behavior (no fixed order); repeats can still occur by chance.
+- **Documentation Cleanup:**
+    - Updated README and Quick Reference to remove obsolete playlist wording and document current generator usage.
+
+## v2.1 (2026-02-21) - "Reliability, Power Saving & UX Clarity"
+- **Network & Discovery Reliability:**
+    - Implemented a hybrid mDNS resilience strategy for `dial-a-charmer.local`:
+        - Event-driven re-announce on `STA_GOT_IP`.
+        - Periodic fallback re-announce task with rate limiting.
+    - Added configurable mDNS timing guards (`APP_MDNS_REANNOUNCE_INTERVAL_MS`, `APP_MDNS_REANNOUNCE_MIN_GAP_MS`).
+- **Power Saving / Deep Sleep UX:**
+    - Replaced 10-second extra-button hold with a 5-click trigger within 3 seconds (idle/on-hook only).
+    - Signal lamp is now forced off before entering Deep Sleep to reduce battery drain.
+    - Added explicit extra-button wakeup configuration for Deep Sleep path.
+- **Logging Safety:**
+    - SD log file is now capped at 10 MB (`/sdcard/logs/app.log`) to prevent uncontrolled growth.
+    - Improved log rotation behavior so the size limit is enforced reliably even during buffered flush bursts.
+- **Web UI / Status Feedback:**
+    - Configuration page now shows clock sync state inline, e.g. `YYYY-MM-DD HH:MM:SS (synchronized)` after successful NTP sync.
+    - Help view updated with Deep Sleep usage guidance.
+- **Feature Cleanup:**
+    - Removed legacy `999` system reboot flow from firmware logic, web UI, generated assets, and user docs.
+    - Removed SD playlist generation (`.m3u`) from tooling; persona playback is folder-based random selection only.
+- **Documentation:**
+    - Updated README and Quick Reference with current behavior and improved English wording in key user-facing sections.
+
+
+## We've come a long way, baby...and missed to note tons of improvements in this file. :P    
+
 ## v0.8.4-beta (2026-02-14) - "Stability, Cleanup & Documentation Sync"
 - **Stability (Boot/WDT):**
     - Added configurable watchdog diagnostics (`APP_WDT_DIAG_LOG`, loop warning threshold, heartbeat interval).
@@ -24,7 +60,7 @@
 
 ## v0.8.3-beta (2026-01-31) - "Performance & UX Update"
 - **Scan-on-Demand (Fast Boot)**:
-    - Removed the slow automatic SD card scan on every boot. The device now boots instantly and loads cached playlists.
+    - Removed the slow automatic SD card scan on every boot. The device now boots instantly and loads cached persona indexes.
     - Added **Dial Code 95** to manually trigger a full re-index / scan of the SD card. This is only necessary if you add files manually without using the helper scripts.
     - During re-indexing, the Web Interface is temporarily suspended to maximize scanning speed.
     - Removed the "Reindex" button from the Web Interface; this function is now exclusively available via the Dial (for privacy/security).
@@ -143,7 +179,7 @@
     - **Project Renaming**: Officially renamed to "Dial-A-Charmer".
 
 - **Audio & Content**:
-    - **Persona Playlists**: Implemented "Style" dialing (1=Trump, 2=Badran, 3=Yoda, 4=Neutral).
+    - **Persona Styles**: Implemented style-based dialing (1=Trump, 2=Badran, 3=Yoda, 4=Neutral).
     - **Smart Shuffle**: Non-repeating playback logic for categories.
     - **Local Priority**: System prefers offline MP3s over TTS to ensure responsiveness.
     - **Tools**: Added `split_audio.py` for automated content preparation.

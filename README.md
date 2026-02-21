@@ -137,11 +137,52 @@ Use a FAT32 formatted SD Card. The file structure is crucial for the Dial-A-Char
 ├── persona_03/                (Persona 3 tracks - Dial 3)
 ├── persona_04/                (Persona 4 tracks - Dial 4)
 ├── persona_05/                (Persona 5 tracks - Dial 5)
-├── playlists/                 (Generated on PC by utils/generate_sd_content.py)
 ├── ringtones/                 (Alarm and ring tones)
 ├── system/                    (System prompts and tones)
 └── time/                      (Time announcements, DE/EN)
 ```
+
+### Custom Persona WAV Files (User Content)
+
+If you want to add your own persona clips, follow these minimum requirements:
+
+* Store files in the language subfolder used at runtime, for example:
+    * `persona_01/de/` for German
+    * `persona_01/en/` for English
+* Use `.wav` files with a lowercase extension (`.wav`).
+* Keep files in standard PCM WAV format (`pcm_s16le`, `44100 Hz`, `16-bit`).
+* Mono (`1`) and stereo (`2`) are both supported.
+
+Important behavior:
+
+* Dial codes map to persona folders (`persona_01` ... `persona_05`), then one matching WAV is picked at random.
+* The **phonebook display name** for each persona is auto-derived from the first WAV filename found in that persona folder.
+* Best naming pattern for clean phonebook titles: `CategoryName_<lang>_<index>.wav` (example: `FunnyQuotes_en_001.wav`).
+* Mixed/custom filenames still play normally, but phonebook titles may look odd if the pattern is not used.
+* Files without `.wav` (or with uppercase-only `.WAV`) are ignored by the current persona scan.
+
+### Phonebook Names
+
+Where persona phonebook names come from:
+
+* On boot, default persona entries are built from the first WAV found in each persona folder (`de`, fallback `en`).
+* The shown title is extracted from the filename stem (before language/index suffix when present).
+* If no suitable file is found, fallback names like `Persona 1` are used.
+
+Important (current firmware behavior):
+
+* Persona playback reads WAV files directly from `persona_XX/<lang>/` and picks one at random.
+* No `.m3u` playlist files are required or generated.
+* Random playback has no fixed order after reboot, but immediate repeats can still happen by chance.
+
+Manual workflow without the Python generator:
+
+1. Create or update `persona_01` ... `persona_05` language folders (`de`/`en`) on SD.
+2. Copy your WAV files into the target persona/language folder.
+3. Keep WAV format compatible (see requirements below).
+4. Reboot device so phonebook display names refresh from the first WAV per persona.
+
+If files are in a different format, convert them first (see **WAV Format Requirements** below).
 
 ### WAV Format Requirements
 
@@ -171,9 +212,10 @@ Batch convert all WAV files in a folder tree (Windows PowerShell, in-place):
 ### Audio Utilities (`utils/`)
 
 **`generate_sd_content.py`** (Recommended)
-This all-in-one script prepares a complete `sd_card_content` folder for you. It ensures your device works immediately without hunting for MP3 files.
+This all-in-one script prepares a complete `sd_card_content` folder for you. It ensures your device works immediately without manual asset assembly.
 
-* **Usage:** `python utils/generate_sd_content.py`
+* **Usage (interactive):** `python utils/generate_sd_content.py`
+* **Usage (non-interactive):** `python utils/generate_sd_content.py --non-interactive`
 * **Feature (Structure):** Creates all required folders (`persona_XX`, `system`, `time` etc.).
 * **Feature (TTS Integration):** Automatically downloads high-quality Google TTS speech files for Numbers, Dates, and System Messages in both **German & English**.
 * **Feature (Tone Synthesis):** Generates clean `wav` files for Dial Tone, Busy Signal, and Beeps using Python's audio libraries (no recording needed).
@@ -237,7 +279,7 @@ Note: During **Night Mode**, base speaker level follows the configured night sli
 
 1. **Prepare Hardware:** Assemble the ESP32, Audio Module, and Rotary Phone mechanics according to the pinout.
 2. **Prepare SD Card:**
-    * **Run Generator:** Execute `python utils/generate_sd_content.py` to create the essential system files, voice prompts, and fonts.
+    * **Run Generator:** Execute `python utils/generate_sd_content.py` (or `python utils/generate_sd_content.py --non-interactive`) to create the essential system files, voice prompts, and fonts.
     * **Format:** Format your MicroSD card to **FAT32**.
     * **Copy:** Copy the *contents* of the generated `sd_card_content` folder to the root of the SD card.
     * **Personalize:** Add your own tracks to the `persona_XX` folders.
@@ -271,9 +313,7 @@ Runtime state tags are available to diagnose alarm/timer interactions quickly:
 
 ## Planned Improvements
 
-* Loud noise on reboot > need to ensure that amps are not powered during reboot?
-* WIFI-bug ... system seems to hang when not connected to WIFI while using captive portal on iPhone to make settings
-* IP-Address should be displayed in Captive Portal and on Configuration page of the web-ui
+* Currently none.
 
 ## License
 

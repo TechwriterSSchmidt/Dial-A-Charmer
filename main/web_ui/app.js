@@ -395,7 +395,7 @@ function render() {
     // Header / Title (Dynamic + Version)
     let html = `
         <div style="text-align:center;">
-        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v2.1 RSA-Edition</span></h2>
+        <h2>${pageTitle}<br><span style="color:#888; font-family: 'Plaisir', serif; font-size: 0.7rem; display:block; margin-top:5px;">v2.2 RSA-Edition</span></h2>
         </div>
     `;
 
@@ -884,7 +884,9 @@ window.saveAlarms = () => {
 function renderAdvanced() {
      const currentTime = state.settings.current_time || "--";
     const isTimeSynchronized = !!state.settings.time_synchronized;
-    const currentTimeDisplay = isTimeSynchronized ? `${currentTime} (${t('synchronized')})` : currentTime;
+    const syncSuffix = isTimeSynchronized
+        ? ` <span style="font-size:0.7em; line-height:1; vertical-align:baseline; font-family:inherit;">(${t('synchronized')})</span>`
+        : "";
      const currentTz = state.settings.timezone || "";
     const ledEnabled = (state.settings.led_enabled === undefined) ? true : !!state.settings.led_enabled;
     const ledDayPct = (state.settings.led_day_pct === undefined) ? 100 : state.settings.led_day_pct;
@@ -908,7 +910,7 @@ function renderAdvanced() {
                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('datetime')}</h4>
 
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;">
-                    <div style="color:#d4af37; font-size:1.1rem; font-family:'Plaisir', serif;">${currentTimeDisplay}</div>
+                    <div style="color:#d4af37; font-size:1.1rem; font-family:'Plaisir', serif;">${currentTime}${syncSuffix}</div>
                     
                     <div style="text-align:right;">
                         <select id="tz-select" style="padding:6px; width:140px; background:#111; color:#fff; border:1px solid #555; border-radius:4px; font-size:0.8rem;" onchange="saveTimezone(this.value)">
