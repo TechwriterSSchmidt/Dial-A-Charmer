@@ -2311,6 +2311,13 @@ extern "C" void app_main(void)
                  clear_snooze_state("cleared_daily_alarm_trigger");
                  g_alarm_state.end_ms = (esp_timer_get_time() / 1000) + (int64_t)APP_DAILY_ALARM_LOOP_MINUTES * 60 * 1000;
                  g_alarm_state.retry_last_ms = 0;
+
+                 // Alarm must preempt any pending voice/persona queue work
+                 g_voice_queue_active = false;
+                 g_voice_queue.clear();
+                 g_voice_menu_reannounce = false;
+                 g_persona_playback_active = false;
+                 g_persona_hangup_pending = false;
                  
                  // Stop anything currently playing
                  pipeline_stop_and_reset(true, true);
@@ -2592,6 +2599,19 @@ extern "C" void app_main(void)
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
                     ESP_LOGI(TAG, "Audio Finished.");
                     stop_playback();
+
+                    if (g_alarm_state.active) {
+                        int64_t now = esp_timer_get_time() / 1000;
+                        if (now < g_alarm_state.end_ms && !g_alarm_state.current_file.empty()) {
+                            play_file(g_alarm_state.current_file.c_str());
+                        } else {
+                            TimeManager::stopAlarm();
+                            reset_alarm_state(true);
+                            update_audio_output(); // Restore routing
+                        }
+                        continue;
+                    }
+
                     if (play_next_in_queue()) {
                         continue;
                     }
@@ -2627,17 +2647,6 @@ extern "C" void app_main(void)
                             g_pending_handset_restore = false;
                         }
                         update_audio_output();
-                    }
-                    if (g_alarm_state.active) {
-                        int64_t now = esp_timer_get_time() / 1000;
-                        if (now < g_alarm_state.end_ms) {
-                            play_file(g_alarm_state.current_file.c_str());
-                        } else {
-                            TimeManager::stopAlarm();
-                            reset_alarm_state(true);
-                            update_audio_output(); // Restore routing
-                        }
-                        continue;
                     }
                     if (g_persona_playback_active && g_off_hook) {
                         g_persona_playback_active = false;
