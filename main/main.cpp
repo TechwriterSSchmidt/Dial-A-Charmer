@@ -2412,6 +2412,9 @@ extern "C" void app_main(void)
 
     // Event Config
     audio_event_iface_cfg_t evt_cfg = AUDIO_EVENT_IFACE_DEFAULT_CFG();
+    evt_cfg.internal_queue_size = 16;
+    evt_cfg.external_queue_size = 16;
+    evt_cfg.queue_set_size = 16;
     audio_event_iface_handle_t evt = audio_event_iface_init(&evt_cfg);
     audio_pipeline_set_listener(pipeline, evt);
 
