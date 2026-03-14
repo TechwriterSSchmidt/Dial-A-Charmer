@@ -73,6 +73,43 @@ static int64_t s_last_mdns_reannounce_ms = 0;
 static portMUX_TYPE s_preview_mux = portMUX_INITIALIZER_UNLOCKED;
 static int64_t s_last_preview_ms = 0;
 static char s_last_preview_file[128] = "";
+static portMUX_TYPE s_http_diag_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint32_t s_http_error_total = 0;
+static uint32_t s_http_error_window = 0;
+static int64_t s_http_error_last_log_ms = 0;
+
+static void note_http_error(const char *where, esp_err_t err) {
+    if (err == ESP_OK) {
+        return;
+    }
+
+    const int64_t now_ms = esp_timer_get_time() / 1000;
+    bool should_log = false;
+    uint32_t total_snapshot = 0;
+    uint32_t window_snapshot = 0;
+
+    portENTER_CRITICAL(&s_http_diag_mux);
+    s_http_error_total++;
+    s_http_error_window++;
+
+    if (s_http_error_last_log_ms == 0 || (now_ms - s_http_error_last_log_ms) >= 30000) {
+        should_log = true;
+        total_snapshot = s_http_error_total;
+        window_snapshot = s_http_error_window;
+        s_http_error_window = 0;
+        s_http_error_last_log_ms = now_ms;
+    }
+    portEXIT_CRITICAL(&s_http_diag_mux);
+
+    if (should_log) {
+        ESP_LOGW(TAG,
+                 "HTTP-DIAG errors total=%u window=%u last_where=%s err=%s",
+                 (unsigned)total_snapshot,
+                 (unsigned)window_snapshot,
+                 where ? where : "?",
+                 esp_err_to_name(err));
+    }
+}
 
 static bool is_sta_connected() {
     wifi_ap_record_t ap_info;
@@ -727,10 +764,11 @@ static esp_err_t api_ringtones_handler(httpd_req_t *req) {
     }
     
     const char *json_str = cJSON_PrintUnformatted(root);
-    httpd_resp_send(req, json_str, strlen(json_str));
+    esp_err_t send_err = httpd_resp_send(req, json_str, strlen(json_str));
+    note_http_error("api_ringtones_handler:send", send_err);
     free((void*)json_str);
     cJSON_Delete(root);
-    return ESP_OK;
+    return send_err;
 }
 
 static esp_err_t api_preview_handler(httpd_req_t *req) {
@@ -775,8 +813,9 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
                 if (suppress) {
                     ESP_LOGI(TAG, "Preview request suppressed (debounce, dt=%lldms, same=%d): %s",
                              (long long)delta_ms, same_file ? 1 : 0, filepath);
-                    httpd_resp_send(req, "OK", 2);
-                    return ESP_OK;
+                    esp_err_t send_err = httpd_resp_send(req, "OK", 2);
+                    note_http_error("api_preview_handler:suppress_send", send_err);
+                    return send_err;
                 }
                 
                 ESP_LOGI(TAG, "Preview request: %s", filepath);
@@ -784,12 +823,14 @@ static esp_err_t api_preview_handler(httpd_req_t *req) {
                 // play_file handles "stop current -> start new" logic safely
                 play_file(filepath); 
                 
-                httpd_resp_send(req, "OK", 2);
-                return ESP_OK;
+                esp_err_t send_err = httpd_resp_send(req, "OK", 2);
+                note_http_error("api_preview_handler:send", send_err);
+                return send_err;
             }
         }
     }
-    httpd_resp_send_404(req);
+    esp_err_t send_404_err = httpd_resp_send_404(req);
+    note_http_error("api_preview_handler:404", send_404_err);
     return ESP_FAIL;
 }
 
@@ -820,10 +861,11 @@ static esp_err_t api_logs_handler(httpd_req_t *req) {
     cJSON_AddItemToObject(root, "lines", arr);
 
     const char *json_str = cJSON_PrintUnformatted(root);
-    httpd_resp_send(req, json_str, strlen(json_str));
+    esp_err_t send_err = httpd_resp_send(req, json_str, strlen(json_str));
+    note_http_error("api_logs_handler:send", send_err);
     free((void *)json_str);
     cJSON_Delete(root);
-    return ESP_OK;
+    return send_err;
 }
 
 static esp_err_t api_logs_download_handler(httpd_req_t *req) {
@@ -839,9 +881,12 @@ static esp_err_t api_logs_download_handler(httpd_req_t *req) {
         char buf[512];
         size_t n = 0;
         while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
-            if (httpd_resp_send_chunk(req, buf, n) != ESP_OK) {
+            esp_err_t chunk_err = httpd_resp_send_chunk(req, buf, n);
+            if (chunk_err != ESP_OK) {
+                note_http_error("api_logs_download_handler:chunk", chunk_err);
                 fclose(f);
-                httpd_resp_sendstr_chunk(req, NULL);
+                esp_err_t end_err = httpd_resp_sendstr_chunk(req, NULL);
+                note_http_error("api_logs_download_handler:end_chunk_fail", end_err);
                 return ESP_FAIL;
             }
         }
@@ -857,7 +902,8 @@ static esp_err_t api_logs_download_handler(httpd_req_t *req) {
     if (access(backup_path, F_OK) == 0) {
         if (send_file(backup_path) == ESP_OK) {
             const char *sep = "\n--- current log ---\n";
-            httpd_resp_send_chunk(req, sep, strlen(sep));
+            esp_err_t sep_err = httpd_resp_send_chunk(req, sep, strlen(sep));
+            note_http_error("api_logs_download_handler:sep_chunk", sep_err);
             sent_any = true;
         }
     }
@@ -867,8 +913,9 @@ static esp_err_t api_logs_download_handler(httpd_req_t *req) {
         }
     }
     if (sent_any) {
-        httpd_resp_sendstr_chunk(req, NULL);
-        return ESP_OK;
+        esp_err_t end_err = httpd_resp_sendstr_chunk(req, NULL);
+        note_http_error("api_logs_download_handler:end_chunk", end_err);
+        return end_err;
     }
 #endif
 
@@ -895,8 +942,9 @@ static esp_err_t api_logs_download_handler(httpd_req_t *req) {
         body.push_back('\n');
     }
 
-    httpd_resp_send(req, body.c_str(), body.size());
-    return ESP_OK;
+    esp_err_t send_err = httpd_resp_send(req, body.c_str(), body.size());
+    note_http_error("api_logs_download_handler:send_body", send_err);
+    return send_err;
 }
 
 static esp_err_t api_time_handler(httpd_req_t *req) {
@@ -910,10 +958,11 @@ static esp_err_t api_time_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(root, "time", timeStr);
     
     const char *json_str = cJSON_PrintUnformatted(root);
-    httpd_resp_send(req, json_str, strlen(json_str));
+    esp_err_t send_err = httpd_resp_send(req, json_str, strlen(json_str));
+    note_http_error("api_time_handler:send", send_err);
     free((void *)json_str);
     cJSON_Delete(root);
-    return ESP_OK;
+    return send_err;
 }
 
 static esp_err_t api_ota_handler(httpd_req_t *req) {
@@ -1228,7 +1277,10 @@ static esp_err_t api_settings_post_handler(httpd_req_t *req) {
         if (cJSON_IsString(item)) {
             std::string enc = encrypt_wifi_pass(item->valuestring);
             mark_nvs_write(nvs_set_str(my_handle, "wifi_pass_enc", enc.c_str()), "wifi_pass_enc");
-            mark_nvs_write(nvs_erase_key(my_handle, "wifi_pass"), "wifi_pass");
+            esp_err_t erase_err = nvs_erase_key(my_handle, "wifi_pass");
+            if (erase_err != ESP_OK && erase_err != ESP_ERR_NVS_NOT_FOUND) {
+                mark_nvs_write(erase_err, "wifi_pass");
+            }
         }
 
         item = cJSON_GetObjectItem(root, "sd_log_enabled");
@@ -1589,8 +1641,9 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
             httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
         }
         httpd_resp_set_type(req, mime_type);
-        httpd_resp_send(req, file_start, file_size);
-        return ESP_OK;
+        esp_err_t send_err = httpd_resp_send(req, file_start, file_size);
+        note_http_error("static_file_handler:embedded_send", send_err);
+        return send_err;
     } else {
         // 2. Selective SD Card Serving (Ringtones ONLY)
         // Arbitrary files from /sdcard/data are not served.
@@ -1610,7 +1663,8 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         if (!allow_sd) {
              // Not found in Flash, and not allowed from SD -> 404
              ESP_LOGW(TAG, "404 Not Found (and not in SD whitelist): %s", file_path);
-             httpd_resp_send_404(req);
+               esp_err_t send_404_err = httpd_resp_send_404(req);
+               note_http_error("static_file_handler:whitelist_404", send_404_err);
              return ESP_FAIL;
         }
         
@@ -1618,14 +1672,16 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         struct stat st;
         if (stat(filepath, &st) == -1) {
             ESP_LOGW(TAG, "SD File allowed but not found: %s", filepath);
-            httpd_resp_send_404(req);
+            esp_err_t send_404_err = httpd_resp_send_404(req);
+            note_http_error("static_file_handler:sd_missing_404", send_404_err);
             return ESP_FAIL;
         }
         
         FILE* f = fopen(filepath, "r");
         if (!f) {
             ESP_LOGE(TAG, "Failed to open allowed SD file: %s", filepath);
-            httpd_resp_send_404(req);
+            esp_err_t send_404_err = httpd_resp_send_404(req);
+            note_http_error("static_file_handler:sd_open_404", send_404_err);
             return ESP_FAIL;
         }
 
@@ -1634,11 +1690,19 @@ static esp_err_t static_file_handler(httpd_req_t *req) {
         char sendbuf[1024];
         size_t chunksize;
         while ((chunksize = fread(sendbuf, 1, sizeof(sendbuf), f)) > 0) {
-            httpd_resp_send_chunk(req, sendbuf, chunksize);
+            esp_err_t chunk_err = httpd_resp_send_chunk(req, sendbuf, chunksize);
+            if (chunk_err != ESP_OK) {
+                note_http_error("static_file_handler:sd_chunk", chunk_err);
+                fclose(f);
+                esp_err_t end_err = httpd_resp_send_chunk(req, NULL, 0);
+                note_http_error("static_file_handler:sd_end_chunk_fail", end_err);
+                return chunk_err;
+            }
         }
         fclose(f);
-        httpd_resp_send_chunk(req, NULL, 0); 
-        return ESP_OK;
+        esp_err_t end_err = httpd_resp_send_chunk(req, NULL, 0);
+        note_http_error("static_file_handler:sd_end_chunk", end_err);
+        return end_err;
     }
 }
 

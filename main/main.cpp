@@ -147,6 +147,13 @@ static bool g_persona_hangup_pending = false;
 static int64_t g_fade_in_end_time = 0;
 static bool g_audio_unmute_pending = false;
 static int64_t g_audio_unmute_deadline_ms = 0;
+static uint32_t g_audio_play_id_counter = 0;
+static uint32_t g_audio_active_play_id = 0;
+static uint32_t g_audio_unmute_pending_play_id = 0;
+static int64_t g_audio_play_started_ms = 0;
+static portMUX_TYPE g_audio_play_req_mux = portMUX_INITIALIZER_UNLOCKED;
+static bool g_audio_play_req_pending = false;
+static char g_audio_play_req_path[256] = {0};
 
 RTC_DATA_ATTR static uint32_t g_boot_count = 0;
 
@@ -331,6 +338,7 @@ void update_audio_output();
 void safe_reboot();
 static void audio_lock();
 static void audio_unlock();
+static bool audio_try_lock();
 static void handle_extra_button_short_press();
 static void enter_deep_sleep();
 static bool can_trigger_deep_sleep_via_button();
@@ -475,6 +483,9 @@ enum LedState {
 static constexpr int kAudioFallbackSampleRate = 44100;
 static constexpr int kAudioFallbackBits = 16;
 static constexpr int kAudioFallbackOutChannels = 2;
+static constexpr int64_t kAudioUnmuteEventGuardMs = 80;
+static constexpr int64_t kHookDebounceMs = 180;
+static constexpr int64_t kKeyDebounceMs = 60;
 
 static inline int sanitize_sample_rate(int sample_rate) {
     if (sample_rate < 8000 || sample_rate > 96000) {
@@ -561,9 +572,13 @@ static void pipeline_stop_and_reset(bool reset_items_state, bool take_audio_lock
 
     audio_pipeline_stop(pipeline);
     audio_pipeline_wait_for_stop(pipeline);
+    audio_pipeline_stop(pipeline);
+    audio_pipeline_wait_for_stop(pipeline);
     is_playing = false;
     g_audio_unmute_pending = false;
     g_audio_unmute_deadline_ms = 0;
+    g_audio_unmute_pending_play_id = 0;
+    g_audio_play_started_ms = 0;
     g_last_playback_finished_ms = esp_timer_get_time() / 1000;
 
     if (reset_items_state) {
@@ -994,6 +1009,51 @@ static void audio_unlock() {
     }
 }
 
+static bool audio_try_lock() {
+    if (!g_audio_mutex) {
+        return true;
+    }
+    return (xSemaphoreTake(g_audio_mutex, 0) == pdTRUE);
+}
+
+static void queue_play_request(const char *path) {
+    if (!path || !path[0]) {
+        return;
+    }
+
+    portENTER_CRITICAL(&g_audio_play_req_mux);
+    strncpy(g_audio_play_req_path, path, sizeof(g_audio_play_req_path) - 1);
+    g_audio_play_req_path[sizeof(g_audio_play_req_path) - 1] = '\0';
+    g_audio_play_req_pending = true;
+    portEXIT_CRITICAL(&g_audio_play_req_mux);
+}
+
+static bool take_queued_play_request(std::string *out_path) {
+    if (!out_path) {
+        return false;
+    }
+
+    bool has_pending = false;
+    char local_path[sizeof(g_audio_play_req_path)] = {0};
+
+    portENTER_CRITICAL(&g_audio_play_req_mux);
+    if (g_audio_play_req_pending && g_audio_play_req_path[0] != '\0') {
+        strncpy(local_path, g_audio_play_req_path, sizeof(local_path) - 1);
+        local_path[sizeof(local_path) - 1] = '\0';
+        g_audio_play_req_pending = false;
+        g_audio_play_req_path[0] = '\0';
+        has_pending = true;
+    }
+    portEXIT_CRITICAL(&g_audio_play_req_mux);
+
+    if (!has_pending) {
+        return false;
+    }
+
+    *out_path = local_path;
+    return true;
+}
+
 static void restore_volume_after_alarm() {
     if (g_saved_volume != -1 && board_handle && board_handle->audio_hal) {
          ESP_LOGI(TAG, "Restoring volume to %d", g_saved_volume);
@@ -1175,6 +1235,7 @@ static int g_gain_sample_rate = 44100;
 static uint8_t *g_stereo_buf = NULL;
 static size_t g_stereo_buf_size = 0;
 static volatile bool g_key3_pressed = false;
+static int64_t g_last_hook_change_ms = 0;
 static float g_noise_gate_factor = 1.0f;
 
 static void fade_out_audio_soft(int delay_ms) {
@@ -1427,6 +1488,7 @@ void play_file(const char* path) {
 
 #if APP_SYSTEM_PROMPT_PREFIX_ENABLE
     bool prefix_candidate = should_prefix_system_prompt(path) && !g_voice_queue_active;
+    const char *play_path = path;
     if (prefix_candidate) {
         g_voice_queue.clear();
         g_voice_queue.push_back(std::string(path));
@@ -1434,22 +1496,29 @@ void play_file(const char* path) {
 #if APP_AUDIO_DIAG_LOG
         audio_diag_mark_unmute_source("prefix_silence_enqueue");
 #endif
-        play_file(APP_SYSTEM_PROMPT_PREFIX_FILE);
-        return;
+        play_path = APP_SYSTEM_PROMPT_PREFIX_FILE;
     }
+#else
+    const char *play_path = path;
 #endif
 
-    bool is_system_prompt = (strncmp(path, "/sdcard/system/", 15) == 0);
-    bool is_startup_sound = is_startup_wav(path);
+    if (!audio_try_lock()) {
+        queue_play_request(play_path);
+        ESP_LOGI(TAG, "AUDIO-SERIAL: queued play request while busy: %s", play_path);
+        return;
+    }
+
+    bool is_system_prompt = (strncmp(play_path, "/sdcard/system/", 15) == 0);
+    bool is_startup_sound = is_startup_wav(play_path);
+    uint32_t this_play_id = ++g_audio_play_id_counter;
+    g_audio_active_play_id = this_play_id;
+    g_audio_play_started_ms = 0;
 
 #if APP_AUDIO_DIAG_LOG
-    audio_diag_mark_play_request(path);
+    audio_diag_mark_play_request(play_path);
 #endif
 
     set_codec_mute(true);
-
-    // Optimized Stop Logic for Fast Switching
-    audio_lock();
 
     // Short soft fade + mute to reduce clicks between WAVs
     if (is_playing) {
@@ -1474,26 +1543,27 @@ void play_file(const char* path) {
 
 
     // Track last playback type
-    g_last_playback_was_dialtone = (strcmp(path, "/sdcard/system/dial_tone.wav") == 0);
+    g_last_playback_was_dialtone = (strcmp(play_path, "/sdcard/system/dial_tone.wav") == 0);
 
     // Force Output Selection immediately after run logic
     update_audio_output();
-    ESP_LOGI(TAG, "Requesting playback: %s", path);
+    ESP_LOGI(TAG, "Requesting playback: %s", play_path);
 
     apply_i2s_clock(kAudioFallbackSampleRate,
                     kAudioFallbackBits,
                     kAudioFallbackOutChannels,
                     "play_file_fallback");
 
-    audio_element_set_uri(fatfs_stream, path);
+    audio_element_set_uri(fatfs_stream, play_path);
     
     if (audio_pipeline_run(pipeline) != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to start pipeline for: %s", path);
+        ESP_LOGE(TAG, "Failed to start pipeline for: %s", play_path);
         // Clean up state if run failed
         pipeline_stop_and_reset(false, false);
         set_pa_enable(false);
     } else {
         is_playing = true;
+        g_audio_play_started_ms = esp_timer_get_time() / 1000;
         set_pa_enable(true);
 #if APP_AUDIO_UNMUTE_ON_RESUME
     #if APP_STARTUP_UNMUTE_IMMEDIATE
@@ -1504,16 +1574,20 @@ void play_file(const char* path) {
             set_codec_mute(false);
             g_audio_unmute_pending = false;
             g_audio_unmute_deadline_ms = 0;
+            g_audio_unmute_pending_play_id = 0;
         } else {
             g_audio_unmute_pending = true;
             g_audio_unmute_deadline_ms = (esp_timer_get_time() / 1000) + APP_AUDIO_UNMUTE_FALLBACK_MS;
+            g_audio_unmute_pending_play_id = this_play_id;
         }
     #else
         g_audio_unmute_pending = true;
         g_audio_unmute_deadline_ms = (esp_timer_get_time() / 1000) + APP_AUDIO_UNMUTE_FALLBACK_MS;
+        g_audio_unmute_pending_play_id = this_play_id;
     #endif
 #else
         set_codec_mute(false);
+        g_audio_unmute_pending_play_id = 0;
 #endif
     }
     
@@ -1649,7 +1723,7 @@ void stop_playback() {
         fade_out_audio_soft(APP_GAIN_RAMP_MS + APP_WAV_FADE_OUT_EXTRA_MS);
         set_codec_mute(true);
         vTaskDelay(pdMS_TO_TICKS(APP_OUTPUT_MUTE_DELAY_MS));
-        pipeline_stop_and_reset(false, true);
+        pipeline_stop_and_reset(true, true);
     }
 }
 
@@ -1798,6 +1872,16 @@ static void enter_deep_sleep() {
 }
 
 void on_hook_change(bool off_hook) {
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    if (g_last_hook_change_ms > 0 && (now_ms - g_last_hook_change_ms) < kHookDebounceMs) {
+        ESP_LOGI(TAG,
+                 "HOOK debounce ignored: state=%s dt=%lldms",
+                 off_hook ? "OFF_HOOK" : "ON_HOOK",
+                 (long long)(now_ms - g_last_hook_change_ms));
+        return;
+    }
+    g_last_hook_change_ms = now_ms;
+
     ESP_LOGI(TAG, "--- HOOK STATE: %s ---", off_hook ? "OFF HOOK (Active/Pickup)" : "ON HOOK (Idle/Hangup)");
 
     g_off_hook = off_hook;
@@ -1924,6 +2008,8 @@ void input_task(void *pvParameters) {
         dial.loop(); // Normal Logic restored
         // dial.debugLoop(); // DEBUG LOGIC DISABLED
 
+        int64_t input_now_ms = esp_timer_get_time() / 1000;
+
         if (g_extra_btn_sleep_requested) {
             g_extra_btn_sleep_requested = false;
             enter_deep_sleep();
@@ -1947,11 +2033,22 @@ void input_task(void *pvParameters) {
 
         if (APP_PIN_KEY3 >= 0) {
             int level = gpio_get_level((gpio_num_t)APP_PIN_KEY3);
-            bool pressed = APP_KEY3_ACTIVE_LOW ? (level == 0) : (level == 1);
-            if (pressed != g_key3_pressed) {
-                g_key3_pressed = pressed;
-                ESP_LOGI(TAG, "Key3 %s", pressed ? "pressed" : "released");
+            bool sampled_pressed = APP_KEY3_ACTIVE_LOW ? (level == 0) : (level == 1);
+            static bool s_key3_last_sample = false;
+            static bool s_key3_stable = false;
+            static int64_t s_key3_last_change_ms = 0;
+
+            if (sampled_pressed != s_key3_last_sample) {
+                s_key3_last_sample = sampled_pressed;
+                s_key3_last_change_ms = input_now_ms;
             }
+
+            if ((input_now_ms - s_key3_last_change_ms) >= kKeyDebounceMs && s_key3_stable != s_key3_last_sample) {
+                s_key3_stable = s_key3_last_sample;
+                g_key3_pressed = s_key3_stable;
+                ESP_LOGI(TAG, "Key3 %s", g_key3_pressed ? "pressed" : "released");
+            }
+
             if (g_key3_pressed) {
                 target_right = 0.0f; // Mute Right on Key3
             }
@@ -2286,7 +2383,7 @@ extern "C" void app_main(void)
     // --- Start Input Task Last ---
     // Start Input Task with Higher Priority (10) to avoid starvation by Audio
     // Started here to ensure 'pipeline' is initialized before any callback tries to stop it
-    xTaskCreate(input_task, "input_task", 4096, &dial, 10, NULL);
+    xTaskCreate(input_task, "input_task", 6144, &dial, 10, NULL);
 
     // --- 5. Main Event Loop ---
     g_led_booting = false;
@@ -2302,6 +2399,13 @@ extern "C" void app_main(void)
 #endif
         // --- Regular Tasks ---
         refresh_night_mode_from_schedule();
+
+        std::string queued_play;
+        if (take_queued_play_request(&queued_play)) {
+            ESP_LOGI(TAG, "AUDIO-SERIAL: processing queued play request: %s", queued_play.c_str());
+            play_file(queued_play.c_str());
+        }
+
         // Check Daily Alarm
         if (TimeManager::checkAlarm()) {
              ESP_LOGI(TAG, "Daily Alarm Triggered! Starting Ring...");
@@ -2503,7 +2607,7 @@ extern "C" void app_main(void)
         }
 
 #if APP_AUDIO_UNMUTE_ON_RESUME
-        if (g_audio_unmute_pending && is_playing) {
+    if (g_audio_unmute_pending && is_playing && g_audio_unmute_pending_play_id == g_audio_active_play_id) {
             int64_t now_ms = esp_timer_get_time() / 1000;
             if (g_audio_unmute_deadline_ms > 0 && now_ms >= g_audio_unmute_deadline_ms) {
                 ESP_LOGW(TAG, "Audio unmute fallback timeout reached");
@@ -2513,6 +2617,7 @@ extern "C" void app_main(void)
                 set_codec_mute(false);
                 g_audio_unmute_pending = false;
                 g_audio_unmute_deadline_ms = 0;
+                g_audio_unmute_pending_play_id = 0;
             }
         }
 #endif
@@ -2561,13 +2666,22 @@ extern "C" void app_main(void)
                                            out_channels);
 #endif
 #if APP_AUDIO_UNMUTE_ON_RESUME
-                if (g_audio_unmute_pending) {
+                if (g_audio_unmute_pending && g_audio_unmute_pending_play_id == g_audio_active_play_id) {
+                    int64_t now_ms = esp_timer_get_time() / 1000;
+                    if ((now_ms - g_audio_play_started_ms) < kAudioUnmuteEventGuardMs) {
+                        ESP_LOGI(TAG,
+                                 "AUDIO-DIAG stale music_info ignored play_id=%u dt=%lldms",
+                                 (unsigned)g_audio_active_play_id,
+                                 (long long)(now_ms - g_audio_play_started_ms));
+                    } else {
 #if APP_AUDIO_DIAG_LOG
-                    audio_diag_mark_unmute_source("music_info");
+                        audio_diag_mark_unmute_source("music_info");
 #endif
-                    set_codec_mute(false);
-                    g_audio_unmute_pending = false;
-                    g_audio_unmute_deadline_ms = 0;
+                        set_codec_mute(false);
+                        g_audio_unmute_pending = false;
+                        g_audio_unmute_deadline_ms = 0;
+                        g_audio_unmute_pending_play_id = 0;
+                    }
                 }
 #endif
                 
@@ -2581,13 +2695,22 @@ extern "C" void app_main(void)
                   audio_diag_mark_resume();
     #endif
 #if APP_AUDIO_UNMUTE_ON_RESUME
-                if (g_audio_unmute_pending) {
+                if (g_audio_unmute_pending && g_audio_unmute_pending_play_id == g_audio_active_play_id) {
+                    int64_t now_ms = esp_timer_get_time() / 1000;
+                    if ((now_ms - g_audio_play_started_ms) < kAudioUnmuteEventGuardMs) {
+                        ESP_LOGI(TAG,
+                                 "AUDIO-DIAG stale resume ignored play_id=%u dt=%lldms",
+                                 (unsigned)g_audio_active_play_id,
+                                 (long long)(now_ms - g_audio_play_started_ms));
+                    } else {
 #if APP_AUDIO_DIAG_LOG
-                    audio_diag_mark_unmute_source("resume");
+                        audio_diag_mark_unmute_source("resume");
 #endif
-                    set_codec_mute(false);
-                    g_audio_unmute_pending = false;
-                    g_audio_unmute_deadline_ms = 0;
+                        set_codec_mute(false);
+                        g_audio_unmute_pending = false;
+                        g_audio_unmute_deadline_ms = 0;
+                        g_audio_unmute_pending_play_id = 0;
+                    }
                 }
 #endif
                  // Playback started/resumed -> Enforce output

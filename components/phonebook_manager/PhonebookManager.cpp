@@ -2,6 +2,8 @@
 #include "app_config.h"
 #include "AppSharedUtils.h"
 #include "esp_log.h"
+#include "esp_heap_caps.h"
+#include "esp_system.h"
 #include "cJSON.h"
 #include "nvs.h"
 #include <dirent.h>
@@ -58,19 +60,36 @@ static std::string extract_category_title(const std::string &filename) {
 }
 
 static std::string get_persona_title(int idx) {
+    auto log_sd_scan_heap = [&](const char *stage, const char *scan_path) {
+        ESP_LOGI(TAG,
+                 "SD-SCAN persona=%d stage=%s path=%s heap=%u min_heap=%u largest_8bit=%u",
+                 idx,
+                 stage ? stage : "?",
+                 scan_path ? scan_path : "?",
+                 (unsigned)esp_get_free_heap_size(),
+                 (unsigned)esp_get_minimum_free_heap_size(),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    };
+
     char path[64];
     std::string wav;
 
     snprintf(path, sizeof(path), "/sdcard/persona_%02d/de", idx);
+    log_sd_scan_heap("try", path);
     if (!read_first_wav(path, wav)) {
         snprintf(path, sizeof(path), "/sdcard/persona_%02d/en", idx);
+        log_sd_scan_heap("try", path);
         if (!read_first_wav(path, wav)) {
             snprintf(path, sizeof(path), "/sdcard/persona_%02d", idx);
+            log_sd_scan_heap("try", path);
             if (!read_first_wav(path, wav)) {
+                log_sd_scan_heap("miss", path);
                 return "";
             }
         }
     }
+
+    log_sd_scan_heap("hit", path);
 
     return extract_category_title(wav);
 }
