@@ -334,6 +334,7 @@ static inline void wdt_diag_heartbeat(const char *loop_name, int64_t *last_heart
 #endif
 
 void play_file(const char* path);
+static void play_file_immediate(const char* path);
 void update_audio_output();
 void safe_reboot();
 static void audio_lock();
@@ -570,10 +571,17 @@ static void pipeline_stop_and_reset(bool reset_items_state, bool take_audio_lock
         audio_lock();
     }
 
-    audio_pipeline_stop(pipeline);
-    audio_pipeline_wait_for_stop(pipeline);
-    audio_pipeline_stop(pipeline);
-    audio_pipeline_wait_for_stop(pipeline);
+    bool pipeline_was_playing = is_playing;
+    audio_element_state_t i2s_state = i2s_writer ? audio_element_get_state(i2s_writer) : AEL_STATE_INIT;
+    bool i2s_active = (i2s_state == AEL_STATE_RUNNING || i2s_state == AEL_STATE_PAUSED);
+
+    if (pipeline_was_playing || i2s_active) {
+        esp_err_t stop_ret = audio_pipeline_stop(pipeline);
+        if (stop_ret == ESP_OK) {
+            audio_pipeline_wait_for_stop(pipeline);
+        }
+    }
+    audio_pipeline_change_state(pipeline, AEL_STATE_INIT);
     is_playing = false;
     g_audio_unmute_pending = false;
     g_audio_unmute_deadline_ms = 0;
@@ -584,7 +592,34 @@ static void pipeline_stop_and_reset(bool reset_items_state, bool take_audio_lock
     if (reset_items_state) {
         audio_pipeline_reset_ringbuffer(pipeline);
         audio_pipeline_reset_items_state(pipeline);
+        audio_pipeline_reset_elements(pipeline);
     }
+
+    if (take_audio_lock) {
+        audio_unlock();
+    }
+}
+
+static void pipeline_finalize_after_finish(bool take_audio_lock) {
+    if (!pipeline) {
+        return;
+    }
+
+    if (take_audio_lock) {
+        audio_lock();
+    }
+
+    is_playing = false;
+    g_audio_unmute_pending = false;
+    g_audio_unmute_deadline_ms = 0;
+    g_audio_unmute_pending_play_id = 0;
+    g_audio_play_started_ms = 0;
+    g_last_playback_finished_ms = esp_timer_get_time() / 1000;
+
+    audio_pipeline_change_state(pipeline, AEL_STATE_INIT);
+    audio_pipeline_reset_ringbuffer(pipeline);
+    audio_pipeline_reset_items_state(pipeline);
+    audio_pipeline_reset_elements(pipeline);
 
     if (take_audio_lock) {
         audio_unlock();
@@ -997,6 +1032,7 @@ static void handle_voice_menu_digit(int digit) {
 // Helpers
 void stop_playback(); // forward decl
 void play_file(const char* path); // forward decl
+static void play_file_immediate(const char* path);
 static void audio_lock() {
     if (g_audio_mutex) {
         xSemaphoreTake(g_audio_mutex, portMAX_DELAY);
@@ -1475,7 +1511,7 @@ static bool is_startup_wav(const char *path) {
     return path && (strcmp(path, "/sdcard/system/startup.wav") == 0);
 }
 
-void play_file(const char* path) {
+static void play_file_immediate(const char* path) {
     if (path == NULL || strlen(path) == 0) {
         ESP_LOGE(TAG, "Invalid file path to play");
         return;
@@ -1486,21 +1522,7 @@ void play_file(const char* path) {
         return;
     }
 
-#if APP_SYSTEM_PROMPT_PREFIX_ENABLE
-    bool prefix_candidate = should_prefix_system_prompt(path) && !g_voice_queue_active;
     const char *play_path = path;
-    if (prefix_candidate) {
-        g_voice_queue.clear();
-        g_voice_queue.push_back(std::string(path));
-        g_voice_queue_active = true;
-#if APP_AUDIO_DIAG_LOG
-        audio_diag_mark_unmute_source("prefix_silence_enqueue");
-#endif
-        play_path = APP_SYSTEM_PROMPT_PREFIX_FILE;
-    }
-#else
-    const char *play_path = path;
-#endif
 
     if (!audio_try_lock()) {
         queue_play_request(play_path);
@@ -1592,6 +1614,34 @@ void play_file(const char* path) {
     }
     
     audio_unlock();
+}
+
+void play_file(const char* path) {
+    if (path == NULL || strlen(path) == 0) {
+        ESP_LOGE(TAG, "Invalid file path to play");
+        return;
+    }
+
+    if (pipeline == NULL) {
+        ESP_LOGE(TAG, "Audio Pipeline not initialized yet, cannot queue: %s", path);
+        return;
+    }
+
+    const char *queue_path = path;
+#if APP_SYSTEM_PROMPT_PREFIX_ENABLE
+    bool prefix_candidate = should_prefix_system_prompt(path) && !g_voice_queue_active;
+    if (prefix_candidate) {
+        g_voice_queue.clear();
+        g_voice_queue.push_back(std::string(path));
+        g_voice_queue_active = true;
+#if APP_AUDIO_DIAG_LOG
+        audio_diag_mark_unmute_source("prefix_silence_enqueue");
+#endif
+        queue_path = APP_SYSTEM_PROMPT_PREFIX_FILE;
+    }
+#endif
+
+    queue_play_request(queue_path);
 }
 
 void wait_for_dialtone_silence_if_needed() {
@@ -2403,7 +2453,7 @@ extern "C" void app_main(void)
         std::string queued_play;
         if (take_queued_play_request(&queued_play)) {
             ESP_LOGI(TAG, "AUDIO-SERIAL: processing queued play request: %s", queued_play.c_str());
-            play_file(queued_play.c_str());
+            play_file_immediate(queued_play.c_str());
         }
 
         // Check Daily Alarm
@@ -2721,7 +2771,8 @@ extern "C" void app_main(void)
             if (msg.source == (void *)i2s_writer && msg.cmd == AEL_MSG_CMD_REPORT_STATUS) {
                 if ((int)msg.data == AEL_STATUS_STATE_FINISHED) {
                     ESP_LOGI(TAG, "Audio Finished.");
-                    stop_playback();
+                    pipeline_finalize_after_finish(true);
+                    set_codec_mute(true);
 
                     if (g_alarm_state.active) {
                         int64_t now = esp_timer_get_time() / 1000;
