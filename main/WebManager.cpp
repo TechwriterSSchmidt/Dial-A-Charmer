@@ -947,6 +947,37 @@ static esp_err_t api_logs_download_handler(httpd_req_t *req) {
     return send_err;
 }
 
+static esp_err_t api_logs_clear_handler(httpd_req_t *req) {
+    // Clear runtime ring buffer shown in Web UI
+    portENTER_CRITICAL(&s_log_mux);
+    s_log_head = 0;
+    s_log_count = 0;
+    for (size_t i = 0; i < LOG_LINE_COUNT; ++i) {
+        s_log_lines[i][0] = '\0';
+    }
+    portEXIT_CRITICAL(&s_log_mux);
+
+#if APP_ENABLE_SD_LOG
+    // Clear buffered SD log lines and remove persisted log files.
+    portENTER_CRITICAL(&s_sd_log_mux);
+    s_sd_log_buf_count = 0;
+    portEXIT_CRITICAL(&s_sd_log_mux);
+
+    if (s_sd_log_file) {
+        fclose(s_sd_log_file);
+        s_sd_log_file = nullptr;
+    }
+
+    char backup_path[160];
+    snprintf(backup_path, sizeof(backup_path), "%s.1", APP_SD_LOG_PATH);
+    remove(APP_SD_LOG_PATH);
+    remove(backup_path);
+#endif
+
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, "{\"ok\":true}", HTTPD_RESP_USE_STRLEN);
+}
+
 static esp_err_t api_time_handler(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     
@@ -1864,7 +1895,7 @@ void WebManager::setupMdns() {
 
 void WebManager::setupWebServer() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 14;
+    config.max_uri_handlers = 15;
     config.stack_size = 16384; // Larger stack to avoid httpd task overflow
     config.uri_match_fn = httpd_uri_match_wildcard; // Enable wildcard matching
 
@@ -1942,6 +1973,14 @@ void WebManager::setupWebServer() {
             .user_ctx  = NULL
         };
         httpd_register_uri_handler(server, &logs_download_uri);
+
+        httpd_uri_t logs_clear_uri = {
+            .uri       = "/api/logs/clear",
+            .method    = HTTP_POST,
+            .handler   = api_logs_clear_handler,
+            .user_ctx  = NULL
+        };
+        httpd_register_uri_handler(server, &logs_clear_uri);
 
         httpd_uri_t time_uri = {
             .uri       = "/api/time",

@@ -73,7 +73,8 @@ const TEXT = {
         find_device_at: "Gerät erreichbar unter:",
         network_error: "Netzwerkfehler",
         check_console: "Konsole prüfen",
-        download_logs: "Logs herunterladen",
+        download_logs: "Download",
+        clear_logs: "Löschen",
         sd_log: "Logging",
         sd_log_enabled: "Logging aktiv",
         select_network: "Bitte lokales Netzwerk auswählen:",
@@ -145,7 +146,8 @@ const TEXT = {
         find_device_at: "Please find the device at:",
         network_error: "Network Error",
         check_console: "Check Console",
-        download_logs: "Download Logs",
+        download_logs: "Download",
+        clear_logs: "Clear",
         sd_log: "Logging",
         sd_log_enabled: "Logging enabled",
         select_network: "Select your local network:",
@@ -193,6 +195,7 @@ const API = {
     scanWifi: () => fetch('/api/wifi/scan').then(r => r.json()),
     getRingtones: () => fetch('/api/ringtones').then(r => r.json()),
     getLogs: () => fetch('/api/logs').then(r => r.json()),
+    clearLogs: () => fetch('/api/logs/clear', { method: 'POST' }),
     getPhonebook: () => fetch('/api/phonebook').then(r => r.json()),
     getTime: () => fetch('/api/time').then(r => r.json()),
     uploadOta: (file, password, onProgress) => {
@@ -321,6 +324,19 @@ function downloadLogs() {
     window.location.href = '/api/logs/download';
 }
 
+async function clearLogs() {
+    const prompt = (state.lang === 'de') ? 'Logs wirklich loeschen?' : 'Clear logs now?';
+    if (!window.confirm(prompt)) return;
+    try {
+        const resp = await API.clearLogs();
+        if (!resp.ok) throw new Error('clear failed');
+        state.logLines = [];
+        updateCrt(state.logLines);
+    } catch (_) {
+        window.alert((state.lang === 'de') ? 'Loeschen fehlgeschlagen' : 'Clear failed');
+    }
+}
+
 // Update alarm clock time display
 function updateAlarmTime() {
     const timeEl = document.getElementById('alarm-current-time');
@@ -440,7 +456,12 @@ function render() {
     }
 
     if (path === '/configuration') {
-        startLogPolling();
+        const logEnabled = (state.settings.sd_log_enabled === undefined) ? true : !!state.settings.sd_log_enabled;
+        if (logEnabled) {
+            startLogPolling();
+        } else {
+            stopLogPolling();
+        }
     } else {
         stopLogPolling();
     }
@@ -1035,22 +1056,44 @@ function renderAdvanced() {
                 </div>
             </div>
 
-            <!-- WIFI PANEL -->
-              <div style="background:#222; padding:12px; border-radius:8px; margin-bottom:15px; border:1px solid #444;">
-                 <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('wifi_network')}</h4>
+            <!-- WIFI PANEL (Collapsible) -->
+            <details class="fold-panel" style="margin-bottom:15px;" >
+                <summary class="fold-summary">${t('wifi_network')}</summary>
+                <div style="padding:10px 12px 12px; border-top:1px solid #333;">
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
+                        <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
+                    </div>
+                </div>
+            </details>
 
-                        <div style="display:flex; flex-direction:column; gap:6px;">
-                            <div class="wifi-ssid-text" style="margin:4px 0 0;">${state.settings.wifi_ssid || t('no_net')} <span class="wifi-ip-text">(${state.settings.ip || '--'})</span></div>
-                            <button onclick="nav('/setup')" class="wifi-scan-btn" style="margin-top:0;">${t('scan')}</button>
-                        </div>
-            </div>
+            <!-- OTA PANEL (Collapsible) -->
+            <details class="fold-panel" style="margin-bottom:5px;">
+                <summary class="fold-summary">${t('ota_title')}</summary>
+                <div style="padding:10px 12px 12px; border-top:1px solid #333;">
+                    <div style="margin-top:10px;">
+                        <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_select')}</label>
+                        <input type="file" id="ota-file" accept=".bin" style="margin-top:6px;" />
+                    </div>
 
+                    <div style="margin-top:10px;">
+                        <div id="ota-status" style="font-size:0.85rem; letter-spacing:0.5px;">${t('ota_status_idle')}</div>
+                        <div id="ota-progress" style="font-size:0.85rem; color:#d4af37; margin-top:4px;">0%</div>
+                    </div>
+
+                    <button onclick="startOtaUpload()" style="margin-top:12px; font-size:1.05rem;">${t('ota_upload')}</button>
+                    <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('ota_hint')}</div>
+                </div>
+            </details>
+
+            ${sdLogEnabled ? `
             <!-- CONSOLE PANEL -->
             <div class="crt-panel">
                 <div class="crt-screen">
                     <div class="crt-text" id="crt-log">READY&gt;_</div>
                 </div>
             </div>
+            ` : ''}
             <div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; gap:10px;">
                 <div style="display:flex; flex-direction:column; align-items:center; gap:4px; min-width:78px;">
                     <label class="switch" title="${t('sd_log')}">
@@ -1059,25 +1102,10 @@ function renderAdvanced() {
                     </label>
                     <span class="alarm-label" style="margin-left:0; text-align:center; line-height:1.1;">${t('sd_log_enabled')}</span>
                 </div>
-                <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
-            </div>
-
-            <!-- OTA PANEL -->
-            <div style="background:#222; padding:15px; border-radius:8px; margin-bottom:5px; border:1px solid #444;">
-                <h4 style="margin-top:0; color:#d4af37; font-size:0.9rem; text-transform:uppercase; border-bottom:1px solid #444; padding-bottom:5px;">${t('ota_title')}</h4>
-
-                <div style="margin-top:10px;">
-                    <label style="font-size:0.8rem; color:#aaa; text-transform:uppercase;">${t('ota_select')}</label>
-                    <input type="file" id="ota-file" accept=".bin" style="margin-top:6px;" />
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <button onclick="downloadLogs()" class="wifi-scan-btn" style="margin-top:0;">${t('download_logs')}</button>
+                    <button onclick="clearLogs()" class="wifi-scan-btn" style="margin-top:0; background:#8B0000; border-color:#8B0000;">${t('clear_logs')}</button>
                 </div>
-
-                <div style="margin-top:10px;">
-                    <div id="ota-status" style="font-size:0.85rem; letter-spacing:0.5px;">${t('ota_status_idle')}</div>
-                    <div id="ota-progress" style="font-size:0.85rem; color:#d4af37; margin-top:4px;">0%</div>
-                </div>
-
-                <button onclick="startOtaUpload()" style="margin-top:12px; font-size:1.05rem;">${t('ota_upload')}</button>
-                <div style="margin-top:8px; font-size:0.75rem; color:#aaa;">${t('ota_hint')}</div>
             </div>
 
         </div>
@@ -1124,7 +1152,14 @@ window.saveLampSettings = (patch) => {
 window.saveSdLogEnabled = (enabled) => {
     const value = !!enabled;
     state.settings.sd_log_enabled = value;
-    API.saveSettings({sd_log_enabled: value});
+    if (value) {
+        startLogPolling();
+    } else {
+        stopLogPolling();
+    }
+    API.saveSettings({sd_log_enabled: value}).finally(() => {
+        render();
+    });
 };
 
 window.startOtaUpload = async () => {

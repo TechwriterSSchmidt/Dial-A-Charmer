@@ -539,3 +539,46 @@ select.alarm-sound-select {
   line-height: 1.15;
   white-space: pre-wrap;
 }
+
+/* Collapsible utility panels */
+.fold-panel {
+  background: #222;
+  border-radius: 8px;
+  border: 1px solid #444;
+}
+
+.fold-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px;
+  color: #d4af37;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  user-select: none;
+}
+
+.fold-summary::-webkit-details-marker {
+  display: none;
+}
+
+.fold-summary::after {
+  content: '+';
+  float: right;
+  color: #d4af37;
+  font-size: 1.6rem;
+  font-weight: bold;
+  line-height: 1;
+  transform: translateY(-2px);
+}
+
+.fold-panel[open] .fold-summary::after {
+  content: '-';
+}
+
+/* Keep firmware file chooser text compact (e.g. 'keine ausgewählt') */
+#ota-file {
+  font-size: 0.72rem;
+  line-height: 1.1;
+  padding: 6px;
+}
