@@ -60,13 +60,13 @@
 #define APP_BUSY_TIMEOUT_MS 5000               // Leerlaufzeit am Hörer bis Besetztton
 #define APP_WAV_SWITCH_DELAY_MS 35             // Kurze Wartezeit beim Umschalten zwischen WAV-Dateien
 #define APP_AUDIO_EVENT_LISTEN_MS 15           // Poll-Intervall für Audio-Event-Loop
-#define APP_OUTPUT_MUTE_DELAY_MS 25            // Mute-Haltezeit beim Stoppen/Umschalten
-#define APP_WAV_FADE_OUT_EXTRA_MS 50           // Zusatzdauer für sanfteres Fade-Out
-#define APP_WAV_FADE_IN_MS 75                  // Standard Fade-In für normale WAV-Wiedergabe
-#define APP_SYSTEM_WAV_FADE_IN_MS 15           // Kürzeres Fade-In für Systemansagen
+#define APP_OUTPUT_MUTE_DELAY_MS 30            // Mute-Haltezeit beim Stoppen/Umschalten
+#define APP_WAV_FADE_OUT_EXTRA_MS 60           // Zusatzdauer für sanfteres Fade-Out
+#define APP_WAV_FADE_IN_MS 80                  // Standard Fade-In für normale WAV-Wiedergabe
+#define APP_SYSTEM_WAV_FADE_IN_MS 45           // Kürzeres Fade-In für Systemansagen
 #define APP_SYSTEM_PROMPT_PREFIX_ENABLE 1      // Vorspann-Datei vor Systemprompts aktivieren
 #define APP_SYSTEM_PROMPT_PREFIX_FILE "/sdcard/system/silence_300ms.wav" // Datei als Prompt-Vorspann
-#define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 250 // Pause bis Voice-Menu erneut angesagt wird
+#define APP_VOICE_MENU_REANNOUNCE_DELAY_MS 500 // Pause bis Voice-Menu erneut angesagt wird
 #define APP_STARTUP_POST_SILENCE_DELAY_MS 180  // Wartezeit nach Boot-Stille vor Startup-Sound
 #define APP_STARTUP_UNMUTE_IMMEDIATE 1         // Audio sofort beim Start-Resume entmuten
 
