@@ -154,6 +154,14 @@ void RotaryDial::begin() {
         configure_input_pin(_mode_pin, "Mode");
     }
 
+    // Prime stable input states to avoid synthetic "state changed" callbacks
+    // on the first loop iteration after boot.
+    _off_hook = (gpio_get_level(_hook_pin) == (APP_HOOK_ACTIVE_LOW ? 0 : 1));
+    _btn_state = (gpio_get_level(_btn_pin) == 0);
+    _last_hook_debounce = MILLIS();
+    _last_btn_debounce = MILLIS();
+    ESP_LOGI("RotaryDial", "Initial states: off_hook=%d btn_down=%d", _off_hook ? 1 : 0, _btn_state ? 1 : 0);
+
     // Install ISR service
     // ISR service may already exist from PERIPH or audio board setup.
     esp_log_level_set("gpio", ESP_LOG_NONE); // Suppress "already installed" error

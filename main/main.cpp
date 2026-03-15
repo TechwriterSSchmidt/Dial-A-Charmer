@@ -2321,6 +2321,10 @@ extern "C" void app_main(void)
     dial.begin();
     dial.setModeActiveLow(APP_DIAL_MODE_ACTIVE_LOW); 
     dial.setPulseActiveLow(APP_DIAL_PULSE_ACTIVE_LOW); 
+    bool boot_off_hook = dial.isOffHook();
+    if (boot_off_hook) {
+        ESP_LOGW(TAG, "Detected OFF HOOK during boot");
+    }
     
     // Debug Mode Pin State
     if (APP_PIN_DIAL_MODE >= 0) {
@@ -2424,11 +2428,24 @@ extern "C" void app_main(void)
     // Default Output: Base Speaker (Rout)
     audio_board_select_output(false);
 
-    // Play Startup Sound
-    ESP_LOGI(TAG, "Playing Startup Sound...");
-    g_startup_sequence_step = 1;
-    audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_300ms.wav");
-    audio_pipeline_run(pipeline);
+    // Play startup sequence only when handset is on-hook.
+    // If handset is already off-hook on boot, avoid overlapping startup audio
+    // and immediately switch to handset routing with dial tone behavior.
+    if (!boot_off_hook) {
+        ESP_LOGI(TAG, "Playing Startup Sound...");
+        g_startup_sequence_step = 1;
+        audio_element_set_uri(fatfs_stream, "/sdcard/system/silence_300ms.wav");
+        audio_pipeline_run(pipeline);
+    } else {
+        g_startup_sequence_step = 0;
+        g_off_hook = true;
+        g_output_mode_handset = true;
+        g_line_busy = false;
+        g_any_digit_dialed = false;
+        g_off_hook_start_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        update_audio_output();
+        play_file("/sdcard/system/dial_tone.wav");
+    }
 
         // Initialize TimeManager (SNTP)
         TimeManager::init();
