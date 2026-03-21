@@ -168,13 +168,15 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         if (s_ap_mode_active) return; // Retry is disabled after AP switch
 
-        if (s_wifi_retry_count < 3) {
-            esp_wifi_connect();
-            s_wifi_retry_count++;
-            ESP_LOGI(TAG, "Retry to connect to the AP");
-        } else {
-            ESP_LOGI(TAG, "Connection failed. Switching to AP Mode.");
-            webManager.startAPMode();
+        s_wifi_retry_count++;
+        esp_wifi_connect();
+
+        if (s_wifi_retry_count == 1 || (APP_WIFI_RETRY_LOG_EVERY > 0 && (s_wifi_retry_count % APP_WIFI_RETRY_LOG_EVERY) == 0)) {
+            ESP_LOGI(TAG, "Retry to connect to the AP (attempt %d)", s_wifi_retry_count);
+        }
+
+        if (APP_WIFI_MAX_RETRY > 0 && s_wifi_retry_count > APP_WIFI_MAX_RETRY) {
+            s_wifi_retry_count = APP_WIFI_MAX_RETRY; // clamp
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;

@@ -149,6 +149,12 @@
 #define APP_SD_LOG_FLUSH_INTERVAL_MS 5000
 #define APP_SD_LOG_BUFFER_LINES 120
 
+// WiFi reconnect behaviour
+// 0 = infinite retries, otherwise limit before clamping the counter (no AP fallback)
+#define APP_WIFI_MAX_RETRY 0
+// Log every Nth retry after the first to reduce spam
+#define APP_WIFI_RETRY_LOG_EVERY 5
+
 // mDNS resilience
 #define APP_MDNS_REANNOUNCE_INTERVAL_MS 90000
 #define APP_MDNS_REANNOUNCE_MIN_GAP_MS 15000
